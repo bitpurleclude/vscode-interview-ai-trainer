@@ -12,12 +12,12 @@ filenames:
 evaluation:
   language: zh-CN
   dimensions:
-    - content_structure
-    - logic_coherence
-    - etiquette_expression
-    - professionalism
-    - policy_alignment
-    - clarity_concision
+    - 内容完整性
+    - 逻辑清晰度
+    - 语言流畅度
+    - 表达感染力
+    - 专业素养
+    - 政策理解
 retrieval:
   top_k: 5
   min_score: 0.15

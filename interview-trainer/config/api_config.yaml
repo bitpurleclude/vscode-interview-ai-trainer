@@ -29,6 +29,7 @@ environments:
       secret_key_is_encrypted: false
       language: zh
       dev_pid: 1537
+      max_chunk_sec: 50
       timeout_sec: 120
       max_retries: 2
     acoustic:
@@ -63,6 +64,7 @@ environments:
       secret_key_is_encrypted: false
       language: zh
       dev_pid: 1537
+      max_chunk_sec: 50
       timeout_sec: 120
       max_retries: 1
     acoustic:

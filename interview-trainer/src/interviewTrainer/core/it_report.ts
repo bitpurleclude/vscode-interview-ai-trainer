@@ -78,6 +78,19 @@ export function it_renderReport(
   });
   lines.push("\n");
 
+  if (response.questionTimings && response.questionTimings.length) {
+    lines.push("### 题目用时\n\n");
+    response.questionTimings.forEach((item, idx) => {
+      const note = item.note ? ` (${item.note})` : "";
+      lines.push(
+        `${idx + 1}. ${item.question} - ${it_formatSeconds(
+          item.durationSec,
+        )}${note}\n`,
+      );
+    });
+    lines.push("\n");
+  }
+
   if (response.notes.length) {
     lines.push("### 检索笔记\n\n");
     response.notes.forEach((note) => {

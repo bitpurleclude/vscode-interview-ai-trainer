@@ -108,6 +108,7 @@ const InterviewTrainer: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [questionError, setQuestionError] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const uiLocked = !config;
@@ -160,6 +161,25 @@ const InterviewTrainer: React.FC = () => {
     );
   }, [itState]);
 
+  const parsedQuestionList = useMemo(
+    () =>
+      questionList
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    [questionList],
+  );
+  const hasQuestion = useMemo(
+    () => questionText.trim().length > 0 || parsedQuestionList.length > 0,
+    [questionText, parsedQuestionList],
+  );
+
+  useEffect(() => {
+    if (questionError && hasQuestion) {
+      setQuestionError(false);
+    }
+  }, [questionError, hasQuestion]);
+
   const handleStartRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -211,10 +231,13 @@ const InterviewTrainer: React.FC = () => {
   const handleStopRecording = () => {
     mediaRecorderRef.current?.stop();
     mediaRecorderRef.current = null;
+    const nextMessage = hasQuestion
+      ? "录音结束，可开始分析。"
+      : "录音结束，请先填写题干或导入题干文件。";
     setItState((prev) => ({
       ...prev,
       recordingState: "idle",
-      statusMessage: "录音结束，可开始分析",
+      statusMessage: nextMessage,
     }));
   };
 
@@ -261,7 +284,7 @@ const InterviewTrainer: React.FC = () => {
 
         setItState((prev) => ({
           ...prev,
-          statusMessage: `已导入音频：${file.name}（${rendered.duration.toFixed(1)}s）`,
+          statusMessage: `已导入音频：${file.name}（${rendered.duration.toFixed(1)}s）${hasQuestion ? '' : '，请先填写题干或导入题干文件'}`,
         }));
       } catch (decodeErr) {
         // Fallback: ask extension host to convert using ffmpeg (if available).
@@ -291,7 +314,7 @@ const InterviewTrainer: React.FC = () => {
         });
         setItState((prev) => ({
           ...prev,
-          statusMessage: `已导入音频：${file.name}（${durationSec.toFixed(1)}s）`,
+          statusMessage: `已导入音频：${file.name}（${durationSec.toFixed(1)}s）${hasQuestion ? '' : '，请先填写题干或导入题干文件'}`,
         }));
       }
     } catch (err) {
@@ -312,8 +335,63 @@ const InterviewTrainer: React.FC = () => {
     }
   };
 
+  const handleImportQuestions = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const lines = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const looksLikeList = lines.length > 1 && lines.every((line) => line.length <= 80);
+
+      if (looksLikeList) {
+        setQuestionList(lines.join("\n"));
+        if (!questionText.trim()) {
+          setQuestionText("");
+        }
+      } else {
+        setQuestionText(text.trim());
+        setQuestionList("");
+      }
+      setQuestionError(false);
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: `已导入题干：${file.name}`,
+      }));
+    } catch (err) {
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "题干文件读取失败，请检查文件编码或格式。",
+        lastError: {
+          type: "question",
+          reason: err instanceof Error ? err.message : String(err),
+          solution: "请使用 UTF-8 编码的 txt 或 md 文件重试。",
+        },
+      }));
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!audioPayload) return;
+    if (!hasQuestion) {
+      setQuestionError(true);
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "请先填写题干或导入题干文件后再分析。",
+        lastError: {
+          type: "question",
+          reason: "题干信息缺失",
+          solution: "请输入题干文本或导入 txt/md 文件。",
+        },
+      }));
+      return;
+    }
     setIsProcessing(true);
     setItState((prev) => ({
       ...prev,
@@ -322,10 +400,7 @@ const InterviewTrainer: React.FC = () => {
     const payload: ItAnalyzeRequest = {
       audio: audioPayload,
       questionText: questionText.trim() || undefined,
-      questionList: questionList
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
+      questionList: parsedQuestionList,
     };
     try {
       const response = await request("it/analyzeAudio", payload);
@@ -406,9 +481,18 @@ const InterviewTrainer: React.FC = () => {
               disabled={uiLocked}
             />
           </label>
+          <label className="it-button it-button--secondary">
+            导入题干
+            <input
+              type="file"
+              accept=".txt,.md,text/plain,text/markdown"
+              onChange={handleImportQuestions}
+              disabled={uiLocked}
+            />
+          </label>
           <button
             className="it-button"
-            disabled={uiLocked || !audioPayload || isProcessing || isImporting}
+            disabled={uiLocked || !audioPayload || !hasQuestion || isProcessing || isImporting}
             onClick={handleAnalyze}
           >
             开始分析
@@ -523,8 +607,30 @@ const InterviewTrainer: React.FC = () => {
           )}
           {analysisResult && activeTab === "evaluation" && (
             <div className="it-evaluation">
+              {analysisResult.questionTimings &&
+              analysisResult.questionTimings.length > 0 && (
+                <div className="it-question-timings">
+                  <div className="it-question-timings__title">
+                    题目用时
+                  </div>
+                  {analysisResult.questionTimings.map((item, idx) => (
+                    <div key={`${idx}-${item.question}`} className="it-question-timings__item">
+                      <div className="it-question-timings__label">
+                        {idx + 1}. {item.question}
+                      </div>
+                      <div className="it-question-timings__value">
+                        {it_formatSeconds(item.durationSec)}
+                        {item.note ? ` (${item.note})` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="it-evaluation__summary">
                 {analysisResult.evaluation.topicSummary}
+              </div>
+              <div className="it-evaluation__overall">
+                ???{analysisResult.evaluation.overallScore}
               </div>
               <div className="it-evaluation__scores">
                 {Object.entries(analysisResult.evaluation.scores || {}).map(
@@ -556,6 +662,14 @@ const InterviewTrainer: React.FC = () => {
                 <h4>改进建议</h4>
                 <ul>
                   {analysisResult.evaluation.improvements.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="it-evaluation__section">
+                <h4>?????</h4>
+                <ul>
+                  {analysisResult.evaluation.nextFocus.map((item, idx) => (
                     <li key={idx}>{item}</li>
                   ))}
                 </ul>
@@ -603,17 +717,20 @@ const InterviewTrainer: React.FC = () => {
         </div>
         <div className="it-question">
           <input
-            className="it-input"
+            className={`it-input${questionError ? " it-input--error" : ""}`}
             placeholder="题干（可选）"
             value={questionText}
             onChange={(event) => setQuestionText(event.target.value)}
           />
           <textarea
-            className="it-textarea it-textarea--small"
+            className={`it-textarea it-textarea--small${questionError ? " it-input--error" : ""}`}
             placeholder="小题列表（一行一个，可选）"
             value={questionList}
             onChange={(event) => setQuestionList(event.target.value)}
           />
+          <div className="it-question__hint">
+            题干或小题列表为必填，可通过“导入题干”快速加载。
+          </div>
         </div>
       </div>
 

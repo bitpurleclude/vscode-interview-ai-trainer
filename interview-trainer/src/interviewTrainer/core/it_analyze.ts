@@ -5,6 +5,7 @@ import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
   ItEvaluation,
+  ItQuestionTiming,
 } from "../../protocol/interviewTrainer";
 import { v4 as uuidv4 } from "uuid";
 
@@ -72,6 +73,107 @@ function it_storeRecording(
   return tempPath;
 }
 
+function it_splitPcmBase64(
+  base64: string,
+  sampleRate: number,
+  maxChunkSec: number,
+): Array<{ speech: string; len: number }> {
+  const buffer = Buffer.from(base64, "base64");
+  const bytesPerSecond = sampleRate * 2;
+  const chunkBytes = Math.max(1, Math.floor(bytesPerSecond * maxChunkSec));
+  const chunks: Array<{ speech: string; len: number }> = [];
+  for (let offset = 0; offset < buffer.length; offset += chunkBytes) {
+    const slice = buffer.subarray(offset, offset + chunkBytes);
+    chunks.push({ speech: slice.toString("base64"), len: slice.length });
+  }
+  return chunks;
+}
+
+function it_buildQuestionTimings(
+  questionText: string,
+  questionList: string[],
+  totalDurationSec: number,
+): ItQuestionTiming[] {
+  const list = questionList.length
+    ? questionList
+    : questionText
+      ? [questionText]
+      : [];
+  if (!list.length || !Number.isFinite(totalDurationSec) || totalDurationSec <= 0) {
+    return [];
+  }
+  const base = totalDurationSec / list.length;
+  let cursor = 0;
+  return list.map((question, idx) => {
+    const isLast = idx === list.length - 1;
+    const durationSec = isLast ? Math.max(0, totalDurationSec - cursor) : base;
+    const startSec = cursor;
+    const endSec = startSec + durationSec;
+    cursor = endSec;
+    return {
+      question,
+      startSec,
+      endSec,
+      durationSec,
+      note: list.length > 1 ? "估算" : undefined,
+    };
+  });
+}
+
+function it_isBaiduContentTooLong(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    message.includes("3310") ||
+    lower.includes("content len too long") ||
+    lower.includes("content length too long")
+  );
+}
+
+async function it_transcribePcmWithChunks(
+  asrConfig: {
+    apiKey: string;
+    secretKey: string;
+    baseUrl: string;
+    devPid: number;
+    language: string;
+    timeoutSec: number;
+    maxRetries: number;
+  },
+  base64: string,
+  sampleRate: number,
+  maxChunkSec: number,
+): Promise<string> {
+  let chunkSec = Math.max(5, Math.floor(maxChunkSec || 50));
+  let lastError: unknown = undefined;
+  for (;;) {
+    const chunks = it_splitPcmBase64(base64, sampleRate, chunkSec);
+    const parts: string[] = [];
+    try {
+      for (const chunk of chunks) {
+        const part = await it_callBaiduAsr(asrConfig, {
+          format: "pcm",
+          rate: sampleRate,
+          channel: 1,
+          cuid: uuidv4(),
+          speech: chunk.speech,
+          len: chunk.len,
+        });
+        parts.push(part);
+      }
+      return parts.join("");
+    } catch (err) {
+      lastError = err;
+      if (it_isBaiduContentTooLong(err) && chunkSec > 5) {
+        chunkSec = Math.max(5, Math.floor(chunkSec / 2));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Baidu ASR failed.");
+}
+
 export async function it_runAnalysis(
   deps: ItAnalyzeDeps,
   request: ItAnalyzeRequest,
@@ -80,6 +182,9 @@ export async function it_runAnalysis(
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
   const questionText = request.questionText?.trim() || "";
   const questionList = (request.questionList ?? []).filter((q) => q.trim());
+  if (!questionText && !questionList.length) {
+    throw new Error("请先填写题干或导入题干文件。");
+  }
 
   const asrCfg = envConfig.asr ?? {};
   const asrProvider = asrCfg.provider || "baidu_vop";
@@ -93,25 +198,33 @@ export async function it_runAnalysis(
     if (!asrCfg.api_key || !asrCfg.secret_key) {
       throw new Error("缺少百度语音转文字的API Key或Secret Key。");
     }
-    transcript = await it_callBaiduAsr(
-      {
-        apiKey: asrCfg.api_key || "",
-        secretKey: asrCfg.secret_key || "",
-        baseUrl: asrCfg.base_url || "https://vop.baidu.com/server_api",
-        devPid: Number(asrCfg.dev_pid || 1537),
-        language: asrCfg.language || "zh",
-        timeoutSec: Number(asrCfg.timeout_sec || 120),
-        maxRetries: Number(asrCfg.max_retries || 1),
-      },
-      {
+    const asrConfig = {
+      apiKey: asrCfg.api_key || "",
+      secretKey: asrCfg.secret_key || "",
+      baseUrl: asrCfg.base_url || "https://vop.baidu.com/server_api",
+      devPid: Number(asrCfg.dev_pid || 1537),
+      language: asrCfg.language || "zh",
+      timeoutSec: Number(asrCfg.timeout_sec || 120),
+      maxRetries: Number(asrCfg.max_retries || 1),
+    };
+    const maxChunkSec = Number(asrCfg.max_chunk_sec || 50);
+    if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
+      transcript = await it_transcribePcmWithChunks(
+        asrConfig,
+        request.audio.base64,
+        request.audio.sampleRate,
+        maxChunkSec,
+      );
+    } else {
+      transcript = await it_callBaiduAsr(asrConfig, {
         format: request.audio.format,
         rate: request.audio.sampleRate,
         channel: 1,
         cuid: uuidv4(),
         speech: request.audio.base64,
         len: request.audio.byteLength,
-      },
-    );
+      });
+    }
   }
 
   const acoustic =
@@ -132,6 +245,12 @@ export async function it_runAnalysis(
           rmsDbStd: 0,
           snrDb: undefined,
         };
+
+  const questionTimings = it_buildQuestionTimings(
+    questionText,
+    questionList,
+    acoustic.durationSec || request.audio.durationSec || 0,
+  );
 
   const workspaceCfg = deps.skillConfig.workspace ?? {};
   const corpus = it_buildCorpus({
@@ -209,6 +328,7 @@ export async function it_runAnalysis(
     acoustic,
     evaluation,
     notes,
+    questionTimings,
     reportPath,
     topicDir,
     audioPath: storedAudioPath,
@@ -222,6 +342,7 @@ export async function it_runAnalysis(
     transcript,
     evaluation,
     notes,
+    questionTimings,
   };
   it_appendAttemptData(topicDir, attemptData);
 

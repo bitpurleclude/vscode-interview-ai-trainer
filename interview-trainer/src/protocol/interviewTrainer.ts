@@ -61,6 +61,14 @@ export interface ItNoteHit {
   snippet: string;
 }
 
+export interface ItQuestionTiming {
+  question: string;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  note?: string;
+}
+
 export interface ItEvaluation {
   topicTitle: string;
   topicSummary: string;
@@ -79,6 +87,7 @@ export interface ItAnalyzeResponse {
   acoustic: ItAcousticMetrics;
   evaluation: ItEvaluation;
   notes: ItNoteHit[];
+  questionTimings?: ItQuestionTiming[];
   reportPath: string;
   topicDir: string;
   audioPath: string;

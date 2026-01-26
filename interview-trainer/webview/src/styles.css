@@ -229,6 +229,13 @@
   font-size: 13px;
 }
 
+.it-evaluation__overall {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--vscode-testing-iconPassed, var(--vscode-foreground));
+}
+
 .it-evaluation__scores {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -311,6 +318,42 @@
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   font-size: 12px;
+}
+
+.it-input--error {
+  border-color: var(--vscode-inputValidation-errorBorder);
+  box-shadow: 0 0 0 1px var(--vscode-inputValidation-errorBorder);
+}
+
+.it-question__hint {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-question-timings {
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px dashed var(--vscode-sideBar-border);
+  background: var(--vscode-sideBarSectionHeader-background);
+  font-size: 12px;
+}
+
+.it-question-timings__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.it-question-timings__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.it-question-timings__value {
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
 }
 
 .it-thinking {
