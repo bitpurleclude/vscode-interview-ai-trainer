@@ -1,0 +1,85 @@
+version: 1
+active:
+  environment: prod
+  llm: baidu_qianfan
+  asr: baidu_vop
+  acoustic: api
+environments:
+  prod:
+    llm:
+      provider: baidu_qianfan
+      model: ernie-4.5-turbo-128k
+      base_url: https://qianfan.baidubce.com/v2
+      api_key: ""
+      api_key_encrypted: ""
+      api_key_is_encrypted: false
+      temperature: 0.8
+      top_p: 0.8
+      timeout_sec: 60
+      max_retries: 2
+    asr:
+      provider: baidu_vop
+      base_url: https://vop.baidu.com/server_api
+      api_key: ""
+      secret_key: ""
+      mock_text: ""
+      api_key_encrypted: ""
+      secret_key_encrypted: ""
+      api_key_is_encrypted: false
+      secret_key_is_encrypted: false
+      language: zh
+      dev_pid: 1537
+      timeout_sec: 120
+      max_retries: 2
+    acoustic:
+      provider: api
+      base_url: ""
+      api_key: ""
+      api_key_encrypted: ""
+      api_key_is_encrypted: false
+      timeout_sec: 60
+      max_retries: 1
+  test:
+    llm:
+      provider: baidu_qianfan
+      model: ernie-4.5-turbo-128k
+      base_url: https://qianfan.baidubce.com/v2
+      api_key: ""
+      api_key_encrypted: ""
+      api_key_is_encrypted: false
+      temperature: 0.8
+      top_p: 0.8
+      timeout_sec: 60
+      max_retries: 1
+    asr:
+      provider: baidu_vop
+      base_url: https://vop.baidu.com/server_api
+      api_key: ""
+      secret_key: ""
+      mock_text: ""
+      api_key_encrypted: ""
+      secret_key_encrypted: ""
+      api_key_is_encrypted: false
+      secret_key_is_encrypted: false
+      language: zh
+      dev_pid: 1537
+      timeout_sec: 120
+      max_retries: 1
+    acoustic:
+      provider: api
+      base_url: ""
+      api_key: ""
+      api_key_encrypted: ""
+      api_key_is_encrypted: false
+      timeout_sec: 60
+      max_retries: 1
+local:
+  whisper:
+    model_path: ""
+    language: zh
+  acoustic:
+    enabled: false
+    mode: basic
+ccswitch:
+  enabled: false
+  config_path: ""

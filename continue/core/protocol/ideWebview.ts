@@ -14,6 +14,13 @@ import {
   SetCodeToEditPayload,
   ShowFilePayload,
 } from "../";
+import {
+  ItAnalyzeRequest,
+  ItAnalyzeResponse,
+  ItConfigSnapshot,
+  ItHistoryItem,
+  ItState,
+} from "./interviewTrainer";
 
 export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
   openUrl: [string, void];
@@ -84,6 +91,11 @@ export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
     },
     void,
   ];
+  "it/getState": [undefined, ItState];
+  "it/getConfig": [undefined, ItConfigSnapshot];
+  "it/analyzeAudio": [ItAnalyzeRequest, ItAnalyzeResponse];
+  "it/listHistory": [{ query?: string; limit?: number }, ItHistoryItem[]];
+  "it/openSettings": [undefined, void];
 };
 
 export type ToWebviewFromIdeProtocol = ToWebviewFromIdeOrCoreProtocol & {
@@ -115,4 +127,6 @@ export type ToWebviewFromIdeProtocol = ToWebviewFromIdeOrCoreProtocol & {
   focusEdit: [undefined, void];
   generateRule: [undefined, void];
   addToChat: [AddToChatPayload, void];
+  "it/stateUpdate": [ItState, void];
+  "it/configUpdate": [ItConfigSnapshot, void];
 };

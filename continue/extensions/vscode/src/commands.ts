@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import * as fs from "node:fs";
+import path from "node:path";
 
 import { ContextMenuConfig, ILLM, ModelInstaller } from "core";
 import { CompletionProvider } from "core/autocomplete/CompletionProvider";
@@ -49,6 +50,10 @@ import { Battery } from "./util/battery";
 import { getMetaKeyLabel } from "./util/util";
 import { openEditorAndRevealRange } from "./util/vscode";
 import { VsCodeIde } from "./VsCodeIde";
+import {
+  it_ensureConfigFiles,
+  it_getUserConfigDir,
+} from "./interviewTrainer/api/it_apiConfig";
 
 let fullScreenPanel: vscode.WebviewPanel | undefined;
 
@@ -93,6 +98,10 @@ function hideGUI() {
     vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar");
     // vscode.commands.executeCommand("workbench.action.toggleAuxiliaryBar");
   }
+}
+
+function focusInterviewTrainerView() {
+  vscode.commands.executeCommand("interviewTrainer.mainView.focus");
 }
 
 function waitForSidebarReady(
@@ -183,6 +192,36 @@ const getCommandsMap: (
   }
 
   return {
+    "interviewTrainer.open": async () => {
+      focusInterviewTrainerView();
+    },
+    "interviewTrainer.analyzeAudioFile": async () => {
+      const selection = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { Audio: ["wav", "m4a", "mp3", "aac"] },
+      });
+      focusInterviewTrainerView();
+      if (!selection || selection.length === 0) {
+        return;
+      }
+      vscode.window.showInformationMessage(
+        "已选中音频文件，请在面试训练助手面板中点击“导入音频”开始分析。",
+      );
+    },
+    "interviewTrainer.openSettings": async () => {
+      it_ensureConfigFiles(extensionContext);
+      const configDir = it_getUserConfigDir(extensionContext);
+      const target = path.join(configDir, "api_config.yaml");
+      await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
+    },
+    "interviewTrainer.openHistory": async () => {
+      focusInterviewTrainerView();
+      vscode.window.showInformationMessage(
+        "历史记录已在面试训练助手面板提供。",
+      );
+    },
     "continue.acceptDiff": async (newFileUri?: string, streamId?: string) => {
       captureCommandTelemetry("acceptDiff");
       void processDiff(

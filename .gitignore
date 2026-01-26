@@ -1,0 +1,16 @@
+# Local build artifacts
+interview-trainer/node_modules/
+**/node_modules/
+node_modules/
+interview-trainer/out/
+interview-trainer/media/
+interview-trainer/build/
+interview-trainer/.vsix/
+
+# Packaged installers and large local test assets
+testdata/*.vsix
+testdata/*.m4a
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

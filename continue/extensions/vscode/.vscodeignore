@@ -2,6 +2,8 @@
 .vscode-test/**
 build/**
 src/**
+!src/extension/config/interview_trainer/**
+!src/extension/assets/interview_trainer/**
 .gitignore
 .yarnrc
 vsc-extension-quickstart.md

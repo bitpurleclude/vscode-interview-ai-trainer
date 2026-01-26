@@ -1,0 +1,11 @@
+version: 1
+ui:
+  collapse_delay_sec: 5
+  thinking_toast_interval_sec: 2
+  remember_tab: true
+workflow:
+  auto_save_results: false
+  allow_partial_save: true
+recording:
+  format: wav
+  max_duration_sec: 1800

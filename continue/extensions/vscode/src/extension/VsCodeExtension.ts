@@ -64,6 +64,8 @@ import {
   initDocumentContentCache,
 } from "../util/editLoggingUtils";
 import type { VsCodeWebviewProtocol } from "../webviewProtocol";
+import { InterviewTrainerExtension } from "../interviewTrainer/InterviewTrainerExtension";
+import { InterviewTrainerWebviewViewProvider } from "../interviewTrainer/InterviewTrainerWebviewViewProvider";
 
 export class VsCodeExtension {
   // Currently some of these are public so they can be used in testing (test/test-suites)
@@ -74,6 +76,7 @@ export class VsCodeExtension {
   private ideUtils: VsCodeIdeUtils;
   private consoleView: ContinueConsoleWebviewViewProvider;
   private sidebar: ContinueGUIWebviewViewProvider;
+  private interviewTrainerView: InterviewTrainerWebviewViewProvider;
   private windowId: string;
   private editDecorationManager: EditDecorationManager;
   private verticalDiffManager: VerticalDiffManager;
@@ -273,6 +276,22 @@ export class VsCodeExtension {
       ),
     );
     resolveWebviewProtocol(this.sidebar.webviewProtocol);
+
+    this.interviewTrainerView = new InterviewTrainerWebviewViewProvider(
+      this.windowId,
+      this.extensionContext,
+    );
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider(
+        InterviewTrainerWebviewViewProvider.viewType,
+        this.interviewTrainerView,
+        { webviewOptions: { retainContextWhenHidden: true } },
+      ),
+    );
+    new InterviewTrainerExtension(
+      this.extensionContext,
+      this.interviewTrainerView.webviewProtocol,
+    );
 
     const inProcessMessenger = new InProcessMessenger<
       ToCoreProtocol,

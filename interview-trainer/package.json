@@ -1,0 +1,120 @@
+{
+  "name": "interview-trainer",
+  "displayName": "面试训练助手",
+  "description": "面试训练录音、转写与评价助手",
+  "version": "0.1.0",
+  "publisher": "interview-trainer",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Education",
+    "AI"
+  ],
+  "activationEvents": [
+    "onView:interviewTrainer.mainView",
+    "onCommand:interviewTrainer.open"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "interviewTrainer.open",
+        "category": "Interview Trainer",
+        "title": "打开面试训练助手"
+      },
+      {
+        "command": "interviewTrainer.analyzeAudioFile",
+        "category": "Interview Trainer",
+        "title": "分析音频文件"
+      },
+      {
+        "command": "interviewTrainer.openSettings",
+        "category": "Interview Trainer",
+        "title": "打开面试训练配置"
+      },
+      {
+        "command": "interviewTrainer.openHistory",
+        "category": "Interview Trainer",
+        "title": "查看历史记录"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "interviewTrainer",
+          "title": "面试训练助手",
+          "icon": "assets/sidebar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "interviewTrainer": [
+        {
+          "type": "webview",
+          "id": "interviewTrainer.mainView",
+          "name": "面试训练助手",
+          "icon": "assets/sidebar-icon.svg",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "interviewTrainer.openSettings",
+          "group": "navigation@1",
+          "when": "view == interviewTrainer.mainView"
+        },
+        {
+          "command": "interviewTrainer.openHistory",
+          "group": "navigation@2",
+          "when": "view == interviewTrainer.mainView"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "interviewTrainer.open"
+        },
+        {
+          "command": "interviewTrainer.analyzeAudioFile"
+        },
+        {
+          "command": "interviewTrainer.openSettings"
+        },
+        {
+          "command": "interviewTrainer.openHistory"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "interviewTrainer.analyzeAudioFile",
+          "group": "navigation@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build:webview": "node scripts/build-webview.js",
+    "build:extension": "tsc -p tsconfig.json",
+    "build": "npm run build:webview && npm run build:extension",
+    "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.21.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "axios": "^1.13.1",
+    "uuid": "^9.0.1",
+    "yaml": "^2.4.5"
+  }
+}

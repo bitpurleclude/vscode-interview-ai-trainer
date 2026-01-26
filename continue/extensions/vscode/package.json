@@ -53,7 +53,8 @@
   "activationEvents": [
     "onUri",
     "onStartupFinished",
-    "onView:continueGUIView"
+    "onView:continueGUIView",
+    "onView:interviewTrainer.mainView"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -151,6 +152,26 @@
       }
     },
     "commands": [
+      {
+        "command": "interviewTrainer.open",
+        "category": "Interview Trainer",
+        "title": "打开面试训练助手"
+      },
+      {
+        "command": "interviewTrainer.analyzeAudioFile",
+        "category": "Interview Trainer",
+        "title": "分析音频文件"
+      },
+      {
+        "command": "interviewTrainer.openSettings",
+        "category": "Interview Trainer",
+        "title": "打开面试训练配置"
+      },
+      {
+        "command": "interviewTrainer.openHistory",
+        "category": "Interview Trainer",
+        "title": "查看历史记录"
+      },
       {
         "command": "continue.applyCodeFromChat",
         "category": "Continue",
@@ -510,6 +531,18 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "interviewTrainer.open"
+        },
+        {
+          "command": "interviewTrainer.analyzeAudioFile"
+        },
+        {
+          "command": "interviewTrainer.openSettings"
+        },
+        {
+          "command": "interviewTrainer.openHistory"
+        },
+        {
           "command": "continue.focusContinueInput"
         },
         {
@@ -557,11 +590,25 @@
       ],
       "explorer/context": [
         {
+          "command": "interviewTrainer.analyzeAudioFile",
+          "group": "1_interview@1"
+        },
+        {
           "command": "continue.selectFilesAsContext",
           "group": "1_debug@1"
         }
       ],
       "view/title": [
+        {
+          "command": "interviewTrainer.openSettings",
+          "group": "navigation@1",
+          "when": "view == interviewTrainer.mainView"
+        },
+        {
+          "command": "interviewTrainer.openHistory",
+          "group": "navigation@2",
+          "when": "view == interviewTrainer.mainView"
+        },
         {
           "command": "continue.newSession",
           "group": "navigation@1",
@@ -608,6 +655,11 @@
           "id": "continue",
           "title": "Continue",
           "icon": "media/sidebar-icon.png"
+        },
+        {
+          "id": "interviewTrainer",
+          "title": "面试训练助手",
+          "icon": "src/extension/assets/interview_trainer/sidebar-icon.svg"
         }
       ],
       "panel": [
@@ -625,6 +677,15 @@
           "id": "continue.continueGUIView",
           "name": "Continue",
           "icon": "media/sidebar-icon.png",
+          "visibility": "visible"
+        }
+      ],
+      "interviewTrainer": [
+        {
+          "type": "webview",
+          "id": "interviewTrainer.mainView",
+          "name": "面试训练助手",
+          "icon": "src/extension/assets/interview_trainer/sidebar-icon.svg",
           "visibility": "visible"
         }
       ],
@@ -776,7 +837,8 @@
     "vitest": "^3.1.4",
     "vscode-languageclient": "^8.0.2",
     "ws": "^8.13.0",
-    "yarn": "^1.22.21"
+    "yarn": "^1.22.21",
+    "yaml": "^2.4.5"
   },
   "overrides": {
     "vitest": {
