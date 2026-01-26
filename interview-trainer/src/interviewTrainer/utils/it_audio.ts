@@ -1,4 +1,5 @@
-import { ItAcousticMetrics } from "../../protocol/interviewTrainer";
+import { ItAcousticMetrics, ItAudioSegment } from "../../protocol/interviewTrainer";
+import { it_formatSeconds } from "./it_text";
 
 const EPS = 1e-12;
 
@@ -22,6 +23,95 @@ function it_countWords(text: string): number {
   const chinese = text.match(/[\u4e00-\u9fff]/g) ?? [];
   const alnum = text.match(/[A-Za-z0-9]+/g) ?? [];
   return chinese.length + alnum.length;
+}
+
+function it_splitTextByDuration(text: string, durations: number[]): string[] {
+  const chars = Array.from((text || "").trim());
+  const totalDuration = durations.reduce((sum, value) => sum + value, 0);
+  if (!chars.length || !totalDuration) {
+    return durations.map(() => "");
+  }
+  const chunks: string[] = [];
+  let cursor = 0;
+  durations.forEach((duration, idx) => {
+    const isLast = idx === durations.length - 1;
+    let count = isLast
+      ? chars.length - cursor
+      : Math.round((chars.length * duration) / totalDuration);
+    if (count <= 0 && cursor < chars.length) {
+      count = 1;
+    }
+    const slice = chars.slice(cursor, cursor + count).join("");
+    chunks.push(slice);
+    cursor += count;
+  });
+  if (chunks.length < durations.length) {
+    while (chunks.length < durations.length) {
+      chunks.push("");
+    }
+  }
+  return chunks;
+}
+
+function it_segmentMeanDb(
+  rmsDb: Float32Array,
+  hopSec: number,
+  startSec: number,
+  endSec: number,
+): number {
+  if (!rmsDb.length) {
+    return 0;
+  }
+  const startIdx = Math.max(0, Math.floor(startSec / hopSec));
+  const endIdx = Math.min(rmsDb.length - 1, Math.floor(endSec / hopSec));
+  if (endIdx < startIdx) {
+    return rmsDb[startIdx] ?? 0;
+  }
+  let sum = 0;
+  let count = 0;
+  for (let i = startIdx; i <= endIdx; i += 1) {
+    sum += rmsDb[i];
+    count += 1;
+  }
+  return count ? sum / count : 0;
+}
+
+function it_segmentTone(
+  rmsDb: Float32Array,
+  hopSec: number,
+  startSec: number,
+  endSec: number,
+): "升调" | "降调" | "平稳" {
+  const startIdx = Math.max(0, Math.floor(startSec / hopSec));
+  const endIdx = Math.min(rmsDb.length - 1, Math.floor(endSec / hopSec));
+  const frames = rmsDb.slice(startIdx, endIdx + 1);
+  const n = frames.length;
+  if (n < 2) {
+    return "平稳";
+  }
+  const meanX = (n - 1) / 2;
+  let meanY = 0;
+  for (let i = 0; i < n; i += 1) {
+    meanY += frames[i];
+  }
+  meanY /= n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i += 1) {
+    const dx = i - meanX;
+    const dy = frames[i] - meanY;
+    num += dx * dy;
+    den += dx * dx;
+  }
+  const slopePerFrame = den ? num / den : 0;
+  const slopePerSec = slopePerFrame / hopSec;
+  if (slopePerSec > 0.6) {
+    return "升调";
+  }
+  if (slopePerSec < -0.6) {
+    return "降调";
+  }
+  return "平稳";
 }
 
 function it_computeRmsDb(
@@ -91,6 +181,121 @@ function it_deriveSpeechSegments(
     }
   }
   return merged;
+}
+
+export function it_buildDetailedTranscript(
+  pcmBase64: string,
+  sampleRate: number,
+  transcript: string,
+): { segments: ItAudioSegment[]; detailedTranscript: string } {
+  const pcm = it_decodePcm16(pcmBase64);
+  const samples = it_int16ToFloat(pcm);
+  const durationSec = samples.length / sampleRate;
+  const frameLengthSec = 0.03;
+  const hopLengthSec = 0.01;
+  const frameSize = Math.max(1, Math.floor(sampleRate * frameLengthSec));
+  const hopSize = Math.max(1, Math.floor(sampleRate * hopLengthSec));
+
+  const rmsDb = it_computeRmsDb(samples, frameSize, hopSize);
+  const sorted = Array.from(rmsDb).sort((a, b) => a - b);
+  const thresholdDb = sorted[Math.floor(sorted.length * 0.25)] + 6;
+
+  const speechSegments = it_deriveSpeechSegments(
+    rmsDb,
+    hopLengthSec,
+    thresholdDb,
+    0.4,
+    0.2,
+  );
+  const speechDurations = speechSegments.map((seg) => Math.max(0, seg[1] - seg[0]));
+  const speechTexts = it_splitTextByDuration(transcript, speechDurations);
+
+  const rmsMean =
+    rmsDb.length > 0
+      ? rmsDb.reduce((sum, val) => sum + val, 0) / rmsDb.length
+      : 0;
+
+  const segments: ItAudioSegment[] = [];
+  let cursor = 0;
+  let speechIndex = 0;
+  const silenceThreshold = 0.2;
+
+  for (const seg of speechSegments) {
+    if (seg[0] - cursor >= silenceThreshold) {
+      segments.push({
+        type: "silence",
+        startSec: cursor,
+        endSec: seg[0],
+        durationSec: seg[0] - cursor,
+        pauseSec: Number((seg[0] - cursor).toFixed(2)),
+      });
+    }
+
+    const startSec = seg[0];
+    const endSec = seg[1];
+    const duration = Math.max(0, endSec - startSec);
+    const text = speechTexts[speechIndex] ?? "";
+    const segMean = it_segmentMeanDb(rmsDb, hopLengthSec, startSec, endSec);
+    const deltaDb = segMean - rmsMean;
+    const ratio = Math.pow(10, deltaDb / 20);
+    const deltaPct = Math.round((ratio - 1) * 100);
+    const volumeLabel =
+      Math.abs(deltaPct) >= 10
+        ? `${deltaPct > 0 ? "提高" : "降低"}${Math.abs(deltaPct)}%`
+        : "正常";
+    const words = it_countWords(text);
+    const speechRateWpm =
+      duration > 0 ? Math.round(words / (duration / 60)) : undefined;
+    const tone = it_segmentTone(rmsDb, hopLengthSec, startSec, endSec);
+
+    segments.push({
+      type: "speech",
+      startSec,
+      endSec,
+      durationSec: duration,
+      text,
+      volumeDb: Number(segMean.toFixed(2)),
+      volumeDeltaPct: deltaPct,
+      volumeLabel,
+      speechRateWpm,
+      pauseSec: 0,
+      tone,
+    });
+    cursor = endSec;
+    speechIndex += 1;
+  }
+
+  if (durationSec - cursor >= silenceThreshold) {
+    segments.push({
+      type: "silence",
+      startSec: cursor,
+      endSec: durationSec,
+      durationSec: durationSec - cursor,
+      pauseSec: Number((durationSec - cursor).toFixed(2)),
+    });
+  }
+
+  const detailedTranscript = segments
+    .map((seg) => {
+      const start = it_formatSeconds(seg.startSec);
+      const end = it_formatSeconds(seg.endSec);
+      if (seg.type === "silence") {
+        const pause = seg.pauseSec ?? seg.durationSec;
+        return `[${start}-${end}] （无语音，停顿：${pause.toFixed(1)}秒）`;
+      }
+      const speechRate = seg.speechRateWpm ? `${seg.speechRateWpm}字/分钟` : "-";
+      const volume = seg.volumeLabel || "正常";
+      const tone = seg.tone ? `，语调：${seg.tone}` : "";
+      const pause = seg.pauseSec !== undefined ? `，停顿：${seg.pauseSec}秒` : "";
+      const content = seg.text?.trim() || "（语音片段）";
+      return `[${start}-${end}] ${content}（音量：${volume}，语速：${speechRate}${tone}${pause}）`;
+    })
+    .join("\n");
+
+  return {
+    segments,
+    detailedTranscript,
+  };
 }
 
 export function it_summarizeAudioMetrics(

@@ -213,6 +213,22 @@
   font-size: 12px;
 }
 
+.it-textarea--tall {
+  height: 260px;
+}
+
+.it-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.it-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
 .it-textarea--small {
   height: 80px;
 }

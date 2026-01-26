@@ -21,7 +21,11 @@ import {
   it_resolveTopicDir,
   it_writeTopicMeta,
 } from "../storage/it_sessions";
-import { it_summarizeAudioMetrics, it_decodePcm16 } from "../utils/it_audio";
+import {
+  it_summarizeAudioMetrics,
+  it_decodePcm16,
+  it_buildDetailedTranscript,
+} from "../utils/it_audio";
 import { it_hashText, it_normalizeText } from "../utils/it_text";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
 import { it_appendReport } from "./it_report";
@@ -246,6 +250,18 @@ export async function it_runAnalysis(
           snrDb: undefined,
         };
 
+  let detailedTranscript: string | undefined = undefined;
+  let audioSegments = undefined;
+  if (request.audio.format === "pcm") {
+    const detailed = it_buildDetailedTranscript(
+      request.audio.base64,
+      request.audio.sampleRate,
+      transcript,
+    );
+    detailedTranscript = detailed.detailedTranscript;
+    audioSegments = detailed.segments;
+  }
+
   const questionTimings = it_buildQuestionTimings(
     questionText,
     questionList,
@@ -325,9 +341,11 @@ export async function it_runAnalysis(
 
   const response: ItAnalyzeResponse = {
     transcript,
+    detailedTranscript,
     acoustic,
     evaluation,
     notes,
+    audioSegments,
     questionTimings,
     reportPath,
     topicDir,
@@ -340,8 +358,10 @@ export async function it_runAnalysis(
     audioPath: storedAudioPath,
     durationSec: acoustic.durationSec,
     transcript,
+    detailedTranscript,
     evaluation,
     notes,
+    audioSegments,
     questionTimings,
   };
   it_appendAttemptData(topicDir, attemptData);

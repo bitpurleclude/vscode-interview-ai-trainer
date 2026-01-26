@@ -587,11 +587,30 @@ const InterviewTrainer: React.FC = () => {
             <div className="it-placeholder">等待分析结果...</div>
           )}
           {analysisResult && activeTab === "transcript" && (
-            <textarea
-              className="it-textarea"
-              value={analysisResult.transcript}
-              readOnly
-            />
+            <div className="it-transcript">
+              {analysisResult.detailedTranscript ? (
+                <>
+                  <div className="it-section-title">带时间标注</div>
+                  <textarea
+                    className="it-textarea it-textarea--tall"
+                    value={analysisResult.detailedTranscript}
+                    readOnly
+                  />
+                  <div className="it-section-title">原始转写</div>
+                  <textarea
+                    className="it-textarea"
+                    value={analysisResult.transcript}
+                    readOnly
+                  />
+                </>
+              ) : (
+                <textarea
+                  className="it-textarea"
+                  value={analysisResult.transcript}
+                  readOnly
+                />
+              )}
+            </div>
           )}
           {analysisResult && activeTab === "acoustic" && (
             <div className="it-metrics">

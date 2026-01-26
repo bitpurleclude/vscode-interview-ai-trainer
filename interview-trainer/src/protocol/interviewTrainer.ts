@@ -61,6 +61,20 @@ export interface ItNoteHit {
   snippet: string;
 }
 
+export interface ItAudioSegment {
+  type: "speech" | "silence";
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  text?: string;
+  volumeDb?: number;
+  volumeLabel?: string;
+  volumeDeltaPct?: number;
+  speechRateWpm?: number;
+  pauseSec?: number;
+  tone?: "升调" | "降调" | "平稳";
+}
+
 export interface ItQuestionTiming {
   question: string;
   startSec: number;
@@ -84,9 +98,11 @@ export interface ItEvaluation {
 
 export interface ItAnalyzeResponse {
   transcript: string;
+  detailedTranscript?: string;
   acoustic: ItAcousticMetrics;
   evaluation: ItEvaluation;
   notes: ItNoteHit[];
+  audioSegments?: ItAudioSegment[];
   questionTimings?: ItQuestionTiming[];
   reportPath: string;
   topicDir: string;
