@@ -4,7 +4,7 @@ import { WebviewProtocol } from "./WebviewProtocol";
 export class InterviewTrainerWebviewViewProvider
   implements vscode.WebviewViewProvider
 {
-  public static readonly viewType = "interviewTrainer.mainView";
+  public static readonly viewType = "itInterviewTrainer.mainView";
   public readonly webviewProtocol = new WebviewProtocol();
 
   constructor(private readonly context: vscode.ExtensionContext) {}

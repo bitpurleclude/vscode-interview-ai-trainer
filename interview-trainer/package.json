@@ -12,29 +12,29 @@
     "AI"
   ],
   "activationEvents": [
-    "onView:interviewTrainer.mainView",
-    "onCommand:interviewTrainer.open"
+    "onView:itInterviewTrainer.mainView",
+    "onCommand:itInterviewTrainer.open"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "interviewTrainer.open",
+        "command": "itInterviewTrainer.open",
         "category": "Interview Trainer",
         "title": "打开面试训练助手"
       },
       {
-        "command": "interviewTrainer.analyzeAudioFile",
+        "command": "itInterviewTrainer.analyzeAudioFile",
         "category": "Interview Trainer",
         "title": "分析音频文件"
       },
       {
-        "command": "interviewTrainer.openSettings",
+        "command": "itInterviewTrainer.openSettings",
         "category": "Interview Trainer",
         "title": "打开面试训练配置"
       },
       {
-        "command": "interviewTrainer.openHistory",
+        "command": "itInterviewTrainer.openHistory",
         "category": "Interview Trainer",
         "title": "查看历史记录"
       }
@@ -42,17 +42,17 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "interviewTrainer",
+          "id": "itInterviewTrainer",
           "title": "面试训练助手",
           "icon": "assets/sidebar-icon.svg"
         }
       ]
     },
     "views": {
-      "interviewTrainer": [
+      "itInterviewTrainer": [
         {
           "type": "webview",
-          "id": "interviewTrainer.mainView",
+          "id": "itInterviewTrainer.mainView",
           "name": "面试训练助手",
           "icon": "assets/sidebar-icon.svg",
           "visibility": "visible"
@@ -62,33 +62,33 @@
     "menus": {
       "view/title": [
         {
-          "command": "interviewTrainer.openSettings",
+          "command": "itInterviewTrainer.openSettings",
           "group": "navigation@1",
-          "when": "view == interviewTrainer.mainView"
+          "when": "view == itInterviewTrainer.mainView"
         },
         {
-          "command": "interviewTrainer.openHistory",
+          "command": "itInterviewTrainer.openHistory",
           "group": "navigation@2",
-          "when": "view == interviewTrainer.mainView"
+          "when": "view == itInterviewTrainer.mainView"
         }
       ],
       "commandPalette": [
         {
-          "command": "interviewTrainer.open"
+          "command": "itInterviewTrainer.open"
         },
         {
-          "command": "interviewTrainer.analyzeAudioFile"
+          "command": "itInterviewTrainer.analyzeAudioFile"
         },
         {
-          "command": "interviewTrainer.openSettings"
+          "command": "itInterviewTrainer.openSettings"
         },
         {
-          "command": "interviewTrainer.openHistory"
+          "command": "itInterviewTrainer.openHistory"
         }
       ],
       "explorer/context": [
         {
-          "command": "interviewTrainer.analyzeAudioFile",
+          "command": "itInterviewTrainer.analyzeAudioFile",
           "group": "navigation@1"
         }
       ]

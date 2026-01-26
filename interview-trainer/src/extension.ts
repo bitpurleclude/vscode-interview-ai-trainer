@@ -18,14 +18,14 @@ export function activate(context: vscode.ExtensionContext) {
   new InterviewTrainerExtension(context, viewProvider.webviewProtocol);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("interviewTrainer.open", () => {
-      vscode.commands.executeCommand("interviewTrainer.mainView.focus");
+    vscode.commands.registerCommand("itInterviewTrainer.open", () => {
+      vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
     }),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      "interviewTrainer.analyzeAudioFile",
+      "itInterviewTrainer.analyzeAudioFile",
       async () => {
         const selection = await vscode.window.showOpenDialog({
           canSelectFiles: true,
@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!selection || selection.length === 0) {
           return;
         }
-        void vscode.commands.executeCommand("interviewTrainer.mainView.focus");
+        void vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
         void vscode.window.showInformationMessage(
           "已选中音频文件，请在面试训练助手面板中点击“导入音频”后开始分析。",
         );
@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("interviewTrainer.openSettings", async () => {
+    vscode.commands.registerCommand("itInterviewTrainer.openSettings", async () => {
       it_ensureConfigFiles(context);
       const configDir = it_getUserConfigDir(context);
       const target = path.join(configDir, "api_config.yaml");
@@ -54,8 +54,8 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("interviewTrainer.openHistory", () => {
-      void vscode.commands.executeCommand("interviewTrainer.mainView.focus");
+    vscode.commands.registerCommand("itInterviewTrainer.openHistory", () => {
+      void vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
       void vscode.window.showInformationMessage(
         "历史记录已在面试训练助手面板提供。",
       );
