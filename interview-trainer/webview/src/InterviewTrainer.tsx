@@ -99,6 +99,7 @@ const InterviewTrainer: React.FC = () => {
     useState<ItAnalyzeRequest["audio"] | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const uiLocked = !config;
@@ -201,19 +202,61 @@ const InterviewTrainer: React.FC = () => {
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const arrayBuffer = await file.arrayBuffer();
-    const decoded = await it_decodeToPcm16(arrayBuffer, 16000);
-    setAudioPayload({
-      format: "pcm",
-      sampleRate: decoded.sampleRate,
-      byteLength: decoded.pcm.length * 2,
-      durationSec: decoded.durationSec,
-      base64: it_pcmToBase64(decoded.pcm),
-    });
-    setItState((prev) => ({
-      ...prev,
-      statusMessage: `已导入音频：${file.name}`,
-    }));
+    try {
+      setIsImporting(true);
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: `正在导入音频：${file.name}（大文件可能需要一些时间）`,
+      }));
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Use WebAudio's resampler via OfflineAudioContext to avoid heavy JS loops.
+      const audioCtx = new AudioContext();
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      const targetRate = 16000;
+      const targetLength = Math.ceil(decoded.duration * targetRate);
+      const offline = new OfflineAudioContext(1, targetLength, targetRate);
+      const source = offline.createBufferSource();
+      source.buffer = decoded;
+      source.connect(offline.destination);
+      source.start(0);
+      const rendered = await offline.startRendering();
+
+      const channel = rendered.getChannelData(0);
+      const pcm = new Int16Array(channel.length);
+      for (let i = 0; i < channel.length; i += 1) {
+        pcm[i] = Math.max(-1, Math.min(1, channel[i])) * 32767;
+      }
+
+      setAudioPayload({
+        format: "pcm",
+        sampleRate: targetRate,
+        byteLength: pcm.length * 2,
+        durationSec: rendered.duration,
+        base64: it_pcmToBase64(pcm),
+      });
+
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: `已导入音频：${file.name}（${rendered.duration.toFixed(1)}s）`,
+      }));
+    } catch (err) {
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "导入失败：无法解码该音频格式",
+        lastError: {
+          type: "import",
+          reason: err instanceof Error ? err.message : String(err),
+          solution:
+            "建议先将音频转为 WAV(16kHz, 单声道) 后再导入，或尝试更换音频文件。",
+        },
+      }));
+    } finally {
+      setIsImporting(false);
+      // allow re-selecting the same file
+      event.target.value = "";
+    }
   };
 
   const handleAnalyze = async () => {
@@ -296,7 +339,7 @@ const InterviewTrainer: React.FC = () => {
           </label>
           <button
             className="it-button"
-            disabled={uiLocked || !audioPayload || isProcessing}
+            disabled={uiLocked || !audioPayload || isProcessing || isImporting}
             onClick={handleAnalyze}
           >
             开始分析
