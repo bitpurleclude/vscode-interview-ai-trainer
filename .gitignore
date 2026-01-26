@@ -14,3 +14,4 @@ testdata/*.m4a
 # OS / editor noise
 .DS_Store
 Thumbs.db
+.vscode/
