@@ -161,38 +161,51 @@ const InterviewTrainer: React.FC = () => {
   }, [itState]);
 
   const handleStartRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream);
-    recordingChunksRef.current = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        recordingChunksRef.current.push(event.data);
-      }
-    };
-    recorder.onstop = async () => {
-      const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
-      const arrayBuffer = await blob.arrayBuffer();
-      const decoded = await it_decodeToPcm16(arrayBuffer, 16000);
-      setAudioPayload({
-        format: "pcm",
-        sampleRate: decoded.sampleRate,
-        byteLength: decoded.pcm.length * 2,
-        durationSec: decoded.durationSec,
-        base64: it_pcmToBase64(decoded.pcm),
-      });
-      setRecordingTime(0);
-    };
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-    setItState((prev) => ({
-      ...prev,
-      recordingState: "recording",
-      statusMessage: "录音中...",
-    }));
-    const interval = setInterval(() => {
-      setRecordingTime((prev) => prev + 1);
-    }, 1000);
-    recorder.addEventListener("stop", () => clearInterval(interval));
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
+        const arrayBuffer = await blob.arrayBuffer();
+        const decoded = await it_decodeToPcm16(arrayBuffer, 16000);
+        setAudioPayload({
+          format: "pcm",
+          sampleRate: decoded.sampleRate,
+          byteLength: decoded.pcm.length * 2,
+          durationSec: decoded.durationSec,
+          base64: it_pcmToBase64(decoded.pcm),
+        });
+        setRecordingTime(0);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setItState((prev) => ({
+        ...prev,
+        recordingState: "recording",
+        statusMessage: "录音中...",
+        lastError: undefined,
+      }));
+      const interval = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+      recorder.addEventListener("stop", () => clearInterval(interval));
+    } catch (err) {
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "录音启动失败：请检查麦克风权限",
+        lastError: {
+          type: "recording",
+          reason: err instanceof Error ? err.message : String(err),
+          solution: "请在系统与 IDE 权限中允许麦克风访问。",
+        },
+      }));
+    }
   };
 
   const handleStopRecording = () => {
@@ -302,6 +315,10 @@ const InterviewTrainer: React.FC = () => {
   const handleAnalyze = async () => {
     if (!audioPayload) return;
     setIsProcessing(true);
+    setItState((prev) => ({
+      ...prev,
+      statusMessage: "已发起分析请求，处理中...",
+    }));
     const payload: ItAnalyzeRequest = {
       audio: audioPayload,
       questionText: questionText.trim() || undefined,
@@ -310,14 +327,26 @@ const InterviewTrainer: React.FC = () => {
         .map((line) => line.trim())
         .filter(Boolean),
     };
-    const response = await request("it/analyzeAudio", payload);
-    if (response?.status === "success") {
-      setAnalysisResult(response.content);
-      setActiveTab("evaluation");
-    } else {
+    try {
+      const response = await request("it/analyzeAudio", payload);
+      if (response?.status === "success") {
+        setAnalysisResult(response.content);
+        setActiveTab("evaluation");
+      } else {
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: "分析失败，请检查配置或网络",
+        }));
+      }
+    } catch (err) {
       setItState((prev) => ({
         ...prev,
-        statusMessage: "分析失败，请检查配置或网络",
+        statusMessage: "分析请求失败",
+        lastError: {
+          type: "analysis",
+          reason: err instanceof Error ? err.message : String(err),
+          solution: "请检查网络与配置后重试。",
+        },
       }));
     }
     setIsProcessing(false);
