@@ -59,12 +59,19 @@ export class InterviewTrainerWebviewViewProvider
       </div>
     `;
 
+    const nonce = String(Math.random()).slice(2);
+
     return `<!DOCTYPE html>
       <html lang="zh-CN">
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <script>const vscode = acquireVsCodeApi();</script>
+          <meta http-equiv="Content-Security-Policy" content="
+            default-src 'none';
+            img-src ${webview.cspSource} https: data:;
+            style-src ${webview.cspSource} 'unsafe-inline';
+            script-src 'nonce-${nonce}';
+          ">
           <style>
             :root { color-scheme: light dark; }
             body {
@@ -144,18 +151,43 @@ export class InterviewTrainerWebviewViewProvider
         </head>
         <body>
           <div id="root">${bootHtml}</div>
-          <script>
+          <script nonce="${nonce}">
             window.__itReady = false;
-            setTimeout(() => {
-              if (!window.__itReady) {
-                const status = document.querySelector(".it-boot__status");
-                if (status) {
-                  status.textContent = "仍在加载，请稍候...";
-                }
+            window.__itScriptLoaded = false;
+            window.__itLastError = "";
+
+            window.addEventListener("error", (event) => {
+              try {
+                window.__itLastError = String(event?.message || event?.error?.message || event);
+              } catch {}
+            });
+            window.addEventListener("unhandledrejection", (event) => {
+              try {
+                window.__itLastError = String(event?.reason?.message || event?.reason || event);
+              } catch {}
+            });
+
+            function updateBoot(text) {
+              const status = document.querySelector(".it-boot__status");
+              if (status) {
+                status.textContent = text;
               }
+            }
+
+            setTimeout(() => {
+              if (window.__itReady) return;
+              if (!window.__itScriptLoaded) {
+                updateBoot("前端脚本未加载：请尝试重启 IDE 或重新安装 VSIX。");
+                return;
+              }
+              if (window.__itLastError) {
+                updateBoot("前端运行出错：" + window.__itLastError);
+                return;
+              }
+              updateBoot("仍在加载，请稍候...");
             }, 6000);
           </script>
-          <script src="${scriptUri}"></script>
+          <script nonce="${nonce}" src="${scriptUri}"></script>
         </body>
       </html>`;
   }
