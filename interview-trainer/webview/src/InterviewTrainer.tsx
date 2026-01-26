@@ -69,6 +69,14 @@ function it_pcmToBase64(pcm: Int16Array): string {
   return btoa(binary);
 }
 
+function it_bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
@@ -211,36 +219,68 @@ const InterviewTrainer: React.FC = () => {
 
       const arrayBuffer = await file.arrayBuffer();
 
-      // Use WebAudio's resampler via OfflineAudioContext to avoid heavy JS loops.
-      const audioCtx = new AudioContext();
-      const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      const targetRate = 16000;
-      const targetLength = Math.ceil(decoded.duration * targetRate);
-      const offline = new OfflineAudioContext(1, targetLength, targetRate);
-      const source = offline.createBufferSource();
-      source.buffer = decoded;
-      source.connect(offline.destination);
-      source.start(0);
-      const rendered = await offline.startRendering();
+      try {
+        // Fast path: decode in WebAudio (works for many WAV/MP3/AAC containers).
+        const audioCtx = new AudioContext();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        const targetRate = 16000;
+        const targetLength = Math.ceil(decoded.duration * targetRate);
+        const offline = new OfflineAudioContext(1, targetLength, targetRate);
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+        const rendered = await offline.startRendering();
 
-      const channel = rendered.getChannelData(0);
-      const pcm = new Int16Array(channel.length);
-      for (let i = 0; i < channel.length; i += 1) {
-        pcm[i] = Math.max(-1, Math.min(1, channel[i])) * 32767;
+        const channel = rendered.getChannelData(0);
+        const pcm = new Int16Array(channel.length);
+        for (let i = 0; i < channel.length; i += 1) {
+          pcm[i] = Math.max(-1, Math.min(1, channel[i])) * 32767;
+        }
+
+        setAudioPayload({
+          format: "pcm",
+          sampleRate: targetRate,
+          byteLength: pcm.length * 2,
+          durationSec: rendered.duration,
+          base64: it_pcmToBase64(pcm),
+        });
+
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: `已导入音频：${file.name}（${rendered.duration.toFixed(1)}s）`,
+        }));
+      } catch (decodeErr) {
+        // Fallback: ask extension host to convert using ffmpeg (if available).
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: `浏览器无法解码（${file.name}），正在尝试使用本地转换...`,
+        }));
+        const bytes = new Uint8Array(arrayBuffer);
+        const ext = file.name.split(".").pop()?.toLowerCase() || "m4a";
+        const resp = await request("it/convertAudioToPcm", {
+          filename: file.name,
+          ext,
+          base64: it_bytesToBase64(bytes),
+        });
+        if (resp?.status !== "success" || !resp.content) {
+          throw decodeErr;
+        }
+        const pcmBase64 = String(resp.content.base64 || "");
+        const durationSec = Number(resp.content.durationSec || 0);
+        const byteLength = Number(resp.content.byteLength || 0);
+        setAudioPayload({
+          format: "pcm",
+          sampleRate: 16000,
+          byteLength,
+          durationSec,
+          base64: pcmBase64,
+        });
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: `已导入音频：${file.name}（${durationSec.toFixed(1)}s）`,
+        }));
       }
-
-      setAudioPayload({
-        format: "pcm",
-        sampleRate: targetRate,
-        byteLength: pcm.length * 2,
-        durationSec: rendered.duration,
-        base64: it_pcmToBase64(pcm),
-      });
-
-      setItState((prev) => ({
-        ...prev,
-        statusMessage: `已导入音频：${file.name}（${rendered.duration.toFixed(1)}s）`,
-      }));
     } catch (err) {
       setItState((prev) => ({
         ...prev,
@@ -249,7 +289,7 @@ const InterviewTrainer: React.FC = () => {
           type: "import",
           reason: err instanceof Error ? err.message : String(err),
           solution:
-            "建议先将音频转为 WAV(16kHz, 单声道) 后再导入，或尝试更换音频文件。",
+            "建议先将音频转为 WAV(16kHz, 单声道) 后再导入；或安装 ffmpeg 后重试。",
         },
       }));
     } finally {

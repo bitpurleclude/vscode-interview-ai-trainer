@@ -1,4 +1,7 @@
 import path from "path";
+import os from "os";
+import fs from "fs";
+import { spawn } from "child_process";
 import * as vscode from "vscode";
 import {
   ItAnalyzeRequest,
@@ -97,9 +100,96 @@ export class InterviewTrainerExtension {
       }
       await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
     });
+    this.webviewProtocol.on("it/convertAudioToPcm", async (msg) => {
+      const base64 = String(msg.data?.base64 || "");
+      const ext = String(msg.data?.ext || "m4a").replace(/[^a-z0-9]/gi, "");
+      if (!base64) {
+        throw new Error("missing audio bytes");
+      }
+
+      const ffmpeg = await this.it_findFfmpeg();
+      if (!ffmpeg) {
+        throw new Error(
+          "未检测到 ffmpeg：请安装 ffmpeg 或将音频先转为 WAV(16kHz 单声道) 后再导入。",
+        );
+      }
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "it-audio-"));
+      const inPath = path.join(tmpDir, `input.${ext || "m4a"}`);
+      const outPath = path.join(tmpDir, "output.pcm");
+      fs.writeFileSync(inPath, Buffer.from(base64, "base64"));
+
+      await new Promise<void>((resolve, reject) => {
+        const args = [
+          "-y",
+          "-i",
+          inPath,
+          "-ac",
+          "1",
+          "-ar",
+          "16000",
+          "-f",
+          "s16le",
+          outPath,
+        ];
+        const child = spawn(ffmpeg, args, { windowsHide: true });
+        let stderr = "";
+        child.stderr.on("data", (d) => {
+          stderr += String(d);
+        });
+        child.on("error", (err) => reject(err));
+        child.on("close", (code) => {
+          if (code === 0 && fs.existsSync(outPath)) {
+            resolve();
+          } else {
+            reject(new Error(`ffmpeg 转换失败: ${stderr || `code=${code}`}`));
+          }
+        });
+      });
+
+      const pcm = fs.readFileSync(outPath);
+      const byteLength = pcm.byteLength;
+      const durationSec = byteLength / (2 * 16000);
+
+      // cleanup best-effort
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {}
+
+      return {
+        base64: pcm.toString("base64"),
+        byteLength,
+        durationSec,
+      };
+    });
     this.webviewProtocol.on("it/analyzeAudio", async (msg) => {
       return await this.handleAnalyze(msg.data);
     });
+  }
+
+  private async it_findFfmpeg(): Promise<string | null> {
+    const envPath = process.env.IT_FFMPEG_PATH;
+    if (envPath && fs.existsSync(envPath)) {
+      return envPath;
+    }
+
+    const candidates = process.platform === "win32" ? ["ffmpeg.exe", "ffmpeg"] : ["ffmpeg"];
+    for (const cmd of candidates) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn(cmd, ["-version"], { windowsHide: true });
+          child.on("error", (err) => reject(err));
+          child.on("close", (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(String(code)));
+          });
+        });
+        return cmd;
+      } catch {
+        // try next
+      }
+    }
+    return null;
   }
 
   private async handleAnalyze(
