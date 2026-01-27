@@ -381,11 +381,17 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
   font-size: 12px;
   background: var(--vscode-editorWidget-background);
   border: 1px solid var(--vscode-editorWidget-border);
   border-radius: 6px;
   padding: 8px;
+}
+
+.it-button--compact {
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .it-question {

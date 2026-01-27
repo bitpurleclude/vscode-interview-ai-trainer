@@ -18,6 +18,7 @@ import {
   ItApiConfig,
   it_applySecretOverrides,
   it_ensureConfigFiles,
+  it_saveSkillConfig,
 } from "./api/it_apiConfig";
 import { it_runAnalysis } from "./core/it_analyze";
 import { it_listHistoryItems } from "./storage/it_history";
@@ -64,12 +65,13 @@ export class InterviewTrainerExtension {
     this.registerHandlers();
   }
 
-  private getWorkspaceRoot(): string {
+  private requireWorkspaceRoot(): string {
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length) {
       return folders[0].uri.fsPath;
     }
-    return this.context.globalStorageUri.fsPath;
+    void vscode.window.showErrorMessage("请先打开工作区文件夹后再进行分析。");
+    throw new Error("workspace not found");
   }
 
   private buildConfigSnapshot(apiConfig: ItApiConfig): ItConfigSnapshot {
@@ -161,7 +163,7 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/getState", () => this.state);
     this.webviewProtocol.on("it/getConfig", () => this.configSnapshot);
     this.webviewProtocol.on("it/listHistory", (msg) => {
-      const workspaceRoot = this.getWorkspaceRoot();
+      const workspaceRoot = this.requireWorkspaceRoot();
       const sessionsRoot = path.join(
         workspaceRoot,
         this.configBundle.skill.sessions_dir || "sessions",
@@ -205,6 +207,35 @@ export class InterviewTrainerExtension {
       );
       const llmConfig = this.it_getLlmConfig();
       return await it_parseQuestions(text, llmConfig);
+    });
+    this.webviewProtocol.on("it/selectSessionsDir", async () => {
+      const workspaceRoot = this.requireWorkspaceRoot();
+      const selection = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        openLabel: "选择保存目录",
+        defaultUri: vscode.Uri.file(workspaceRoot),
+      });
+      if (!selection || selection.length === 0) {
+        return { canceled: true };
+      }
+      const selected = selection[0].fsPath;
+      const relative = path.relative(workspaceRoot, selected);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        void vscode.window.showWarningMessage("请选择当前工作区内的目录。");
+        return { canceled: true };
+      }
+      const normalized = relative ? relative.split(path.sep).join("/") : "sessions";
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        sessions_dir: normalized || "sessions",
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return { sessionsDir: normalized || "sessions" };
     });
     this.webviewProtocol.on("openFile", async (msg) => {
       const target = msg.data?.path;
@@ -330,7 +361,7 @@ export class InterviewTrainerExtension {
         this.context,
         this.configBundle.api,
       );
-      const workspaceRoot = this.getWorkspaceRoot();
+      const workspaceRoot = this.requireWorkspaceRoot();
       const response = await it_runAnalysis(
         {
           context: this.context,

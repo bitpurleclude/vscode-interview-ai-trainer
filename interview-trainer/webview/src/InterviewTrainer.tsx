@@ -901,6 +901,14 @@ const InterviewTrainer: React.FC = () => {
               <span>ASR: {config.asrProvider}</span>
               <span>LLM: {config.llmProvider}</span>
               <span>环境: {config.activeEnvironment}</span>
+              <span>保存目录: {config.sessionsDir}</span>
+              <button
+                className="it-button it-button--secondary it-button--compact"
+                disabled={uiLocked}
+                onClick={() => request("it/selectSessionsDir", undefined)}
+              >
+                选择保存目录
+              </button>
             </>
           ) : (
             <span>配置加载中...</span>

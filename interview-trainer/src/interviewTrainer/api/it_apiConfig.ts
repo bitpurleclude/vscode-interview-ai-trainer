@@ -83,6 +83,14 @@ export function it_saveApiConfig(
   it_writeYamlFile(path.join(baseDir, "api_config.yaml"), apiConfig);
 }
 
+export function it_saveSkillConfig(
+  context: vscode.ExtensionContext,
+  skillConfig: Record<string, any>,
+): void {
+  const baseDir = it_getUserConfigDir(context);
+  it_writeYamlFile(path.join(baseDir, "skill_config.yaml"), skillConfig);
+}
+
 export async function it_applySecretOverrides(
   context: vscode.ExtensionContext,
   apiConfig: ItApiConfig,
