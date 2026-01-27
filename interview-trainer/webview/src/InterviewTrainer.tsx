@@ -759,7 +759,7 @@ const InterviewTrainer: React.FC = () => {
                 {analysisResult.evaluation.topicSummary}
               </div>
               <div className="it-evaluation__overall">
-                ???{analysisResult.evaluation.overallScore}
+                总分：{analysisResult.evaluation.overallScore}
               </div>
               <div className="it-evaluation__scores">
                 {Object.entries(analysisResult.evaluation.scores || {}).map(
@@ -796,7 +796,7 @@ const InterviewTrainer: React.FC = () => {
                 </ul>
               </div>
               <div className="it-evaluation__section">
-                <h4>?????</h4>
+                <h4>练习重点</h4>
                 <ul>
                   {analysisResult.evaluation.nextFocus.map((item, idx) => (
                     <li key={idx}>{item}</li>
