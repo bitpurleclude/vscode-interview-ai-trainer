@@ -209,25 +209,84 @@ function it_buildFallbackRevisions(
 ): Array<{ question: string; original: string; revised: string }> {
   return questionAnswers.map((item) => {
     const base = item.answer || "（作答略）";
-    const sentences = base
-      .split(/[。！？!?]/)
-      .map((sentence) => sentence.trim())
+    const cleaned = base
+      .replace(/考生回答完毕|回答完毕|考生回答/g, "")
+      .replace(/\s+/g, "");
+    const rawClauses = cleaned
+      .split(/[。！？!?；;]/)
+      .flatMap((part) => part.split(/[，,]/))
+      .map((part) => part.trim())
       .filter(Boolean);
-    const conclusion = sentences[0] || "我认为需要系统推进相关工作。";
-    const background = sentences.slice(1, 3).join("；");
-    const measures = sentences.slice(3, 6).join("；");
-    const summary =
-      sentences.length > 1 ? sentences[sentences.length - 1] : "形成可持续改进闭环。";
+    const seen = new Set<string>();
+    const clauses: string[] = [];
+    rawClauses.forEach((clause) => {
+      if (!seen.has(clause) && clause.length > 1) {
+        seen.add(clause);
+        clauses.push(clause);
+      }
+    });
+
+    const buckets = {
+      coord: [] as string[],
+      product: [] as string[],
+      promote: [] as string[],
+      safety: [] as string[],
+      other: [] as string[],
+    };
+    clauses.forEach((clause) => {
+      if (/安全|救援|应急|预案|备案|评估|评判|医疗/.test(clause)) {
+        buckets.safety.push(clause);
+      } else if (/部门|统筹|联动|协同|交通|农业|文旅|公安|卫健/.test(clause)) {
+        buckets.coord.push(clause);
+      } else if (/农产品|小吃|文化|展览|艺术|特色|旅游|奖品|展销/.test(clause)) {
+        buckets.product.push(clause);
+      } else if (/宣传|推广|政务|媒体|新闻|抖音|平台|传播/.test(clause)) {
+        buckets.promote.push(clause);
+      } else {
+        buckets.other.push(clause);
+      }
+    });
+
+    const take = (bucket: string[], count: number): string => {
+      if (!bucket.length) {
+        return "";
+      }
+      return bucket.splice(0, count).join("，");
+    };
+
+    const introClause = clauses[0] || "我认为要系统推进这项工作";
+    const intro = `各位考官，${introClause}${introClause.endsWith("。") ? "" : "。"}为确保本次活动顺利开展，我将围绕统筹协调、资源落地、宣传推广与安全保障四个方面推进工作。`;
+
+    const coordDetail =
+      take(buckets.coord, 2) ||
+      take(buckets.other, 1) ||
+      "成立专项工作组，明确交通、农业、文旅等部门职责，形成联动机制";
+    const productDetail =
+      take(buckets.product, 2) ||
+      take(buckets.other, 1) ||
+      "下乡调研筛选本地特色产品，设置展销与体验点位，丰富赛事配套";
+    const promoteDetail =
+      take(buckets.promote, 2) ||
+      take(buckets.other, 1) ||
+      "统筹线上线下渠道发布信息，提升赛事影响力与参与度";
+    const safetyDetail =
+      take(buckets.safety, 2) ||
+      take(buckets.other, 1) ||
+      "坚持一赛一案，配足救援力量，完善应急预案与处置流程";
+
+    const hint = improvements.slice(0, 2).join("；");
+    const closing = hint
+      ? `最后，我会持续复盘优化，重点落实${hint}，确保执行落地。`
+      : "最后，我会持续复盘优化，确保工作闭环。";
+
     const revised = [
-      `**结论**：${conclusion}${conclusion.endsWith("。") ? "" : "。"}`,
-      `**背景与原因**：${background || "结合材料简要说明背景与成因。"}${
-        background && !background.endsWith("。") ? "。" : ""
-      }`,
-      `**对策**：${measures || "从制度、资源与执行落地提出可操作举措。"}${
-        measures && !measures.endsWith("。") ? "。" : ""
-      }`,
-      `**总结**：${summary}${summary.endsWith("。") ? "" : "。"}`,
-    ].join("");
+      intro,
+      `第一，**统筹协调**，打好工作基础。${coordDetail}。`,
+      `第二，**资源落地**，做优特色配套。${productDetail}。`,
+      `第三，**宣传推广**，扩大活动影响。${promoteDetail}。`,
+      `第四，**安全保障**，守住工作底线。${safetyDetail}。`,
+      closing,
+    ].join("\n\n");
     return {
       question: item.question,
       original: base,
@@ -449,7 +508,8 @@ export async function it_evaluateAnswer(
       : "考生回答(按题): 无",
     "要求: strengths/issues/improvements 至少各3条，nextFocus 至少2条。",
     "revisedAnswers 必须基于对应题目的原回答，并综合 improvements 的改进意见进行润色、删冗与补充逻辑。",
-    "revisedAnswers 仅输出优化后的完整回答，不要出现“示范答题/改进要点”等提示语。",
+    "请输出完整、流畅的段落式回答：开头一句给结论，随后用“第一/第二/第三/第四”展开要点，最后收束总结。",
+    "不要使用“结论/背景/对策/总结”等标题，也不要出现“示范答题/改进要点”等提示语。",
     "可用 **加粗** 标记关键观点或结论。",
     "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus, revisedAnswers",
     "scores 中的键必须与评分维度名称完全一致。",
