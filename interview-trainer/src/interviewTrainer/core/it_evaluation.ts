@@ -207,12 +207,26 @@ function it_buildFallbackRevisions(
   questionAnswers: Array<{ question: string; answer: string }>,
   improvements: string[],
 ): Array<{ question: string; original: string; revised: string }> {
-  const hints = improvements.slice(0, 3).join("；");
   return questionAnswers.map((item) => {
     const base = item.answer || "（作答略）";
+    const sentences = base
+      .split(/[。！？!?]/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+    const conclusion = sentences[0] || "我认为需要系统推进相关工作。";
+    const background = sentences.slice(1, 3).join("；");
+    const measures = sentences.slice(3, 6).join("；");
+    const summary =
+      sentences.length > 1 ? sentences[sentences.length - 1] : "形成可持续改进闭环。";
     const revised = [
-      `示范答题：围绕“${item.question}”，先给结论，再从背景、原因、对策展开，最后总结提升。`,
-      `改进要点：${hints || "结构清晰、措施具体、结合实际"}`,
+      `**结论**：${conclusion}${conclusion.endsWith("。") ? "" : "。"}`,
+      `**背景与原因**：${background || "结合材料简要说明背景与成因。"}${
+        background && !background.endsWith("。") ? "。" : ""
+      }`,
+      `**对策**：${measures || "从制度、资源与执行落地提出可操作举措。"}${
+        measures && !measures.endsWith("。") ? "。" : ""
+      }`,
+      `**总结**：${summary}${summary.endsWith("。") ? "" : "。"}`,
     ].join("");
     return {
       question: item.question,
@@ -434,7 +448,9 @@ export async function it_evaluateAnswer(
           .join("\n")}`
       : "考生回答(按题): 无",
     "要求: strengths/issues/improvements 至少各3条，nextFocus 至少2条。",
-    "如题目列表存在，请给出每题示范性修改(revisedAnswers)，要求结构清晰、中文表达。",
+    "revisedAnswers 必须基于对应题目的原回答，并综合 improvements 的改进意见进行润色、删冗与补充逻辑。",
+    "revisedAnswers 仅输出优化后的完整回答，不要出现“示范答题/改进要点”等提示语。",
+    "可用 **加粗** 标记关键观点或结论。",
     "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus, revisedAnswers",
     "scores 中的键必须与评分维度名称完全一致。",
   ].join("\\n\\n");
