@@ -7,6 +7,8 @@ import {
   ItEvaluation,
   ItQuestionTiming,
   ItAudioSegment,
+  ItStepStatus,
+  ItWorkflowStep,
 } from "../../protocol/interviewTrainer";
 import { v4 as uuidv4 } from "uuid";
 
@@ -37,6 +39,14 @@ interface ItAnalyzeDeps {
   apiConfig: ItApiConfig;
   skillConfig: Record<string, any>;
   workspaceRoot: string;
+  onProgress?: (update: ItAnalyzeProgress) => void;
+}
+
+interface ItAnalyzeProgress {
+  step: ItWorkflowStep;
+  progress: number;
+  message?: string;
+  status?: ItStepStatus;
 }
 
 function it_getEnvConfig(apiConfig: ItApiConfig, env: string): any {
@@ -325,6 +335,7 @@ async function it_transcribePcmWithChunks(
   base64: string,
   sampleRate: number,
   maxChunkSec: number,
+  onProgress?: (processed: number, total: number) => void,
 ): Promise<string> {
   let chunkSec = Math.max(5, Math.floor(maxChunkSec || 50));
   let lastError: unknown = undefined;
@@ -332,7 +343,8 @@ async function it_transcribePcmWithChunks(
     const chunks = it_splitPcmBase64(base64, sampleRate, chunkSec);
     const parts: string[] = [];
     try {
-      for (const chunk of chunks) {
+      for (let idx = 0; idx < chunks.length; idx += 1) {
+        const chunk = chunks[idx];
         const part = await it_callBaiduAsr(asrConfig, {
           format: "pcm",
           rate: sampleRate,
@@ -342,6 +354,7 @@ async function it_transcribePcmWithChunks(
           len: chunk.len,
         });
         parts.push(part);
+        onProgress?.(idx + 1, chunks.length);
       }
       return parts.join("");
     } catch (err) {
@@ -360,6 +373,19 @@ export async function it_runAnalysis(
   deps: ItAnalyzeDeps,
   request: ItAnalyzeRequest,
 ): Promise<ItAnalyzeResponse> {
+  const reportProgress = (
+    step: ItWorkflowStep,
+    progress: number,
+    message?: string,
+    status?: ItStepStatus,
+  ) => {
+    deps.onProgress?.({
+      step,
+      progress,
+      message,
+      status,
+    });
+  };
   const env = deps.apiConfig.active?.environment || "prod";
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
   const questionText = request.questionText?.trim() || "";
@@ -370,9 +396,11 @@ export async function it_runAnalysis(
 
   const asrCfg = envConfig.asr ?? {};
   const asrProvider = asrCfg.provider || "baidu_vop";
+  reportProgress("asr", 0, "语音转写 0%", "running");
   let transcript = "";
   if (asrProvider === "mock") {
     transcript = String(asrCfg.mock_text || "");
+    reportProgress("asr", 100, "语音转写 100%", "success");
   } else {
     if (asrProvider !== "baidu_vop") {
       throw new Error("当前仅支持百度语音转文字（baidu_vop）。");
@@ -396,8 +424,13 @@ export async function it_runAnalysis(
         request.audio.base64,
         request.audio.sampleRate,
         maxChunkSec,
+        (done, total) => {
+          const percent = total ? Math.round((done / total) * 100) : 0;
+          reportProgress("asr", percent, `语音转写 ${percent}%`, "running");
+        },
       );
     } else {
+      reportProgress("asr", 25, "语音转写 25%", "running");
       transcript = await it_callBaiduAsr(asrConfig, {
         format: request.audio.format,
         rate: request.audio.sampleRate,
@@ -407,8 +440,10 @@ export async function it_runAnalysis(
         len: request.audio.byteLength,
       });
     }
+    reportProgress("asr", 100, "语音转写 100%", "success");
   }
 
+  reportProgress("acoustic", 20, "声学分析 20%", "running");
   const acoustic =
     request.audio.format === "pcm"
       ? it_summarizeAudioMetrics(
@@ -427,6 +462,7 @@ export async function it_runAnalysis(
           rmsDbStd: 0,
           snrDb: undefined,
         };
+  reportProgress("acoustic", 100, "声学分析 100%", "success");
 
   let detailedTranscript: string | undefined = undefined;
   let audioSegments = undefined;
@@ -466,6 +502,7 @@ export async function it_runAnalysis(
     );
   }
 
+  reportProgress("notes", 15, "笔记检索 15%", "running");
   const workspaceCfg = deps.skillConfig.workspace ?? {};
   const corpus = it_buildCorpus({
     notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
@@ -489,6 +526,7 @@ export async function it_runAnalysis(
     Number(deps.skillConfig.retrieval?.top_k ?? 5),
     Number(deps.skillConfig.retrieval?.min_score ?? 0.1),
   );
+  reportProgress("notes", 100, "笔记检索 100%", "success");
 
   const topicTitle = it_deriveTopicTitle(
     questionText,
@@ -529,6 +567,7 @@ export async function it_runAnalysis(
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
   };
 
+  reportProgress("evaluation", 10, "面试评价 10%", "running");
   const evaluation: ItEvaluation = await it_evaluateAnswer(
     questionText || topicTitle,
     transcript,
@@ -538,6 +577,7 @@ export async function it_runAnalysis(
     questionList,
     questionAnswers,
   );
+  reportProgress("evaluation", 100, "面试评价 100%", "success");
 
   const response: ItAnalyzeResponse = {
     transcript,
@@ -552,6 +592,23 @@ export async function it_runAnalysis(
     audioPath: storedAudioPath,
   };
 
+  reportProgress("report", 30, "结果生成 30%", "running");
+  it_appendReport(
+    reportPath,
+    topicTitle,
+    questionText || undefined,
+    questionList.length ? questionList : undefined,
+    attemptIndex,
+    response,
+    {
+      attemptHeading: "第{n}次作答",
+      segmentHeading: "小题{n}",
+      attemptNote: "评分为相对参考，请结合标准文件自评。",
+    },
+  );
+  reportProgress("report", 100, "结果生成 100%", "success");
+
+  reportProgress("write", 40, "写入文件 40%", "running");
   const attemptData = {
     attemptIndex,
     timestamp: new Date().toISOString(),
@@ -578,20 +635,7 @@ export async function it_runAnalysis(
     updatedAt: now,
     overallScore: evaluation.overallScore,
   });
-
-  it_appendReport(
-    reportPath,
-    topicTitle,
-    questionText || undefined,
-    questionList.length ? questionList : undefined,
-    attemptIndex,
-    response,
-    {
-      attemptHeading: "第{n}次作答",
-      segmentHeading: "小题{n}",
-      attemptNote: "评分为相对参考，请结合标准文件自评。",
-    },
-  );
+  reportProgress("write", 100, "写入文件 100%", "success");
 
   return response;
 }

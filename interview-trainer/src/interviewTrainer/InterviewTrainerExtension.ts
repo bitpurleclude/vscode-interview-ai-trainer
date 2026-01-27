@@ -8,6 +8,9 @@ import {
   ItAnalyzeResponse,
   ItConfigSnapshot,
   ItState,
+  ItStepState,
+  ItStepStatus,
+  ItWorkflowStep,
 } from "../protocol/interviewTrainer";
 
 import {
@@ -36,6 +39,15 @@ const IT_STATUS_INIT: ItState = {
     { id: "report", status: "pending", progress: 0 },
     { id: "write", status: "pending", progress: 0 },
   ],
+};
+
+const IT_PROGRESS_WEIGHTS: Partial<Record<ItWorkflowStep, number>> = {
+  asr: 0.45,
+  acoustic: 0.15,
+  notes: 0.1,
+  evaluation: 0.2,
+  report: 0.05,
+  write: 0.05,
 };
 
 export class InterviewTrainerExtension {
@@ -91,6 +103,58 @@ export class InterviewTrainerExtension {
   private updateState(nextState: Partial<ItState>): void {
     this.state = { ...this.state, ...nextState };
     this.webviewProtocol.send("it/stateUpdate", this.state);
+  }
+
+  private buildRunSteps(): ItStepState[] {
+    return IT_STATUS_INIT.steps.map((step) => ({
+      ...step,
+      status: step.id === "init" ? "success" : "pending",
+      progress: step.id === "init" ? 100 : 0,
+      message: undefined,
+    }));
+  }
+
+  private computeOverallProgress(steps: ItStepState[]): number {
+    let weighted = 0;
+    let totalWeight = 0;
+    for (const step of steps) {
+      const weight = IT_PROGRESS_WEIGHTS[step.id];
+      if (!weight) {
+        continue;
+      }
+      totalWeight += weight;
+      const progress = Math.max(0, Math.min(100, step.progress || 0));
+      weighted += weight * (progress / 100);
+    }
+    if (!totalWeight) {
+      return 0;
+    }
+    return Math.round((weighted / totalWeight) * 100);
+  }
+
+  private updateProgress(update: {
+    step: ItWorkflowStep;
+    progress: number;
+    message?: string;
+    status?: ItStepStatus;
+  }): void {
+    const steps = this.state.steps.map((step) => {
+      if (step.id !== update.step) {
+        return step;
+      }
+      return {
+        ...step,
+        status: update.status ?? step.status,
+        progress: Math.max(0, Math.min(100, Math.round(update.progress))),
+        message: update.message ?? step.message,
+      };
+    });
+    const overallProgress = this.computeOverallProgress(steps);
+    this.updateState({
+      steps,
+      overallProgress,
+      statusMessage: update.message ?? this.state.statusMessage,
+    });
   }
 
   private registerHandlers(): void {
@@ -226,16 +290,20 @@ export class InterviewTrainerExtension {
     request: ItAnalyzeRequest,
   ): Promise<ItAnalyzeResponse> {
     try {
+      const steps = this.buildRunSteps().map((step) => {
+        if (step.id === "recording") {
+          return { ...step, status: "success", progress: 100 };
+        }
+        if (step.id === "asr") {
+          return { ...step, status: "running", progress: 0 };
+        }
+        return step;
+      });
       this.updateState({
         statusMessage: "正在处理音频与转写",
-        overallProgress: 15,
-        steps: this.state.steps.map((step) =>
-          step.id === "recording"
-            ? { ...step, status: "success", progress: 100 }
-            : step.id === "asr"
-              ? { ...step, status: "running", progress: 10 }
-              : step,
-        ),
+        steps,
+        overallProgress: this.computeOverallProgress(steps),
+        lastError: undefined,
       });
 
       this.configBundle = it_loadConfigBundle(this.context);
@@ -250,13 +318,13 @@ export class InterviewTrainerExtension {
           apiConfig: this.configBundle.api,
           skillConfig: this.configBundle.skill,
           workspaceRoot,
+          onProgress: (update) => this.updateProgress(update),
         },
         request,
       );
 
       this.updateState({
         statusMessage: "分析完成，可保存与复盘",
-        overallProgress: 100,
         steps: this.state.steps.map((step) =>
           [
             "acoustic",
@@ -269,6 +337,8 @@ export class InterviewTrainerExtension {
             ? { ...step, status: "success", progress: 100 }
             : step,
         ),
+        overallProgress: 100,
+        lastError: undefined,
       });
 
       return response;

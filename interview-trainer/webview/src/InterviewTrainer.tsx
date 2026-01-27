@@ -538,8 +538,13 @@ const InterviewTrainer: React.FC = () => {
       <div className="it-steps">
         {steps.map((step) => (
           <div key={step.id} className={`it-step it-step--${step.status}`}>
-            <div className="it-step__dot" />
-            <div className="it-step__label">{STEP_LABELS[step.id]}</div>
+            <div className="it-step__content">
+              <div className="it-step__dot" />
+              <div className="it-step__label">{STEP_LABELS[step.id]}</div>
+            </div>
+            {step.message && (
+              <div className="it-step__meta">{step.message}</div>
+            )}
           </div>
         ))}
       </div>
@@ -643,6 +648,18 @@ const InterviewTrainer: React.FC = () => {
           {audioPayload && (
             <div className="it-audio-summary">
               音频时长：{audioPayload.durationSec.toFixed(1)}s
+            </div>
+          )}
+          {thinkingVisible && (
+            <div className="it-thinking">
+              <div className="it-thinking__title">正在思考：分析处理中</div>
+              <div className="it-thinking__body">
+                1. 解析语音特征与转写文本
+                <br />
+                2. 检索相似笔记与评分标准
+                <br />
+                3. 生成结构化面试评价
+              </div>
             </div>
           )}
         </div>
@@ -869,18 +886,6 @@ const InterviewTrainer: React.FC = () => {
         </div>
       </div>
 
-      {thinkingVisible && (
-        <div className="it-thinking">
-          <div className="it-thinking__title">正在思考：分析处理中</div>
-          <div className="it-thinking__body">
-            1. 解析语音特征与转写文本
-            <br />
-            2. 检索相似笔记与评分标准
-            <br />
-            3. 生成结构化面试评价
-          </div>
-        </div>
-      )}
     </div>
   );
 };

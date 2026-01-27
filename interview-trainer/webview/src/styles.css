@@ -110,12 +110,19 @@
 .it-step {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: var(--vscode-sideBarSectionHeader-background);
   font-size: 11px;
+}
+
+.it-step__content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .it-step__dot {
@@ -139,6 +146,12 @@
 
 .it-step--error .it-step__dot {
   background: var(--vscode-errorForeground);
+}
+
+.it-step__meta {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
 }
 
 .it-flow__right {
@@ -230,7 +243,7 @@
 }
 
 .it-textarea--small {
-  height: 80px;
+  height: 120px;
 }
 
 .it-metrics {
@@ -336,7 +349,7 @@
 
 .it-footer {
   display: grid;
-  grid-template-columns: 1fr 1.5fr;
+  grid-template-columns: 1fr 1.8fr;
   gap: 12px;
 }
 
@@ -355,6 +368,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  background: var(--vscode-editorWidget-background);
 }
 
 .it-input {
@@ -363,7 +380,7 @@
   border: 1px solid var(--vscode-input-border);
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .it-input--error {
@@ -403,16 +420,12 @@
 }
 
 .it-thinking {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: min(320px, 70%);
   background: var(--vscode-editorWidget-background);
   border: 1px solid var(--vscode-editorWidget-border);
   border-radius: 6px;
-  padding: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 8px 10px;
   font-size: 12px;
+  color: var(--vscode-descriptionForeground);
 }
 
 .it-thinking__title {
