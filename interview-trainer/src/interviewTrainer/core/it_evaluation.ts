@@ -474,18 +474,6 @@ export async function it_evaluateAnswer(
     questionAnswers && questionAnswers.length
       ? questionAnswers
       : it_splitTranscriptByQuestions(questions, transcript);
-  if (config.provider !== "baidu_qianfan" || !config.apiKey) {
-    return it_heuristicEvaluation(
-      question,
-      transcript,
-      acoustic,
-      notes,
-      dimensions,
-      config.language,
-      questions,
-    );
-  }
-
   const systemPrompt =
     "你是一位严谨但建设性的中文面试官，请根据回答内容与表达质量进行评分。必须使用中文，不要输出英文标签或解释。仅输出JSON。";
   const userPrompt = [
@@ -514,6 +502,22 @@ export async function it_evaluateAnswer(
     "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus, revisedAnswers",
     "scores 中的键必须与评分维度名称完全一致。",
   ].join("\\n\\n");
+  const promptText = `System:\\n${systemPrompt}\\n\\nUser:\\n${userPrompt}`;
+  if (config.provider !== "baidu_qianfan" || !config.apiKey) {
+    const fallback = it_heuristicEvaluation(
+      question,
+      transcript,
+      acoustic,
+      notes,
+      dimensions,
+      config.language,
+      questions,
+    );
+    return {
+      ...fallback,
+      prompt: promptText,
+    };
+  }
 
   const content = await it_callQianfanChat(
     {
@@ -560,6 +564,7 @@ export async function it_evaluateAnswer(
       revisedAnswers,
       mode: "llm",
       raw: content,
+      prompt: promptText,
     };
   } catch {
     const fallback = it_heuristicEvaluation(
@@ -571,6 +576,6 @@ export async function it_evaluateAnswer(
       config.language,
       questions,
     );
-    return { ...fallback, raw: content };
+    return { ...fallback, raw: content, prompt: promptText };
   }
 }

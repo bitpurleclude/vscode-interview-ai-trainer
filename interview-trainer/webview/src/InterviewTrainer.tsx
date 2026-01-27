@@ -865,6 +865,16 @@ const InterviewTrainer: React.FC = () => {
                   </div>
                 </div>
               )}
+              {analysisResult.evaluation.prompt && (
+                <div className="it-evaluation__section">
+                  <h4>示范答题提示词</h4>
+                  <textarea
+                    className="it-textarea it-textarea--prompt"
+                    value={analysisResult.evaluation.prompt}
+                    readOnly
+                  />
+                </div>
+              )}
             </div>
           )}
           {activeTab === "history" && (

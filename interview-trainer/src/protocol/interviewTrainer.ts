@@ -95,6 +95,7 @@ export interface ItEvaluation {
   revisedAnswers?: ItRevisedAnswer[];
   mode: "llm" | "heuristic";
   raw?: string;
+  prompt?: string;
 }
 
 export interface ItRevisedAnswer {

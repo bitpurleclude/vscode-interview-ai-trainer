@@ -255,6 +255,10 @@
   height: 260px;
 }
 
+.it-textarea--prompt {
+  height: 240px;
+}
+
 .it-transcript {
   display: flex;
   flex-direction: column;
