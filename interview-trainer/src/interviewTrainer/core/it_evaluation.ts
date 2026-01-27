@@ -393,10 +393,14 @@ export async function it_evaluateAnswer(
   notes: ItNoteHit[],
   config: ItEvaluationConfig,
   questionList: string[],
+  questionAnswers?: Array<{ question: string; answer: string }>,
 ): Promise<ItEvaluation> {
   const dimensions = it_normalizeDimensions(config.dimensions);
   const questions = questionList.length ? questionList : question ? [question] : [];
-  const questionAnswers = it_splitTranscriptByQuestions(questions, transcript);
+  const resolvedAnswers =
+    questionAnswers && questionAnswers.length
+      ? questionAnswers
+      : it_splitTranscriptByQuestions(questions, transcript);
   if (config.provider !== "baidu_qianfan" || !config.apiKey) {
     return it_heuristicEvaluation(
       question,
@@ -425,7 +429,7 @@ export async function it_evaluateAnswer(
       ? `题目列表:\n${questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n")}`
       : "题目列表: 无",
     questions.length
-      ? `考生回答(按题):\n${questionAnswers
+      ? `考生回答(按题):\n${resolvedAnswers
           .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
           .join("\n")}`
       : "考生回答(按题): 无",
@@ -464,10 +468,10 @@ export async function it_evaluateAnswer(
       Array.isArray(parsed.revisedAnswers) && parsed.revisedAnswers.length
         ? parsed.revisedAnswers.map((item: any, idx: number) => ({
             question: String(item?.question || questions[idx] || `第${idx + 1}题`),
-            original: String(item?.original || questionAnswers[idx]?.answer || ""),
+            original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
             revised: String(item?.revised || ""),
           }))
-        : it_buildFallbackRevisions(questionAnswers, parsedImprovements);
+        : it_buildFallbackRevisions(resolvedAnswers, parsedImprovements);
     return {
       topicTitle: parsed.topicTitle || question || "未命名",
       topicSummary: parsed.topicSummary || "",

@@ -101,6 +101,30 @@ function it_extractQuestions(raw: string): { prompt: string; questions: string[]
   return { prompt, questions };
 }
 
+async function it_parseQuestionsRemote(
+  text: string,
+): Promise<{ prompt: string; questions: string[]; source: string } | null> {
+  try {
+    const resp = await request("it/parseQuestions", { text });
+    if (resp?.status === "success" && resp.content) {
+      const material = String(resp.content.material || "").trim();
+      const questions = Array.isArray(resp.content.questions)
+        ? resp.content.questions.map((item: any) => String(item)).filter(Boolean)
+        : [];
+      if (material || questions.length) {
+        return {
+          prompt: material,
+          questions,
+          source: String(resp.content.source || "unknown"),
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
@@ -366,29 +390,37 @@ const InterviewTrainer: React.FC = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      const parsed = it_extractQuestions(text);
-      if (parsed.questions.length) {
-        setQuestionList(parsed.questions.join("\n"));
-        setQuestionText(parsed.prompt || "");
+      let recognizedInfo = "";
+      const remote = await it_parseQuestionsRemote(text);
+      if (remote && remote.questions.length) {
+        setQuestionList(remote.questions.join("\n"));
+        setQuestionText(remote.prompt || "");
+        recognizedInfo = `，已识别${remote.questions.length}题（${remote.source}）`;
       } else {
-        const lines = text
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean);
-        const looksLikeList =
-          lines.length > 1 && lines.every((line) => line.length <= 80);
-        if (looksLikeList) {
-          setQuestionList(lines.join("\n"));
-          setQuestionText("");
+        const parsed = it_extractQuestions(text);
+        if (parsed.questions.length) {
+          setQuestionList(parsed.questions.join("\n"));
+          setQuestionText(parsed.prompt || "");
         } else {
-          setQuestionText(text.trim());
-          setQuestionList("");
+          const lines = text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+          const looksLikeList =
+            lines.length > 1 && lines.every((line) => line.length <= 80);
+          if (looksLikeList) {
+            setQuestionList(lines.join("\n"));
+            setQuestionText("");
+          } else {
+            setQuestionText(text.trim());
+            setQuestionList("");
+          }
         }
       }
       setQuestionError(false);
       setItState((prev) => ({
         ...prev,
-        statusMessage: `已导入题干：${file.name}`,
+        statusMessage: `已导入题干：${file.name}${recognizedInfo}`,
       }));
     } catch (err) {
       setItState((prev) => ({
@@ -428,13 +460,35 @@ const InterviewTrainer: React.FC = () => {
     let finalQuestionText = questionText.trim();
     let finalQuestionList = parsedQuestionList;
     if (!finalQuestionList.length && finalQuestionText) {
-      const parsed = it_extractQuestions(finalQuestionText);
-      if (parsed.questions.length) {
-        finalQuestionText = parsed.prompt || finalQuestionText;
-        finalQuestionList = parsed.questions;
-        setQuestionList(parsed.questions.join("\n"));
-        setQuestionText(parsed.prompt || "");
+      const remote = await it_parseQuestionsRemote(finalQuestionText);
+      if (remote && remote.questions.length) {
+        finalQuestionText = remote.prompt || finalQuestionText;
+        finalQuestionList = remote.questions;
+        setQuestionList(remote.questions.join("\n"));
+        setQuestionText(remote.prompt || "");
+      } else {
+        const parsed = it_extractQuestions(finalQuestionText);
+        if (parsed.questions.length) {
+          finalQuestionText = parsed.prompt || finalQuestionText;
+          finalQuestionList = parsed.questions;
+          setQuestionList(parsed.questions.join("\n"));
+          setQuestionText(parsed.prompt || "");
+        }
       }
+    }
+    if (!finalQuestionList.length) {
+      setQuestionError(true);
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "未识别到题目，请检查题干格式或手动拆分。",
+        lastError: {
+          type: "question",
+          reason: "题目识别失败",
+          solution: "请在题干中包含“第N题/第N问”，或手动将题目逐行填写。",
+        },
+      }));
+      setIsProcessing(false);
+      return;
     }
     const payload: ItAnalyzeRequest = {
       audio: audioPayload,

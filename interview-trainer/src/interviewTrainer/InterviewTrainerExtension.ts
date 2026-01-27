@@ -19,6 +19,8 @@ import {
 import { it_runAnalysis } from "./core/it_analyze";
 import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
+import { ItQianfanConfig } from "./api/it_qianfan";
+import { it_parseQuestions } from "./core/it_questionParser";
 
 const IT_STATUS_INIT: ItState = {
   statusMessage: "等待开始面试训练",
@@ -68,6 +70,24 @@ export class InterviewTrainerExtension {
     };
   }
 
+  private it_getLlmConfig(): ItQianfanConfig | null {
+    const env = this.configBundle.api.active?.environment || "prod";
+    const envConfig = this.configBundle.api.environments?.[env] ?? {};
+    const llm = envConfig.llm ?? {};
+    if (llm.provider !== "baidu_qianfan" || !llm.api_key) {
+      return null;
+    }
+    return {
+      apiKey: llm.api_key || "",
+      baseUrl: llm.base_url || "https://qianfan.baidubce.com/v2",
+      model: llm.model || "ernie-4.5-turbo-128k",
+      temperature: Number(llm.temperature ?? 0.8),
+      topP: Number(llm.top_p ?? 0.8),
+      timeoutSec: Number(llm.timeout_sec ?? 60),
+      maxRetries: Number(llm.max_retries ?? 1),
+    };
+  }
+
   private updateState(nextState: Partial<ItState>): void {
     this.state = { ...this.state, ...nextState };
     this.webviewProtocol.send("it/stateUpdate", this.state);
@@ -92,6 +112,16 @@ export class InterviewTrainerExtension {
         "vscode.open",
         vscode.Uri.file(target),
       );
+    });
+    this.webviewProtocol.on("it/parseQuestions", async (msg) => {
+      const text = String(msg.data?.text || "");
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.api = await it_applySecretOverrides(
+        this.context,
+        this.configBundle.api,
+      );
+      const llmConfig = this.it_getLlmConfig();
+      return await it_parseQuestions(text, llmConfig);
     });
     this.webviewProtocol.on("openFile", async (msg) => {
       const target = msg.data?.path;

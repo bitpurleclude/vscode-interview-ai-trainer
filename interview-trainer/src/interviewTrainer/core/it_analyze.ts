@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { it_callBaiduAsr } from "../api/it_baidu";
 import { ItApiConfig } from "../api/it_apiConfig";
+import { ItQianfanConfig, it_callQianfanChat } from "../api/it_qianfan";
 import { it_evaluateAnswer } from "./it_evaluation";
 import { it_buildCorpus, it_retrieveNotes } from "./it_notes";
 import {
@@ -27,7 +28,7 @@ import {
   it_decodePcm16,
   it_buildDetailedTranscript,
 } from "../utils/it_audio";
-import { it_hashText, it_normalizeText } from "../utils/it_text";
+import { it_formatSeconds, it_hashText, it_normalizeText } from "../utils/it_text";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
 import { it_appendReport } from "./it_report";
 
@@ -189,6 +190,128 @@ function it_isBaiduContentTooLong(error: unknown): boolean {
   );
 }
 
+function it_getLlmConfig(envConfig: any): ItQianfanConfig | null {
+  const llm = envConfig?.llm ?? {};
+  if (llm.provider !== "baidu_qianfan" || !llm.api_key) {
+    return null;
+  }
+  return {
+    apiKey: llm.api_key || "",
+    baseUrl: llm.base_url || "https://qianfan.baidubce.com/v2",
+    model: llm.model || "ernie-4.5-turbo-128k",
+    temperature: Number(llm.temperature ?? 0.2),
+    topP: Number(llm.top_p ?? 0.8),
+    timeoutSec: Number(llm.timeout_sec ?? 60),
+    maxRetries: Number(llm.max_retries ?? 1),
+  };
+}
+
+function it_extractJson(text: string): any | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+async function it_assignSegmentsWithLlm(
+  llmConfig: ItQianfanConfig,
+  questions: string[],
+  segments: ItAudioSegment[],
+): Promise<
+  | {
+      timings: ItQuestionTiming[];
+      answers: Array<{ question: string; answer: string }>;
+    }
+  | null
+> {
+  if (!questions.length || !segments.length) {
+    return null;
+  }
+  const speechSegments = segments
+    .filter((seg) => seg.type === "speech" && seg.text && seg.text.trim())
+    .slice(0, 120);
+  if (!speechSegments.length) {
+    return null;
+  }
+
+  const lines = speechSegments.map(
+    (seg, idx) =>
+      `${idx}. [${it_formatSeconds(seg.startSec)}-${it_formatSeconds(seg.endSec)}] ${seg.text}`,
+  );
+  const systemPrompt =
+    "你是中文面试答题分段助手。根据题目列表，将转写分段归属到对应题目。仅输出JSON。";
+  const userPrompt = [
+    "题目列表:",
+    questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n"),
+    "",
+    "转写分段(仅语音):",
+    lines.join("\n"),
+    "",
+    "要求:",
+    "1) 输出 JSON: {assignments:[{segmentIndex, questionIndex}]}。",
+    "2) questionIndex 从 0 开始，对应题目顺序。",
+    "3) 非答题内容可标记为 -1。",
+  ].join("\n");
+
+  try {
+    const content = await it_callQianfanChat(llmConfig, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ]);
+    const parsed = it_extractJson(content);
+    const assignments = Array.isArray(parsed?.assignments)
+      ? parsed.assignments
+      : [];
+    if (!assignments.length) {
+      return null;
+    }
+    const mapping: Array<number> = new Array(speechSegments.length).fill(-1);
+    assignments.forEach((item: any) => {
+      const segIndex = Number(item?.segmentIndex);
+      const qIndex = Number(item?.questionIndex);
+      if (
+        Number.isFinite(segIndex) &&
+        Number.isFinite(qIndex) &&
+        segIndex >= 0 &&
+        segIndex < mapping.length
+      ) {
+        mapping[segIndex] = qIndex;
+      }
+    });
+
+    const timings: ItQuestionTiming[] = [];
+    const answers: Array<{ question: string; answer: string }> = [];
+    for (let q = 0; q < questions.length; q += 1) {
+      const segs = speechSegments.filter((_, idx) => mapping[idx] === q);
+      if (!segs.length) {
+        return null;
+      }
+      const startSec = Math.min(...segs.map((seg) => seg.startSec));
+      const endSec = Math.max(...segs.map((seg) => seg.endSec));
+      timings.push({
+        question: questions[q],
+        startSec,
+        endSec,
+        durationSec: Math.max(0, endSec - startSec),
+        note: "LLM分段",
+      });
+      answers.push({
+        question: questions[q],
+        answer: segs.map((seg) => seg.text?.trim()).filter(Boolean).join(""),
+      });
+    }
+    return { timings, answers };
+  } catch {
+    return null;
+  }
+}
+
 async function it_transcribePcmWithChunks(
   asrConfig: {
     apiKey: string;
@@ -317,12 +440,31 @@ export async function it_runAnalysis(
     audioSegments = detailed.segments;
   }
 
-  const questionTimings = it_buildQuestionTimings(
-    questionText,
-    questionList,
-    acoustic.durationSec || request.audio.durationSec || 0,
-    audioSegments,
-  );
+  let questionTimings: ItQuestionTiming[] = [];
+  let questionAnswers: Array<{ question: string; answer: string }> | undefined =
+    undefined;
+  if (audioSegments && questionList.length > 1) {
+    const llmConfig = it_getLlmConfig(envConfig);
+    if (llmConfig) {
+      const assigned = await it_assignSegmentsWithLlm(
+        llmConfig,
+        questionList,
+        audioSegments,
+      );
+      if (assigned) {
+        questionTimings = assigned.timings;
+        questionAnswers = assigned.answers;
+      }
+    }
+  }
+  if (!questionTimings.length) {
+    questionTimings = it_buildQuestionTimings(
+      questionText,
+      questionList,
+      acoustic.durationSec || request.audio.durationSec || 0,
+      audioSegments,
+    );
+  }
 
   const workspaceCfg = deps.skillConfig.workspace ?? {};
   const corpus = it_buildCorpus({
@@ -394,6 +536,7 @@ export async function it_runAnalysis(
     notes,
     evaluationConfig,
     questionList,
+    questionAnswers,
   );
 
   const response: ItAnalyzeResponse = {
