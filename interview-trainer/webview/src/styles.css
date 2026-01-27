@@ -259,10 +259,17 @@
 }
 
 .it-evaluation__overall {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
   color: var(--vscode-testing-iconPassed, var(--vscode-foreground));
+}
+
+.it-evaluation__overall-value {
+  font-weight: 600;
 }
 
 .it-evaluation__scores {

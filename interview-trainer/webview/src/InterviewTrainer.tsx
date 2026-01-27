@@ -759,7 +759,10 @@ const InterviewTrainer: React.FC = () => {
                 {analysisResult.evaluation.topicSummary}
               </div>
               <div className="it-evaluation__overall">
-                总分：{analysisResult.evaluation.overallScore}
+                <span>总分</span>
+                <span className="it-evaluation__overall-value">
+                  {analysisResult.evaluation.overallScore ?? "-"}
+                </span>
               </div>
               <div className="it-evaluation__scores">
                 {Object.entries(analysisResult.evaluation.scores || {}).map(
