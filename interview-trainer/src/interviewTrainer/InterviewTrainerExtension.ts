@@ -177,6 +177,25 @@ export class InterviewTrainerExtension {
         vscode.Uri.file(target),
       );
     });
+    this.webviewProtocol.on("it/openMicSettings", async () => {
+      if (process.platform === "win32") {
+        await vscode.env.openExternal(
+          vscode.Uri.parse("ms-settings:privacy-microphone"),
+        );
+        return;
+      }
+      if (process.platform === "darwin") {
+        await vscode.env.openExternal(
+          vscode.Uri.parse(
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+          ),
+        );
+        return;
+      }
+      void vscode.window.showInformationMessage(
+        "请在系统设置中开启麦克风权限后重试。",
+      );
+    });
     this.webviewProtocol.on("it/parseQuestions", async (msg) => {
       const text = String(msg.data?.text || "");
       this.configBundle = it_loadConfigBundle(this.context);

@@ -264,13 +264,27 @@ const InterviewTrainer: React.FC = () => {
       }, 1000);
       recorder.addEventListener("stop", () => clearInterval(interval));
     } catch (err) {
+      const errorName =
+        err instanceof DOMException ? err.name : err instanceof Error ? err.name : "";
+      let reason = "录音启动失败";
+      let solution = "请检查麦克风权限或设备状态。";
+      if (["NotAllowedError", "SecurityError"].includes(errorName)) {
+        reason = "麦克风权限被拒绝";
+        solution = "请在系统设置与 IDE 权限中允许访问麦克风。";
+      } else if (errorName === "NotFoundError") {
+        reason = "未检测到麦克风设备";
+        solution = "请连接麦克风或检查设备是否被禁用。";
+      } else if (errorName === "NotReadableError") {
+        reason = "麦克风被占用或无法读取";
+        solution = "请关闭其他占用麦克风的应用后重试。";
+      }
       setItState((prev) => ({
         ...prev,
-        statusMessage: "录音启动失败：请检查麦克风权限",
+        statusMessage: `${reason}，请检查麦克风权限`,
         lastError: {
           type: "recording",
-          reason: err instanceof Error ? err.message : String(err),
-          solution: "请在系统与 IDE 权限中允许麦克风访问。",
+          reason,
+          solution,
         },
       }));
     }
@@ -628,6 +642,15 @@ const InterviewTrainer: React.FC = () => {
         )}
         {itState.lastError && (
           <span className="it-status__error">{itState.lastError.reason}</span>
+        )}
+        {itState.lastError?.type === "recording" && (
+          <button
+            className="it-link-button"
+            type="button"
+            onClick={() => request("it/openMicSettings", undefined)}
+          >
+            打开麦克风权限设置
+          </button>
         )}
       </div>
 
