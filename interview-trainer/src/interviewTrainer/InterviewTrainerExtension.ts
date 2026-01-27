@@ -108,7 +108,7 @@ export class InterviewTrainerExtension {
   private buildRunSteps(): ItStepState[] {
     return IT_STATUS_INIT.steps.map((step) => ({
       ...step,
-      status: step.id === "init" ? "success" : "pending",
+      status: (step.id === "init" ? "success" : "pending") as ItStepStatus,
       progress: step.id === "init" ? 100 : 0,
       message: undefined,
     }));
@@ -292,10 +292,10 @@ export class InterviewTrainerExtension {
     try {
       const steps = this.buildRunSteps().map((step) => {
         if (step.id === "recording") {
-          return { ...step, status: "success", progress: 100 };
+          return { ...step, status: "success" as ItStepStatus, progress: 100 };
         }
         if (step.id === "asr") {
-          return { ...step, status: "running", progress: 0 };
+          return { ...step, status: "running" as ItStepStatus, progress: 0 };
         }
         return step;
       });
