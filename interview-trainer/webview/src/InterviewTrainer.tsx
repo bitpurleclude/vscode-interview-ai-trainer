@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
@@ -539,13 +539,26 @@ const InterviewTrainer: React.FC = () => {
     await request("openFile", { path: analysisResult.reportPath });
   };
 
-  const handleLoadHistory = async () => {
+  const handleLoadHistory = useCallback(async () => {
     const response = await request("it/listHistory", { limit: 30 });
     if (response?.status === "success") {
       setHistoryItems(response.content ?? []);
       setActiveTab("history");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const disposeHistory = on("it/showHistory", () => {
+      void handleLoadHistory();
+    });
+    const disposeSettings = on("it/showSettings", () => {
+      void request("it/openSettings", undefined);
+    });
+    return () => {
+      disposeHistory();
+      disposeSettings();
+    };
+  }, [handleLoadHistory]);
 
   const renderSteps = (steps: ItStepState[]) => {
     return (

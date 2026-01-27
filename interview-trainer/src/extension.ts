@@ -17,6 +17,16 @@ export function activate(context: vscode.ExtensionContext) {
 
   new InterviewTrainerExtension(context, viewProvider.webviewProtocol);
 
+  const sendToWebview = async (messageType: string, data?: any): Promise<boolean> => {
+    await vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    if (!viewProvider.webviewProtocol.webview) {
+      return false;
+    }
+    viewProvider.webviewProtocol.send(messageType, data);
+    return true;
+  };
+
   context.subscriptions.push(
     vscode.commands.registerCommand("itInterviewTrainer.open", () => {
       vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
@@ -46,19 +56,24 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("itInterviewTrainer.openSettings", async () => {
-      it_ensureConfigFiles(context);
-      const configDir = it_getUserConfigDir(context);
-      const target = path.join(configDir, "api_config.yaml");
-      await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
+      const sent = await sendToWebview("it/showSettings");
+      if (!sent) {
+        it_ensureConfigFiles(context);
+        const configDir = it_getUserConfigDir(context);
+        const target = path.join(configDir, "api_config.yaml");
+        await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
+      }
     }),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("itInterviewTrainer.openHistory", () => {
-      void vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
-      void vscode.window.showInformationMessage(
-        "历史记录已在面试训练助手面板提供。",
-      );
+    vscode.commands.registerCommand("itInterviewTrainer.openHistory", async () => {
+      const sent = await sendToWebview("it/showHistory");
+      if (!sent) {
+        void vscode.window.showInformationMessage(
+          "请先打开面试训练助手面板。",
+        );
+      }
     }),
   );
 }
