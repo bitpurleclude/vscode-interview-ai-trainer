@@ -243,6 +243,14 @@
   font-size: 12px;
 }
 
+.it-textarea--question {
+  height: 160px;
+}
+
+.it-textarea--questions {
+  height: 140px;
+}
+
 .it-textarea--tall {
   height: 260px;
 }
@@ -259,9 +267,7 @@
   color: var(--vscode-descriptionForeground);
 }
 
-.it-textarea--small {
-  height: 120px;
-}
+ 
 
 .it-metrics {
   display: grid;

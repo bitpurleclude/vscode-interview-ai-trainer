@@ -13,6 +13,14 @@ export interface ItNoteHit {
   snippet: string;
 }
 
+let cachedCorpus:
+  | {
+      key: string;
+      dirMtimes: Record<string, number>;
+      corpus: ItCorpusItem[];
+    }
+  | undefined;
+
 function it_readText(filePath: string): string {
   try {
     return fs.readFileSync(filePath, "utf-8");
@@ -72,9 +80,35 @@ function it_scoreTokens(queryTokens: string[], textTokens: string[]): number {
   return hits / Math.max(1, queryTokens.length);
 }
 
+function it_getDirMtime(dirPath: string): number {
+  if (!dirPath || !fs.existsSync(dirPath)) {
+    return 0;
+  }
+  try {
+    return fs.statSync(dirPath).mtimeMs || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
+  const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
+  const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
+  const dirMtimes: Record<string, number> = {};
+  entries.forEach(([kind, dirPath]) => {
+    dirMtimes[kind] = it_getDirMtime(dirPath);
+  });
+  if (cachedCorpus && cachedCorpus.key === key) {
+    const unchanged = entries.every(
+      ([kind]) => cachedCorpus?.dirMtimes[kind] === dirMtimes[kind],
+    );
+    if (unchanged) {
+      return cachedCorpus.corpus;
+    }
+  }
+
   const corpus: ItCorpusItem[] = [];
-  for (const [kind, dirPath] of Object.entries(inputs)) {
+  for (const [kind, dirPath] of entries) {
     if (!fs.existsSync(dirPath)) {
       continue;
     }
@@ -96,6 +130,7 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
       }
     }
   }
+  cachedCorpus = { key, dirMtimes, corpus };
   return corpus;
 }
 

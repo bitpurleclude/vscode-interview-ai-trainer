@@ -915,14 +915,14 @@ const InterviewTrainer: React.FC = () => {
           )}
         </div>
         <div className="it-question">
-          <input
-            className={`it-input${questionError ? " it-input--error" : ""}`}
-            placeholder="题干（可选）"
+          <textarea
+            className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
+            placeholder="题干材料（可选）"
             value={questionText}
             onChange={(event) => setQuestionText(event.target.value)}
           />
           <textarea
-            className={`it-textarea it-textarea--small${questionError ? " it-input--error" : ""}`}
+            className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
             placeholder="小题列表（一行一个，可选）"
             value={questionList}
             onChange={(event) => setQuestionList(event.target.value)}
