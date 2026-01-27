@@ -169,6 +169,49 @@ function it_buildQuestionTimings(
       return fromSegments;
     }
   }
+  if (segments && segments.length && list.length === 1) {
+    const speechSegments = segments.filter((seg) => seg.type === "speech");
+    if (speechSegments.length) {
+      const startMarkers = [/开始答题/, /开始作答/, /开始回答/];
+      const endMarkers = [/回答完毕/, /答题结束/, /回答结束/, /作答完毕/];
+      const findMarker = (patterns: RegExp[], fromEnd: boolean): number | null => {
+        const ordered = fromEnd ? [...segments].reverse() : segments;
+        for (const seg of ordered) {
+          if (seg.type !== "speech" || !seg.text) {
+            continue;
+          }
+          const normalized = it_normalizeText(seg.text);
+          if (!normalized) {
+            continue;
+          }
+          if (patterns.some((pattern) => pattern.test(normalized))) {
+            return fromEnd ? seg.endSec : seg.startSec;
+          }
+        }
+        return null;
+      };
+
+      const startSec = findMarker(startMarkers, false) ?? speechSegments[0].startSec;
+      const endSec =
+        findMarker(endMarkers, true) ??
+        speechSegments[speechSegments.length - 1].endSec;
+      if (endSec > startSec) {
+        const note =
+          startSec !== speechSegments[0].startSec || endSec !== speechSegments[speechSegments.length - 1].endSec
+            ? "答题标记"
+            : "语音起止";
+        return [
+          {
+            question: list[0],
+            startSec,
+            endSec,
+            durationSec: Math.max(0, endSec - startSec),
+            note,
+          },
+        ];
+      }
+    }
+  }
   if (!list.length || !Number.isFinite(totalDurationSec) || totalDurationSec <= 0) {
     return [];
   }
