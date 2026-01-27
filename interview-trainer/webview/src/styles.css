@@ -279,6 +279,36 @@
   font-size: 12px;
 }
 
+.it-revised-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.it-revised-item {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-editorWidget-background);
+  font-size: 12px;
+}
+
+.it-revised-item__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.it-revised-item__block {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.it-revised-item__block span:first-child {
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
 .it-history {
   display: flex;
   flex-direction: column;

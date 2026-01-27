@@ -221,13 +221,14 @@ export function it_buildDetailedTranscript(
   const silenceThreshold = 0.2;
 
   for (const seg of speechSegments) {
-    if (seg[0] - cursor >= silenceThreshold) {
+    const gapSec = seg[0] - cursor;
+    if (gapSec >= silenceThreshold) {
       segments.push({
         type: "silence",
         startSec: cursor,
         endSec: seg[0],
-        durationSec: seg[0] - cursor,
-        pauseSec: Number((seg[0] - cursor).toFixed(2)),
+        durationSec: gapSec,
+        pauseSec: Number(gapSec.toFixed(2)),
       });
     }
 
@@ -258,7 +259,7 @@ export function it_buildDetailedTranscript(
       volumeDeltaPct: deltaPct,
       volumeLabel,
       speechRateWpm,
-      pauseSec: 0,
+      pauseSec: gapSec > 0 ? Number(gapSec.toFixed(2)) : 0,
       tone,
     });
     cursor = endSec;
@@ -286,7 +287,8 @@ export function it_buildDetailedTranscript(
       const speechRate = seg.speechRateWpm ? `${seg.speechRateWpm}字/分钟` : "-";
       const volume = seg.volumeLabel || "正常";
       const tone = seg.tone ? `，语调：${seg.tone}` : "";
-      const pause = seg.pauseSec !== undefined ? `，停顿：${seg.pauseSec}秒` : "";
+      const pause =
+        seg.pauseSec && seg.pauseSec > 0.1 ? `，停顿：${seg.pauseSec}秒` : "";
       const content = seg.text?.trim() || "（语音片段）";
       return `[${start}-${end}] ${content}（音量：${volume}，语速：${speechRate}${tone}${pause}）`;
     })

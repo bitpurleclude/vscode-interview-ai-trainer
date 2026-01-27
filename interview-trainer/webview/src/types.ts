@@ -92,8 +92,15 @@ export interface ItEvaluation {
   issues: string[];
   improvements: string[];
   nextFocus: string[];
+  revisedAnswers?: ItRevisedAnswer[];
   mode: "llm" | "heuristic";
   raw?: string;
+}
+
+export interface ItRevisedAnswer {
+  question: string;
+  original: string;
+  revised: string;
 }
 
 export interface ItAnalyzeResponse {

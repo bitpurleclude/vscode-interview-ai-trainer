@@ -77,6 +77,30 @@ function it_bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function it_extractQuestions(raw: string): { prompt: string; questions: string[] } {
+  const text = (raw || "").replace(/\r\n/g, "\n").trim();
+  const marker = /第\s*[一二三四五六七八九十0-9]+\s*[题问][：:]/g;
+  const matches = Array.from(text.matchAll(marker));
+  if (!matches.length) {
+    return { prompt: text, questions: [] };
+  }
+  const firstIdx = matches[0].index ?? 0;
+  const prompt = text.slice(0, firstIdx).trim();
+  const questions: string[] = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const start = (matches[i].index ?? 0) + matches[i][0].length;
+    const end = i < matches.length - 1 ? matches[i + 1].index ?? text.length : text.length;
+    const chunk = text.slice(start, end).trim();
+    const cleaned = chunk
+      .split(/解析[:：]|答案[:：]|建议[:：]|参考[:：]|点评[:：]/)[0]
+      .trim();
+    if (cleaned) {
+      questions.push(cleaned);
+    }
+  }
+  return { prompt, questions };
+}
+
 const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
@@ -342,20 +366,24 @@ const InterviewTrainer: React.FC = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      const lines = text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const looksLikeList = lines.length > 1 && lines.every((line) => line.length <= 80);
-
-      if (looksLikeList) {
-        setQuestionList(lines.join("\n"));
-        if (!questionText.trim()) {
-          setQuestionText("");
-        }
+      const parsed = it_extractQuestions(text);
+      if (parsed.questions.length) {
+        setQuestionList(parsed.questions.join("\n"));
+        setQuestionText(parsed.prompt || "");
       } else {
-        setQuestionText(text.trim());
-        setQuestionList("");
+        const lines = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        const looksLikeList =
+          lines.length > 1 && lines.every((line) => line.length <= 80);
+        if (looksLikeList) {
+          setQuestionList(lines.join("\n"));
+          setQuestionText("");
+        } else {
+          setQuestionText(text.trim());
+          setQuestionList("");
+        }
       }
       setQuestionError(false);
       setItState((prev) => ({
@@ -397,10 +425,21 @@ const InterviewTrainer: React.FC = () => {
       ...prev,
       statusMessage: "已发起分析请求，处理中...",
     }));
+    let finalQuestionText = questionText.trim();
+    let finalQuestionList = parsedQuestionList;
+    if (!finalQuestionList.length && finalQuestionText) {
+      const parsed = it_extractQuestions(finalQuestionText);
+      if (parsed.questions.length) {
+        finalQuestionText = parsed.prompt || finalQuestionText;
+        finalQuestionList = parsed.questions;
+        setQuestionList(parsed.questions.join("\n"));
+        setQuestionText(parsed.prompt || "");
+      }
+    }
     const payload: ItAnalyzeRequest = {
       audio: audioPayload,
-      questionText: questionText.trim() || undefined,
-      questionList: parsedQuestionList,
+      questionText: finalQuestionText || undefined,
+      questionList: finalQuestionList,
     };
     try {
       const response = await request("it/analyzeAudio", payload);
@@ -693,6 +732,29 @@ const InterviewTrainer: React.FC = () => {
                   ))}
                 </ul>
               </div>
+              {analysisResult.evaluation.revisedAnswers &&
+              analysisResult.evaluation.revisedAnswers.length > 0 && (
+                <div className="it-evaluation__section">
+                  <h4>示范性修改</h4>
+                  <div className="it-revised-list">
+                    {analysisResult.evaluation.revisedAnswers.map((item, idx) => (
+                      <div key={`${idx}-${item.question}`} className="it-revised-item">
+                        <div className="it-revised-item__title">
+                          {idx + 1}. {item.question}
+                        </div>
+                        <div className="it-revised-item__block">
+                          <span>原回答：</span>
+                          <span>{item.original}</span>
+                        </div>
+                        <div className="it-revised-item__block">
+                          <span>示范：</span>
+                          <span>{item.revised}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {activeTab === "history" && (
@@ -748,7 +810,7 @@ const InterviewTrainer: React.FC = () => {
             onChange={(event) => setQuestionList(event.target.value)}
           />
           <div className="it-question__hint">
-            题干或小题列表为必填，可通过“导入题干”快速加载。
+            题干或小题列表为必填，支持直接粘贴完整材料并自动识别第N题。
           </div>
         </div>
       </div>

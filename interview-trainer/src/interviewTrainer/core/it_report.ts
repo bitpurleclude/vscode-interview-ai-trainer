@@ -82,6 +82,16 @@ export function it_renderReport(
   });
   lines.push("\n");
 
+  if (response.evaluation.revisedAnswers?.length) {
+    lines.push("### 示范性修改\n\n");
+    response.evaluation.revisedAnswers.forEach((item, idx) => {
+      lines.push(`${idx + 1}. ${item.question}\n`);
+      lines.push(`- 原回答: ${item.original}\n`);
+      lines.push(`- 示范: ${item.revised}\n`);
+    });
+    lines.push("\n");
+  }
+
   if (response.questionTimings && response.questionTimings.length) {
     lines.push("### 题目用时\n\n");
     response.questionTimings.forEach((item, idx) => {

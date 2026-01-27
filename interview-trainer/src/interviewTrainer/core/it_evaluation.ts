@@ -116,6 +116,112 @@ function it_toStringArray(value: unknown): string[] {
   return [];
 }
 
+function it_parseQuestionIndex(marker: string): number | null {
+  const match = marker.match(/第\s*([一二三四五六七八九十0-9]+)\s*[题问]/);
+  if (!match) {
+    return null;
+  }
+  const raw = match[1];
+  if (/^\d+$/.test(raw)) {
+    const idx = Number(raw);
+    return Number.isFinite(idx) ? idx - 1 : null;
+  }
+  const map: Record<string, number> = {
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  if (raw.length === 1 && map[raw] !== undefined) {
+    return map[raw] - 1;
+  }
+  if (raw.length === 2 && raw.startsWith("十")) {
+    const tail = raw[1];
+    const base = map[tail] ?? 0;
+    return 10 + base - 1;
+  }
+  return null;
+}
+
+function it_splitTranscriptByQuestions(
+  questionList: string[],
+  transcript: string,
+): Array<{ question: string; answer: string }> {
+  const items = questionList.map((question) => ({
+    question,
+    answer: "",
+  }));
+  if (!questionList.length) {
+    return items;
+  }
+  const matches = Array.from(
+    transcript.matchAll(/第\s*[一二三四五六七八九十0-9]+\s*[题问]/g),
+  );
+  const boundaries: Array<{ index: number; pos: number }> = [];
+  matches.forEach((match) => {
+    const idx = it_parseQuestionIndex(match[0]);
+    if (idx !== null && idx >= 0 && idx < questionList.length && match.index !== undefined) {
+      boundaries.push({ index: idx, pos: match.index });
+    }
+  });
+  const unique = new Map<number, number>();
+  boundaries.forEach((item) => {
+    if (!unique.has(item.index)) {
+      unique.set(item.index, item.pos);
+    }
+  });
+  const ordered = Array.from(unique.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([index, pos]) => ({ index, pos }));
+  if (ordered.length) {
+    const positions = [0, ...ordered.map((item) => item.pos), transcript.length];
+    const indices = [0, ...ordered.map((item) => item.index), questionList.length];
+    for (let i = 0; i < indices.length - 1; i += 1) {
+      const start = positions[i];
+      const end = positions[i + 1];
+      const answer = transcript.slice(start, end).replace(/第\s*[一二三四五六七八九十0-9]+\s*[题问]/, "").trim();
+      const targetIndex = indices[i];
+      if (items[targetIndex]) {
+        items[targetIndex].answer = answer;
+      }
+    }
+    return items;
+  }
+  const totalLen = transcript.length;
+  const base = Math.max(1, Math.floor(totalLen / questionList.length));
+  for (let i = 0; i < questionList.length; i += 1) {
+    const start = i * base;
+    const end = i === questionList.length - 1 ? totalLen : (i + 1) * base;
+    items[i].answer = transcript.slice(start, end).trim();
+  }
+  return items;
+}
+
+function it_buildFallbackRevisions(
+  questionAnswers: Array<{ question: string; answer: string }>,
+  improvements: string[],
+): Array<{ question: string; original: string; revised: string }> {
+  const hints = improvements.slice(0, 3).join("；");
+  return questionAnswers.map((item) => {
+    const base = item.answer || "（作答略）";
+    const revised = [
+      `示范答题：围绕“${item.question}”，先给结论，再从背景、原因、对策展开，最后总结提升。`,
+      `改进要点：${hints || "结构清晰、措施具体、结合实际"}`,
+    ].join("");
+    return {
+      question: item.question,
+      original: base,
+      revised,
+    };
+  });
+}
+
 function it_adjustScore(
   scores: Record<string, number>,
   dimension: string,
@@ -134,6 +240,7 @@ function it_heuristicEvaluation(
   notes: ItNoteHit[],
   dimensions: string[],
   language: string,
+  questionList: string[],
 ): ItEvaluation {
   const normalizedDimensions = it_normalizeDimensions(dimensions);
   const scores: Record<string, number> = {};
@@ -260,6 +367,10 @@ function it_heuristicEvaluation(
     hasPolicy ? "有政策依据" : "政策依据不足",
   ];
 
+  const questions = questionList.length ? questionList : question ? [question] : [];
+  const questionAnswers = it_splitTranscriptByQuestions(questions, transcript);
+  const revisedAnswers = it_buildFallbackRevisions(questionAnswers, improvements);
+
   return {
     topicTitle: question || "未命名",
     topicSummary: summaryParts.join("；"),
@@ -269,6 +380,7 @@ function it_heuristicEvaluation(
     issues,
     improvements,
     nextFocus,
+    revisedAnswers,
     mode: "heuristic",
     raw: language,
   };
@@ -280,8 +392,11 @@ export async function it_evaluateAnswer(
   acoustic: ItAcousticMetrics,
   notes: ItNoteHit[],
   config: ItEvaluationConfig,
+  questionList: string[],
 ): Promise<ItEvaluation> {
   const dimensions = it_normalizeDimensions(config.dimensions);
+  const questions = questionList.length ? questionList : question ? [question] : [];
+  const questionAnswers = it_splitTranscriptByQuestions(questions, transcript);
   if (config.provider !== "baidu_qianfan" || !config.apiKey) {
     return it_heuristicEvaluation(
       question,
@@ -290,6 +405,7 @@ export async function it_evaluateAnswer(
       notes,
       dimensions,
       config.language,
+      questions,
     );
   }
 
@@ -305,8 +421,17 @@ export async function it_evaluateAnswer(
           .join("\\n")}`
       : "检索笔记: 无",
     `评分维度(每项1-10分): ${dimensions.join("、")}`,
+    questions.length
+      ? `题目列表:\n${questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n")}`
+      : "题目列表: 无",
+    questions.length
+      ? `考生回答(按题):\n${questionAnswers
+          .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
+          .join("\n")}`
+      : "考生回答(按题): 无",
     "要求: strengths/issues/improvements 至少各3条，nextFocus 至少2条。",
-    "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus",
+    "如题目列表存在，请给出每题示范性修改(revisedAnswers)，要求结构清晰、中文表达。",
+    "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus, revisedAnswers",
     "scores 中的键必须与评分维度名称完全一致。",
   ].join("\\n\\n");
 
@@ -334,6 +459,15 @@ export async function it_evaluateAnswer(
     );
     const overallScore =
       parsed.overallScore || it_computeOverallScore(mappedScores, dimensions);
+    const parsedImprovements = it_toStringArray(parsed.improvements);
+    const revisedAnswers =
+      Array.isArray(parsed.revisedAnswers) && parsed.revisedAnswers.length
+        ? parsed.revisedAnswers.map((item: any, idx: number) => ({
+            question: String(item?.question || questions[idx] || `第${idx + 1}题`),
+            original: String(item?.original || questionAnswers[idx]?.answer || ""),
+            revised: String(item?.revised || ""),
+          }))
+        : it_buildFallbackRevisions(questionAnswers, parsedImprovements);
     return {
       topicTitle: parsed.topicTitle || question || "未命名",
       topicSummary: parsed.topicSummary || "",
@@ -341,8 +475,9 @@ export async function it_evaluateAnswer(
       overallScore,
       strengths: it_toStringArray(parsed.strengths),
       issues: it_toStringArray(parsed.issues),
-      improvements: it_toStringArray(parsed.improvements),
+      improvements: parsedImprovements,
       nextFocus: it_toStringArray(parsed.nextFocus),
+      revisedAnswers,
       mode: "llm",
       raw: content,
     };
@@ -354,6 +489,7 @@ export async function it_evaluateAnswer(
       notes,
       dimensions,
       config.language,
+      questions,
     );
     return { ...fallback, raw: content };
   }

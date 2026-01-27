@@ -6,6 +6,7 @@ import {
   ItAnalyzeResponse,
   ItEvaluation,
   ItQuestionTiming,
+  ItAudioSegment,
 } from "../../protocol/interviewTrainer";
 import { v4 as uuidv4 } from "uuid";
 
@@ -93,16 +94,70 @@ function it_splitPcmBase64(
   return chunks;
 }
 
+function it_buildQuestionTimingsFromSegments(
+  questionList: string[],
+  segments: ItAudioSegment[],
+  totalDurationSec: number,
+): ItQuestionTiming[] {
+  if (!questionList.length || !segments.length) {
+    return [];
+  }
+  const cnNums = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  const startTimes: Array<number | undefined> = new Array(questionList.length).fill(
+    undefined,
+  );
+  startTimes[0] = 0;
+  for (let idx = 1; idx < questionList.length; idx += 1) {
+    const cn = cnNums[idx - 1] ?? "";
+    const digit = String(idx + 1);
+    const regex = new RegExp(`第\\s*(${cn}|${digit})\\s*[题问]`);
+    const hit = segments.find((seg) => seg.text && regex.test(seg.text));
+    if (hit) {
+      startTimes[idx] = hit.startSec;
+    }
+  }
+  const fullMarkers = startTimes.slice(1).every((t) => typeof t === "number");
+  if (!fullMarkers) {
+    return [];
+  }
+  const duration = totalDurationSec || segments[segments.length - 1]?.endSec || 0;
+  const timings: ItQuestionTiming[] = [];
+  for (let i = 0; i < questionList.length; i += 1) {
+    const startSec = startTimes[i] ?? 0;
+    const endSec =
+      i < questionList.length - 1 ? (startTimes[i + 1] as number) : duration;
+    timings.push({
+      question: questionList[i],
+      startSec,
+      endSec,
+      durationSec: Math.max(0, endSec - startSec),
+      note: "转写分段",
+    });
+  }
+  return timings;
+}
+
 function it_buildQuestionTimings(
   questionText: string,
   questionList: string[],
   totalDurationSec: number,
+  segments?: ItAudioSegment[],
 ): ItQuestionTiming[] {
   const list = questionList.length
     ? questionList
     : questionText
       ? [questionText]
       : [];
+  if (segments && segments.length && list.length > 1) {
+    const fromSegments = it_buildQuestionTimingsFromSegments(
+      list,
+      segments,
+      totalDurationSec,
+    );
+    if (fromSegments.length) {
+      return fromSegments;
+    }
+  }
   if (!list.length || !Number.isFinite(totalDurationSec) || totalDurationSec <= 0) {
     return [];
   }
@@ -266,6 +321,7 @@ export async function it_runAnalysis(
     questionText,
     questionList,
     acoustic.durationSec || request.audio.durationSec || 0,
+    audioSegments,
   );
 
   const workspaceCfg = deps.skillConfig.workspace ?? {};
@@ -337,6 +393,7 @@ export async function it_runAnalysis(
     acoustic,
     notes,
     evaluationConfig,
+    questionList,
   );
 
   const response: ItAnalyzeResponse = {
