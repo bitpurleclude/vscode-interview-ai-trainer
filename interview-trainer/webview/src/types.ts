@@ -135,6 +135,10 @@ export interface ItConfigSnapshot {
   acousticProvider: string;
   llmProfiles?: Record<string, any>;
   asrProfiles?: Record<string, any>;
+  prompts: {
+    evaluationPrompt: string;
+    demoPrompt: string;
+  };
   llm: {
     provider: string;
     baseUrl: string;

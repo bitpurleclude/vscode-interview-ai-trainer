@@ -107,6 +107,11 @@ export class InterviewTrainerExtension {
       acousticProvider: apiConfig.active?.acoustic || "api",
       llmProfiles,
       asrProfiles,
+      prompts: {
+        evaluationPrompt:
+          (this.configBundle.skill.prompts?.evaluation_prompt as string) || "",
+        demoPrompt: (this.configBundle.skill.prompts?.demo_prompt as string) || "",
+      },
       llm: {
         provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
         baseUrl: llmConfig.base_url || llmDefaultBase,
@@ -658,6 +663,24 @@ export class InterviewTrainerExtension {
       this.configSnapshot = this.buildConfigSnapshot(apiConfig);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/savePrompts", async (msg) => {
+      const payload = msg.data || {};
+      const evaluationPrompt = String(payload.evaluationPrompt || "");
+      const demoPrompt = String(payload.demoPrompt || "");
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        prompts: {
+          ...this.configBundle.skill.prompts,
+          evaluation_prompt: evaluationPrompt,
+          demo_prompt: demoPrompt,
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return { evaluationPrompt, demoPrompt };
     });
     this.webviewProtocol.on("it/testLlm", async (msg) => {
       const payload = msg.data || {};

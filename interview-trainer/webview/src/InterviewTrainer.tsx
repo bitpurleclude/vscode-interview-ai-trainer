@@ -301,14 +301,24 @@ const InterviewTrainer: React.FC = () => {
       if (resp?.status === "success" && resp.content) {
         setConfig(resp.content);
         applyProfileToForm(resp.content);
+        setCustomPrompt(
+          resp.content.prompts?.evaluationPrompt || STRICT_SYSTEM_PROMPT,
+        );
+        setDemoPrompt(resp.content.prompts?.demoPrompt || DEFAULT_DEMO_PROMPT);
       } else {
         // fallback to unlock UI even if后端出错
-        setConfig({
+        const fallbackConfig: ItConfigSnapshot = {
           activeEnvironment: "prod",
           envList: ["prod"],
           llmProvider: "baidu_qianfan",
           asrProvider: "baidu_vop",
           acousticProvider: "api",
+          llmProfiles: {},
+          asrProfiles: {},
+          prompts: {
+            evaluationPrompt: STRICT_SYSTEM_PROMPT,
+            demoPrompt: DEFAULT_DEMO_PROMPT,
+          },
           llm: {
             provider: "baidu_qianfan",
             baseUrl: "https://qianfan.baidubce.com/v2",
@@ -340,7 +350,10 @@ const InterviewTrainer: React.FC = () => {
             knowledgeDir: "inputs/knowledge",
             examplesDir: "inputs/examples",
           },
-        });
+        };
+        setConfig(fallbackConfig);
+        setCustomPrompt(STRICT_SYSTEM_PROMPT);
+        setDemoPrompt(DEFAULT_DEMO_PROMPT);
         setItState((prev) => ({
           ...prev,
           statusMessage: "配置加载失败，已使用默认配置",
@@ -1772,6 +1785,21 @@ const InterviewTrainer: React.FC = () => {
                 <div>
                   <div className="it-settings__title">评分提示词</div>
                   <div className="it-settings__desc">严格高标准，不输出安慰语</div>
+                </div>
+                <div className="it-settings__actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked}
+                    onClick={async () => {
+                      await request("it/savePrompts", {
+                        evaluationPrompt: customPrompt,
+                        demoPrompt,
+                      });
+                      setApiSaveMessage("提示词已保存");
+                    }}
+                  >
+                    保存提示词
+                  </button>
                 </div>
               </div>
               <textarea
