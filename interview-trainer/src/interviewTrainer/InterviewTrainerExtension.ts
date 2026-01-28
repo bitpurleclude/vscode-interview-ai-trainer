@@ -59,6 +59,11 @@ export class InterviewTrainerExtension {
   private recordingChild: import("child_process").ChildProcess | null = null;
   private recordingTempDir: string | null = null;
   private recordingStartAt: number | null = null;
+  private recordingExitInfo: {
+    exitCode: number | null;
+    exitSignal: string | null;
+    stderr: string;
+  } | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -620,19 +625,49 @@ export class InterviewTrainerExtension {
     const tmpPath = path.join(tmpDir, "capture.pcm");
     const commonArgs = ["-y", "-ac", "1", "-ar", "16000", "-f", "s16le", tmpPath];
     let inputArgs: string[];
+    const customInput = process.env.IT_FFMPEG_INPUT;
     if (process.platform === "win32") {
-      inputArgs = ["-f", "dshow", "-i", "audio=default"];
+      inputArgs = ["-f", "dshow", "-i", `audio=${customInput || "default"}`];
     } else if (process.platform === "darwin") {
-      inputArgs = ["-f", "avfoundation", "-i", ":0"];
+      inputArgs = ["-f", "avfoundation", "-i", customInput || ":0"];
     } else {
-      inputArgs = ["-f", "pulse", "-i", "default"];
+      inputArgs = ["-f", "pulse", "-i", customInput || "default"];
     }
     const args = [...inputArgs, ...commonArgs];
     const child = spawn(ffmpeg, args, { windowsHide: true });
-    child.on("error", () => {});
+    let stderr = "";
+    child.stderr?.on("data", (d) => {
+      stderr += String(d);
+    });
+    let exitCode: number | null = null;
+    let exitSignal: string | null = null;
+    child.on("close", (code, signal) => {
+      exitCode = code;
+      exitSignal = signal;
+      this.recordingExitInfo = { exitCode, exitSignal, stderr };
+    });
+    child.on("error", (err) => {
+      this.recordingExitInfo = {
+        exitCode: null,
+        exitSignal: null,
+        stderr: err instanceof Error ? err.message : String(err),
+      };
+    });
     this.recordingChild = child;
     this.recordingTempDir = tmpDir;
     this.recordingStartAt = Date.now();
+    this.recordingExitInfo = null;
+
+    // 若 ffmpeg 立即退出，短暂等待并提前报错。
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (exitCode !== null) {
+      const detail = `ffmpeg 启动失败，退出码=${exitCode ?? "未知"}, 信号=${exitSignal ?? "无"}, stderr=${stderr.trim() || "无"}`;
+      this.recordingChild = null;
+      this.recordingTempDir = null;
+      this.recordingStartAt = null;
+      throw new Error(detail);
+    }
+
     return {
       tmpDir,
       tmpPath,
@@ -688,6 +723,10 @@ export class InterviewTrainerExtension {
       } catch {
         // ignore
       }
+    } else if (this.recordingExitInfo) {
+      exitCode = this.recordingExitInfo.exitCode;
+      exitSignal = this.recordingExitInfo.exitSignal;
+      stderr = this.recordingExitInfo.stderr;
     }
 
     if (!fs.existsSync(tmpPath)) {
