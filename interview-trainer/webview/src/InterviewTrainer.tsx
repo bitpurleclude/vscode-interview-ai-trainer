@@ -156,6 +156,7 @@ const InterviewTrainer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ResultTab>("transcript");
   const [questionText, setQuestionText] = useState("");
   const [questionList, setQuestionList] = useState("");
+  const [customPrompt, setCustomPrompt] = useState(STRICT_SYSTEM_PROMPT);
   const [analysisResult, setAnalysisResult] = useState<ItAnalyzeResponse | null>(
     null,
   );
@@ -572,6 +573,7 @@ const InterviewTrainer: React.FC = () => {
       audio: audioPayload,
       questionText: finalQuestionText || undefined,
       questionList: finalQuestionList,
+      systemPrompt: customPrompt?.trim() || undefined,
     };
     try {
       const response = await request("it/analyzeAudio", payload);
@@ -1140,8 +1142,8 @@ const InterviewTrainer: React.FC = () => {
               </div>
               <textarea
                 className="it-textarea it-textarea--prompt"
-                value={STRICT_SYSTEM_PROMPT}
-                readOnly
+                value={customPrompt}
+                onChange={(event) => setCustomPrompt(event.target.value)}
               />
             </div>
 

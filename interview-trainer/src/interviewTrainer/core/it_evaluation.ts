@@ -467,6 +467,7 @@ export async function it_evaluateAnswer(
   config: ItEvaluationConfig,
   questionList: string[],
   questionAnswers?: Array<{ question: string; answer: string }>,
+  customSystemPrompt?: string,
 ): Promise<ItEvaluation> {
   const lowSpeech =
     (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
@@ -497,14 +498,16 @@ export async function it_evaluateAnswer(
     };
   }
 
-  const systemPrompt = [
-    "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
-    "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
-    "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
-    "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
-    "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
-    "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
-  ].join("\n");
+  const systemPrompt =
+    customSystemPrompt?.trim() ||
+    [
+      "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
+      "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
+      "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
+      "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
+      "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
+      "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
+    ].join("\n");
   const userPrompt = [
     `题干:\\n${question || "未提供"}`,
     `回答文本:\\n${transcript}`,

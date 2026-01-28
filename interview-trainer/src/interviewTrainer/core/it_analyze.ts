@@ -646,6 +646,7 @@ export async function it_runAnalysis(
     evaluationConfig,
     questionList,
     questionAnswers,
+    request.systemPrompt,
   );
   reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
 
