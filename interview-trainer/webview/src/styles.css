@@ -467,6 +467,54 @@
   word-break: break-all;
 }
 
+.it-diagnostic {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.it-diagnostic__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.it-diagnostic__title {
+  font-weight: 600;
+}
+
+.it-diagnostic__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.it-diagnostic__devices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-diagnostic__hint {
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-diagnostic__error {
+  color: var(--vscode-errorForeground);
+}
+
+.it-diagnostic__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .it-question {
   display: flex;
   flex-direction: column;

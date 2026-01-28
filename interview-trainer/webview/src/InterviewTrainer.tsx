@@ -157,6 +157,14 @@ const InterviewTrainer: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [questionError, setQuestionError] = useState(false);
+  const [micDiagnostic, setMicDiagnostic] = useState<{
+    status: "idle" | "running" | "done" | "error";
+    permissionState?: string;
+    audioInputCount?: number;
+    audioInputs?: Array<{ label: string; deviceId: string }>;
+    error?: string;
+    updatedAt?: string;
+  }>({ status: "idle" });
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const uiLocked = !config;
@@ -576,6 +584,60 @@ const InterviewTrainer: React.FC = () => {
   const handleSelectWorkspaceDir = async (kind: string) => {
     await request("it/selectWorkspaceDir", { kind });
   };
+  const handleMicDiagnostic = async () => {
+    setMicDiagnostic({ status: "running" });
+    try {
+      let permissionState = "unknown";
+      if (navigator.permissions?.query) {
+        try {
+          const status = await navigator.permissions.query({
+            name: "microphone" as PermissionName,
+          });
+          permissionState = status.state || "unknown";
+        } catch {
+          permissionState = "unknown";
+        }
+      }
+
+      let audioInputs: Array<{ label: string; deviceId: string }> = [];
+      if (navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        audioInputs = devices
+          .filter((device) => device.kind === "audioinput")
+          .map((device) => ({
+            label: device.label || "（未授权时不可见设备名称）",
+            deviceId: device.deviceId,
+          }));
+      }
+
+      setMicDiagnostic({
+        status: "done",
+        permissionState,
+        audioInputCount: audioInputs.length,
+        audioInputs,
+        updatedAt: new Date().toLocaleString(),
+      });
+    } catch (err) {
+      setMicDiagnostic({
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+        updatedAt: new Date().toLocaleString(),
+      });
+    }
+  };
+
+  const it_formatPermissionState = (state?: string) => {
+    switch (state) {
+      case "granted":
+        return "已授权";
+      case "denied":
+        return "被拒绝";
+      case "prompt":
+        return "待确认";
+      default:
+        return "未知";
+    }
+  };
 
   useEffect(() => {
     const disposeHistory = on("it/showHistory", () => {
@@ -983,6 +1045,68 @@ const InterviewTrainer: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+          <div className="it-diagnostic">
+            <div className="it-diagnostic__header">
+              <div className="it-diagnostic__title">麦克风诊断</div>
+              <button
+                className="it-button it-button--secondary it-button--compact"
+                disabled={uiLocked || micDiagnostic.status === "running"}
+                onClick={handleMicDiagnostic}
+              >
+                {micDiagnostic.status === "running" ? "诊断中..." : "开始诊断"}
+              </button>
+            </div>
+            {micDiagnostic.status === "idle" && (
+              <div className="it-diagnostic__hint">
+                点击“开始诊断”查看权限状态与设备列表。
+              </div>
+            )}
+            {(micDiagnostic.status === "done" ||
+              micDiagnostic.status === "error") && (
+              <div className="it-diagnostic__body">
+                {micDiagnostic.status === "error" ? (
+                  <div className="it-diagnostic__error">
+                    诊断失败：{micDiagnostic.error}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      权限状态：{it_formatPermissionState(micDiagnostic.permissionState)}
+                    </div>
+                    <div>
+                      麦克风设备数：{micDiagnostic.audioInputCount ?? 0}
+                    </div>
+                    {micDiagnostic.audioInputs?.length ? (
+                      <div className="it-diagnostic__devices">
+                        {micDiagnostic.audioInputs.map((device, idx) => (
+                          <div key={`${device.deviceId}-${idx}`}>
+                            {idx + 1}. {device.label}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="it-diagnostic__hint">
+                        未检测到麦克风设备或权限不足。
+                      </div>
+                    )}
+                    <div className="it-diagnostic__hint">
+                      {micDiagnostic.permissionState === "denied"
+                        ? "若权限被拒绝，请确认 VS Code 不是以管理员身份运行，并重启 VS Code。"
+                        : "如权限待确认，请点击“开始录音”触发授权弹窗。"}
+                    </div>
+                  </>
+                )}
+                <div className="it-diagnostic__actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    onClick={() => request("it/openMicSettings", undefined)}
+                  >
+                    打开系统麦克风设置
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="it-question">
