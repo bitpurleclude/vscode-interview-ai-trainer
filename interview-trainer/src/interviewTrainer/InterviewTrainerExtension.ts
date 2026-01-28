@@ -92,6 +92,8 @@ export class InterviewTrainerExtension {
     const envConfig = apiConfig.environments?.[env] ?? {};
     const llmConfig = envConfig.llm ?? {};
     const asrConfig = envConfig.asr ?? {};
+    const llmProfiles = envConfig.llm_profiles || {};
+    const asrProfiles = envConfig.asr_profiles || {};
     const llmDefaultBase =
       llmConfig.provider === "volc_doubao"
         ? "https://ark.cn-beijing.volces.com"
@@ -103,6 +105,8 @@ export class InterviewTrainerExtension {
       llmProvider: apiConfig.active?.llm || llmConfig.provider || "baidu_qianfan",
       asrProvider: apiConfig.active?.asr || asrConfig.provider || "baidu_vop",
       acousticProvider: apiConfig.active?.acoustic || "api",
+      llmProfiles,
+      asrProfiles,
       llm: {
         provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
         baseUrl: llmConfig.base_url || llmDefaultBase,
@@ -577,6 +581,8 @@ export class InterviewTrainerExtension {
       };
       const llmForm = payload.llm || {};
       const asrForm = payload.asr || {};
+      const llmProfiles = { ...(envConfig.llm_profiles || {}) };
+      const asrProfiles = { ...(envConfig.asr_profiles || {}) };
 
       const llmDefaultBase =
         llmForm.provider === "volc_doubao"
@@ -598,6 +604,9 @@ export class InterviewTrainerExtension {
         timeout_sec: Number(llmForm.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
         max_retries: Number(llmForm.maxRetries ?? envConfig.llm?.max_retries ?? 1),
       };
+      llmProfiles[envConfig.llm.provider] = {
+        ...envConfig.llm,
+      };
 
       envConfig.asr = {
         ...(envConfig.asr || {}),
@@ -612,6 +621,9 @@ export class InterviewTrainerExtension {
         timeout_sec: Number(asrForm.timeoutSec ?? envConfig.asr?.timeout_sec ?? 120),
         max_retries: Number(asrForm.maxRetries ?? envConfig.asr?.max_retries ?? 1),
       };
+      asrProfiles[envConfig.asr.provider] = {
+        ...envConfig.asr,
+      };
 
       apiConfig.active = {
         ...apiConfig.active,
@@ -621,7 +633,11 @@ export class InterviewTrainerExtension {
       };
       apiConfig.environments = {
         ...apiConfig.environments,
-        [environment]: envConfig,
+        [environment]: {
+          ...envConfig,
+          llm_profiles: llmProfiles,
+          asr_profiles: asrProfiles,
+        },
       };
 
       await this.context.secrets.store(

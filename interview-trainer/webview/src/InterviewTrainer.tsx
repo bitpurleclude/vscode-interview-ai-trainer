@@ -168,6 +168,8 @@ const InterviewTrainer: React.FC = () => {
   const [selectedInput, setSelectedInput] = useState<string>("");
   const [apiForm, setApiForm] = useState({
     environment: "prod",
+    llmProfiles: {} as Record<string, any>,
+    asrProfiles: {} as Record<string, any>,
     llm: {
       provider: "baidu_qianfan",
       baseUrl: "https://qianfan.baidubce.com/v2",
@@ -197,6 +199,68 @@ const InterviewTrainer: React.FC = () => {
   const [testingAsr, setTestingAsr] = useState(false);
   const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
   const [asrTestMessage, setAsrTestMessage] = useState<string | null>(null);
+  const applyProfileToForm = useCallback(
+    (cfg: ItConfigSnapshot | null, targetProvider?: string, targetAsr?: string) => {
+      if (!cfg) return;
+      const provider = targetProvider || cfg.llmProvider || cfg.llm?.provider || "baidu_qianfan";
+      const asrProvider = targetAsr || cfg.asrProvider || cfg.asr?.provider || "baidu_vop";
+      const llmProfile =
+        (cfg.llmProfiles && cfg.llmProfiles[provider]) ||
+        (cfg.llm && cfg.llm.provider === provider ? cfg.llm : null);
+      const asrProfile =
+        (cfg.asrProfiles && cfg.asrProfiles[asrProvider]) ||
+        (cfg.asr && cfg.asr.provider === asrProvider ? cfg.asr : null);
+      const llmDefaults =
+        provider === "volc_doubao"
+          ? {
+              baseUrl: "https://ark.cn-beijing.volces.com",
+              model: "doubao-1-5-pro-32k-250115",
+            }
+          : {
+              baseUrl: "https://qianfan.baidubce.com/v2",
+              model: "ernie-4.5-turbo-128k",
+            };
+      const asrDefaults = {
+        baseUrl: "https://vop.baidu.com/server_api",
+        language: "zh",
+        devPid: 1537,
+        mockText: "",
+        maxChunkSec: 50,
+        timeoutSec: 120,
+        maxRetries: 1,
+      };
+
+      setApiForm((prev) => ({
+        ...prev,
+        environment: cfg.activeEnvironment || "prod",
+        llmProfiles: cfg.llmProfiles || prev.llmProfiles,
+        asrProfiles: cfg.asrProfiles || prev.asrProfiles,
+        llm: {
+          provider,
+          baseUrl: llmProfile?.base_url || llmProfile?.baseUrl || llmDefaults.baseUrl,
+          model: llmProfile?.model || llmDefaults.model,
+          apiKey: llmProfile?.api_key || llmProfile?.apiKey || "",
+          temperature: Number(llmProfile?.temperature ?? 0.8),
+          topP: Number(llmProfile?.top_p ?? llmProfile?.topP ?? 0.8),
+          timeoutSec: Number(llmProfile?.timeout_sec ?? llmProfile?.timeoutSec ?? 60),
+          maxRetries: Number(llmProfile?.max_retries ?? llmProfile?.maxRetries ?? 1),
+        },
+        asr: {
+          provider: asrProvider,
+          baseUrl: asrProfile?.base_url || asrProfile?.baseUrl || asrDefaults.baseUrl,
+          apiKey: asrProfile?.api_key || asrProfile?.apiKey || "",
+          secretKey: asrProfile?.secret_key || asrProfile?.secretKey || "",
+          language: asrProfile?.language || asrDefaults.language,
+          devPid: Number(asrProfile?.dev_pid ?? asrProfile?.devPid ?? asrDefaults.devPid),
+          mockText: asrProfile?.mock_text || asrProfile?.mockText || asrDefaults.mockText,
+          maxChunkSec: Number(asrProfile?.max_chunk_sec ?? asrProfile?.maxChunkSec ?? asrDefaults.maxChunkSec),
+          timeoutSec: Number(asrProfile?.timeout_sec ?? asrProfile?.timeoutSec ?? asrDefaults.timeoutSec),
+          maxRetries: Number(asrProfile?.max_retries ?? asrProfile?.maxRetries ?? asrDefaults.maxRetries),
+        },
+      }));
+    },
+    [],
+  );
   const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -229,6 +293,7 @@ const InterviewTrainer: React.FC = () => {
     request("it/getConfig", undefined).then((resp) => {
       if (resp?.status === "success" && resp.content) {
         setConfig(resp.content);
+        applyProfileToForm(resp.content);
       } else {
         // fallback to unlock UI even if后端出错
         setConfig({
@@ -285,32 +350,8 @@ const InterviewTrainer: React.FC = () => {
 
   useEffect(() => {
     if (!config) return;
-    setApiForm({
-      environment: config.activeEnvironment || "prod",
-      llm: {
-        provider: config.llm?.provider || config.llmProvider || "baidu_qianfan",
-        baseUrl: config.llm?.baseUrl || "https://qianfan.baidubce.com/v2",
-        model: config.llm?.model || "ernie-4.5-turbo-128k",
-        apiKey: config.llm?.apiKey || "",
-        temperature: Number(config.llm?.temperature ?? 0.8),
-        topP: Number(config.llm?.topP ?? 0.8),
-        timeoutSec: Number(config.llm?.timeoutSec ?? 60),
-        maxRetries: Number(config.llm?.maxRetries ?? 1),
-      },
-      asr: {
-        provider: config.asr?.provider || config.asrProvider || "baidu_vop",
-        baseUrl: config.asr?.baseUrl || "https://vop.baidu.com/server_api",
-        apiKey: config.asr?.apiKey || "",
-        secretKey: config.asr?.secretKey || "",
-        language: config.asr?.language || "zh",
-        devPid: Number(config.asr?.devPid ?? 1537),
-        mockText: config.asr?.mockText || "",
-        maxChunkSec: Number(config.asr?.maxChunkSec ?? 50),
-        timeoutSec: Number(config.asr?.timeoutSec ?? 120),
-        maxRetries: Number(config.asr?.maxRetries ?? 1),
-      },
-    });
-  }, [config]);
+    applyProfileToForm(config);
+  }, [config, applyProfileToForm]);
 
   useEffect(() => {
     const disposeState = on("it/stateUpdate", (data) => {
@@ -716,13 +757,72 @@ const InterviewTrainer: React.FC = () => {
                 baseUrl: "https://qianfan.baidubce.com/v2",
                 model: "ernie-4.5-turbo-128k",
               };
+        const nextProfile =
+          (prev.llmProfiles && prev.llmProfiles[provider]) ||
+          (provider === prev.llm.provider ? prev.llm : undefined) ||
+          {};
         return {
           ...prev,
+          llmProfiles: {
+            ...prev.llmProfiles,
+          },
           llm: {
             ...prev.llm,
             provider,
-            baseUrl: prev.llm.baseUrl || defaults.baseUrl,
-            model: prev.llm.model || defaults.model,
+            baseUrl: nextProfile.base_url || nextProfile.baseUrl || defaults.baseUrl,
+            model: nextProfile.model || defaults.model,
+            apiKey: nextProfile.api_key || nextProfile.apiKey || prev.llm.apiKey,
+            temperature: Number(
+              nextProfile.temperature ?? prev.llm.temperature ?? 0.8,
+            ),
+            topP: Number(nextProfile.top_p ?? nextProfile.topP ?? prev.llm.topP ?? 0.8),
+            timeoutSec: Number(
+              nextProfile.timeout_sec ?? nextProfile.timeoutSec ?? prev.llm.timeoutSec ?? 60,
+            ),
+            maxRetries: Number(
+              nextProfile.max_retries ?? nextProfile.maxRetries ?? prev.llm.maxRetries ?? 1,
+            ),
+          },
+        };
+      }
+      if (scope === "asr" && key === "provider") {
+        const provider = String(value);
+        const nextProfile =
+          (prev.asrProfiles && prev.asrProfiles[provider]) ||
+          (provider === prev.asr.provider ? prev.asr : undefined) ||
+          {};
+        const defaults = {
+          baseUrl: "https://vop.baidu.com/server_api",
+          language: "zh",
+          devPid: 1537,
+          mockText: "",
+          maxChunkSec: 50,
+          timeoutSec: 120,
+          maxRetries: 1,
+        };
+        return {
+          ...prev,
+          asrProfiles: {
+            ...prev.asrProfiles,
+          },
+          asr: {
+            ...prev.asr,
+            provider,
+            baseUrl: nextProfile.base_url || nextProfile.baseUrl || defaults.baseUrl,
+            apiKey: nextProfile.api_key || nextProfile.apiKey || prev.asr.apiKey,
+            secretKey: nextProfile.secret_key || nextProfile.secretKey || prev.asr.secretKey,
+            language: nextProfile.language || prev.asr.language || defaults.language,
+            devPid: Number(nextProfile.dev_pid ?? nextProfile.devPid ?? prev.asr.devPid ?? defaults.devPid),
+            mockText: nextProfile.mock_text || nextProfile.mockText || prev.asr.mockText || defaults.mockText,
+            maxChunkSec: Number(
+              nextProfile.max_chunk_sec ?? nextProfile.maxChunkSec ?? prev.asr.maxChunkSec ?? defaults.maxChunkSec,
+            ),
+            timeoutSec: Number(
+              nextProfile.timeout_sec ?? nextProfile.timeoutSec ?? prev.asr.timeoutSec ?? defaults.timeoutSec,
+            ),
+            maxRetries: Number(
+              nextProfile.max_retries ?? nextProfile.maxRetries ?? prev.asr.maxRetries ?? defaults.maxRetries,
+            ),
           },
         };
       }
@@ -766,12 +866,41 @@ const InterviewTrainer: React.FC = () => {
         timeoutSec: Number(apiForm.asr.timeoutSec),
         maxRetries: Number(apiForm.asr.maxRetries),
       },
+      llmProfiles: {
+        ...apiForm.llmProfiles,
+        [apiForm.llm.provider]: {
+          provider: apiForm.llm.provider,
+          base_url: apiForm.llm.baseUrl,
+          model: apiForm.llm.model,
+          api_key: apiForm.llm.apiKey,
+          temperature: Number(apiForm.llm.temperature),
+          top_p: Number(apiForm.llm.topP),
+          timeout_sec: Number(apiForm.llm.timeoutSec),
+          max_retries: Number(apiForm.llm.maxRetries),
+        },
+      },
+      asrProfiles: {
+        ...apiForm.asrProfiles,
+        [apiForm.asr.provider]: {
+          provider: apiForm.asr.provider,
+          base_url: apiForm.asr.baseUrl,
+          api_key: apiForm.asr.apiKey,
+          secret_key: apiForm.asr.secretKey,
+          language: apiForm.asr.language,
+          dev_pid: Number(apiForm.asr.devPid),
+          mock_text: apiForm.asr.mockText,
+          max_chunk_sec: Number(apiForm.asr.maxChunkSec),
+          timeout_sec: Number(apiForm.asr.timeoutSec),
+          max_retries: Number(apiForm.asr.maxRetries),
+        },
+      },
     };
     try {
       const resp = await request("it/updateApiSettings", payload);
       if (resp?.status === "success") {
         if (resp.content) {
           setConfig(resp.content);
+          applyProfileToForm(resp.content, payload.llm.provider, payload.asr.provider);
         }
         setApiSaveMessage("已保存，重试录音即可生效。");
       } else {
@@ -830,6 +959,7 @@ const InterviewTrainer: React.FC = () => {
     if (resp?.status === "success" && resp.content) {
       setConfig(resp.content);
       setApiSaveMessage("已重新加载配置。");
+      applyProfileToForm(resp.content);
     }
   };
   const handleToggleRetrieval = async (enabled: boolean) => {
