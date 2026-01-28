@@ -21,6 +21,10 @@ let cachedCorpus:
     }
   | undefined;
 
+const IT_ALLOWED_EXTS = [".md", ".mdx", ".markdown", ".txt"];
+const IT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
+const IT_MAX_CHUNK_LEN = 1200;
+
 function it_readText(filePath: string): string {
   try {
     return fs.readFileSync(filePath, "utf-8");
@@ -114,18 +118,29 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
     }
     const files = fs.readdirSync(dirPath, { withFileTypes: true });
     for (const entry of files) {
+      if (entry.name.startsWith(".")) {
+        continue;
+      }
       if (entry.isDirectory()) {
         const child = path.join(dirPath, entry.name);
         corpus.push(...it_buildCorpus({ [kind]: child }));
         continue;
       }
       const ext = path.extname(entry.name).toLowerCase();
-      if (![".md", ".txt"].includes(ext)) {
+      if (!IT_ALLOWED_EXTS.includes(ext)) {
         continue;
       }
       const fullPath = path.join(dirPath, entry.name);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.size > IT_MAX_FILE_SIZE) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
       const text = it_readText(fullPath);
-      for (const chunk of it_splitText(text, 1200)) {
+      for (const chunk of it_splitText(text, IT_MAX_CHUNK_LEN)) {
         corpus.push({ kind, source: fullPath, text: chunk });
       }
     }
