@@ -292,7 +292,7 @@ const InterviewTrainer: React.FC = () => {
         lastError: {
           type: "recording_error",
           reason: err instanceof Error ? err.message : String(err),
-          solution: "请确认 ffmpeg 可用，并检查系统麦克风权限。",
+          solution: "请确认内置 ffmpeg 可执行，并检查系统麦克风权限。",
         },
       }));
     }

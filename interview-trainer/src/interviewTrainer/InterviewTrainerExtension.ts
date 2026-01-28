@@ -2,6 +2,7 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 import { spawn } from "child_process";
+import ffmpegStatic from "ffmpeg-static";
 import * as vscode from "vscode";
 import {
   ItAnalyzeRequest,
@@ -575,6 +576,10 @@ export class InterviewTrainerExtension {
   }
 
   private async it_findFfmpeg(): Promise<string | null> {
+    const bundled = typeof ffmpegStatic === "string" ? ffmpegStatic : null;
+    if (bundled && fs.existsSync(bundled)) {
+      return bundled;
+    }
     const envPath = process.env.IT_FFMPEG_PATH;
     if (envPath && fs.existsSync(envPath)) {
       return envPath;
