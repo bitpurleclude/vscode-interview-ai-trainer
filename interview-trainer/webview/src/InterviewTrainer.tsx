@@ -625,6 +625,20 @@ const InterviewTrainer: React.FC = () => {
       });
     }
   };
+  const handleRequestMicPermission = async () => {
+    setMicDiagnostic({ status: "running" });
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      await handleMicDiagnostic();
+    } catch (err) {
+      setMicDiagnostic({
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+        updatedAt: new Date().toLocaleString(),
+      });
+    }
+  };
 
   const it_formatPermissionState = (state?: string) => {
     switch (state) {
@@ -1049,13 +1063,22 @@ const InterviewTrainer: React.FC = () => {
           <div className="it-diagnostic">
             <div className="it-diagnostic__header">
               <div className="it-diagnostic__title">麦克风诊断</div>
-              <button
-                className="it-button it-button--secondary it-button--compact"
-                disabled={uiLocked || micDiagnostic.status === "running"}
-                onClick={handleMicDiagnostic}
-              >
-                {micDiagnostic.status === "running" ? "诊断中..." : "开始诊断"}
-              </button>
+              <div className="it-diagnostic__actions">
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || micDiagnostic.status === "running"}
+                  onClick={handleRequestMicPermission}
+                >
+                  一键申请权限
+                </button>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || micDiagnostic.status === "running"}
+                  onClick={handleMicDiagnostic}
+                >
+                  {micDiagnostic.status === "running" ? "诊断中..." : "开始诊断"}
+                </button>
+              </div>
             </div>
             {micDiagnostic.status === "idle" && (
               <div className="it-diagnostic__hint">
@@ -1103,6 +1126,12 @@ const InterviewTrainer: React.FC = () => {
                     onClick={() => request("it/openMicSettings", undefined)}
                   >
                     打开系统麦克风设置
+                  </button>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    onClick={() => request("it/reloadWindow", undefined)}
+                  >
+                    重启 VS Code
                   </button>
                 </div>
               </div>

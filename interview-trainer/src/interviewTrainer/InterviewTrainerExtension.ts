@@ -207,6 +207,9 @@ export class InterviewTrainerExtension {
         "请在系统设置中开启麦克风权限后重试。",
       );
     });
+    this.webviewProtocol.on("it/reloadWindow", async () => {
+      await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    });
     this.webviewProtocol.on("it/parseQuestions", async (msg) => {
       const text = String(msg.data?.text || "");
       this.configBundle = it_loadConfigBundle(this.context);
