@@ -47,6 +47,51 @@ function it_countMatches(text: string, pattern: RegExp): number {
   return matches ? matches.length : 0;
 }
 
+function it_stripGreetings(text: string): string {
+  return text.replace(
+    /(各位考官|各位领导|各位老师|考生开始答题|考生回答完毕|回答完毕|考生回答|大家好|尊敬的各位)/g,
+    "",
+  );
+}
+
+function it_splitSentences(text: string): string[] {
+  return text
+    .split(/[。！？!?.；;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function it_buildHeuristicRevisedAnswers(
+  answers: Array<{ question: string; answer: string }>,
+  timePlan: number[] = [4, 3, 3],
+): Array<{ question: string; revised: string; estimatedTimeMin: number; original: string }> {
+  return answers.map((item, idx) => {
+    const cleaned = it_stripGreetings(item.answer || "");
+    const sentences = Array.from(new Set(it_splitSentences(cleaned)));
+    const conclusion = sentences[0] || "结论：需补充关键观点";
+    const points = sentences.slice(1, 4);
+    while (points.length < 2) {
+      points.push("补充关键举措（责任人/时限/指标/风险兜底）");
+    }
+    const time = timePlan[idx] ?? 3;
+    const revised = [
+      `【用时约${time}分钟】结论：${conclusion}`,
+      `要点1：${points[0]}`,
+      `要点2：${points[1]}`,
+      points[2] ? `要点3：${points[2]}` : undefined,
+      "要求：每条要点需明确责任人/时间节点/量化指标或风险兜底。",
+    ]
+      .filter(Boolean)
+      .join("；");
+    return {
+      question: item.question,
+      revised,
+      estimatedTimeMin: time,
+      original: item.answer || "",
+    };
+  });
+}
+
 function it_sentenceCount(text: string): number {
   const parts = text.split(/[。！？!?]/).map((item) => item.trim()).filter(Boolean);
   return parts.length || 1;
@@ -554,6 +599,7 @@ const demoPrompt =
     return {
       ...fallback,
       prompt: promptText,
+      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, [4, 3, 3]),
     };
   }
 
@@ -587,6 +633,7 @@ const demoPrompt =
     );
     return {
       ...fallback,
+      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, [4, 3, 3]),
       raw: err instanceof Error ? err.message : String(err),
       prompt: promptText,
     };
