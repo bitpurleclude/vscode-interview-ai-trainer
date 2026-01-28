@@ -399,8 +399,9 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/reloadWindow", async () => {
       await vscode.commands.executeCommand("workbench.action.reloadWindow");
     });
-    this.webviewProtocol.on("it/startNativeRecording", async () => {
-      return await this.it_startNativeRecording();
+    this.webviewProtocol.on("it/startNativeRecording", async (msg) => {
+      const device = msg.data?.device ? String(msg.data.device) : undefined;
+      return await this.it_startNativeRecording(device);
     });
     this.webviewProtocol.on("it/stopNativeRecording", async () => {
       return await this.it_stopNativeRecording();

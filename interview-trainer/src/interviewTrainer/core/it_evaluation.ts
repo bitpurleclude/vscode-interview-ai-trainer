@@ -89,7 +89,7 @@ function it_fillMissingScores(
   const filled = { ...scores };
   dimensions.forEach((dim) => {
     if (filled[dim] === undefined) {
-      filled[dim] = 6;
+      filled[dim] = 4;
     }
   });
   return filled;
@@ -103,7 +103,7 @@ function it_computeOverallScore(
   if (!values.length) {
     return 0;
   }
-  return Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 10);
+  return Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
 }
 
 function it_toStringArray(value: unknown): string[] {
@@ -468,12 +468,35 @@ export async function it_evaluateAnswer(
   questionList: string[],
   questionAnswers?: Array<{ question: string; answer: string }>,
 ): Promise<ItEvaluation> {
+  const lowSpeech =
+    (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
   const dimensions = it_normalizeDimensions(config.dimensions);
   const questions = questionList.length ? questionList : question ? [question] : [];
   const resolvedAnswers =
     questionAnswers && questionAnswers.length
       ? questionAnswers
       : it_splitTranscriptByQuestions(questions, transcript);
+
+  if (lowSpeech) {
+    const baseScores: Record<string, number> = {};
+    dimensions.forEach((dim) => {
+      baseScores[dim] = 2;
+    });
+    return {
+      topicTitle: question || "无有效回答",
+      topicSummary: "未检测到有效语音内容，请确保麦克风输入正常并重新作答。",
+      scores: baseScores,
+      overallScore: 2,
+      strengths: [],
+      issues: ["未检测到有效语音或内容过短。", "请检查麦克风音量与输入设备。"],
+      improvements: ["重新回答题目，保证清晰、连续的语音输入。"],
+      nextFocus: ["确保录音设备选择正确", "避免静音，完整作答每个问题"],
+      revisedAnswers: it_buildFallbackRevisions(resolvedAnswers, []),
+      mode: "heuristic",
+      raw: "no_speech_detected",
+    };
+  }
+
   const systemPrompt =
     "你是一位严谨但建设性的中文面试官，请根据回答内容与表达质量进行评分。必须使用中文，不要输出英文标签或解释。仅输出JSON。";
   const userPrompt = [
