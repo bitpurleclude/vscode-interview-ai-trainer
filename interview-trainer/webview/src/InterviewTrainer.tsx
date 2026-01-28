@@ -371,6 +371,10 @@ const InterviewTrainer: React.FC = () => {
   useEffect(() => {
     if (!config) return;
     applyProfileToForm(config);
+    if (config.prompts) {
+      setCustomPrompt(config.prompts.evaluationPrompt || STRICT_SYSTEM_PROMPT);
+      setDemoPrompt(config.prompts.demoPrompt || DEFAULT_DEMO_PROMPT);
+    }
   }, [config, applyProfileToForm]);
 
   useEffect(() => {

@@ -41,10 +41,6 @@ export function it_renderReport(
 
   lines.push("### 转写文本\n\n");
   lines.push(`${response.transcript}\n\n`);
-  if (response.detailedTranscript) {
-    lines.push("### 带时间标注转写\n\n");
-    lines.push(`${response.detailedTranscript}\n\n`);
-  }
 
   lines.push("### 声学分析\n\n");
   lines.push("| 指标 | 数值 |\n| --- | --- |\n");

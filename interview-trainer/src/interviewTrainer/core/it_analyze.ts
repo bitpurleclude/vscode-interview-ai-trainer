@@ -651,7 +651,10 @@ export async function it_runAnalysis(
   let questionTimings: ItQuestionTiming[] = [];
   let questionAnswers: Array<{ question: string; answer: string }> | undefined =
     undefined;
+  let llmTimingAttempted = false;
+  let llmTimingFailed = false;
   if (audioSegments && questionList.length > 1 && llmConfig) {
+    llmTimingAttempted = true;
     const splitAnswers = await it_splitAnswersWithLlm(
       llmConfig,
       questionList,
@@ -690,16 +693,28 @@ export async function it_runAnalysis(
       if (assigned) {
         questionTimings = assigned.timings;
         questionAnswers = assigned.answers;
+      } else {
+        llmTimingFailed = true;
       }
     }
   }
   if (!questionTimings.length) {
+    if (llmTimingAttempted && llmTimingFailed) {
+      questionTimings = questionList.map((q) => ({
+        question: q,
+        startSec: 0,
+        endSec: 0,
+        durationSec: 0,
+        note: "LLM时间计算失败",
+      }));
+    } else {
     questionTimings = it_buildQuestionTimings(
       questionText,
       questionList,
       acoustic.durationSec || request.audio.durationSec || 0,
       audioSegments,
     );
+    }
   }
 
   let notes: ReturnType<typeof it_retrieveNotes> = [];
