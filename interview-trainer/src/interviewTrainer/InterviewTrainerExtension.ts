@@ -184,10 +184,21 @@ export class InterviewTrainerExtension {
         fs.renameSync(fullPath, backupPath);
         moved.push(backupName);
       } catch (error) {
+        const stat = (() => {
+          try {
+            return fs.lstatSync(fullPath);
+          } catch {
+            return null;
+          }
+        })();
         // Windows 上文件句柄占用时 rename 可能失败，尝试复制备份后删除源目录。
         try {
-          fs.cpSync(fullPath, backupPath, { recursive: true, errorOnExist: false });
-          const lockedEntries = this.it_removeDirLoose(fullPath);
+          if (stat && stat.isDirectory()) {
+            fs.cpSync(fullPath, backupPath, { recursive: true, errorOnExist: false });
+          } else {
+            fs.copyFileSync(fullPath, backupPath);
+          }
+          const lockedEntries = this.it_removeDirLoose(fullPath, Boolean(stat?.isDirectory()));
           if (lockedEntries.length) {
             locked.push(...lockedEntries);
             moved.push(`${backupName} (partial)`);
@@ -258,29 +269,52 @@ export class InterviewTrainerExtension {
     };
   }
 
-  private it_removeDirLoose(dir: string): string[] {
+  private it_removeDirLoose(dir: string, isDirectory: boolean): string[] {
     const locked: string[] = [];
     if (!fs.existsSync(dir)) {
       return locked;
     }
-    const entries = fs.readdirSync(dir);
-    for (const entry of entries) {
-      const full = path.join(dir, entry);
+    if (isDirectory) {
+      let entries: string[] = [];
       try {
-        fs.rmSync(full, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
+        entries = fs.readdirSync(dir);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code || "";
+        if (code === "ENOTDIR") {
+          // 实际不是目录，走文件删除逻辑
+          return this.it_removeDirLoose(dir, false);
+        }
+        locked.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
+        return locked;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry);
+        try {
+          fs.rmSync(full, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code || "";
+          if (code === "EBUSY" || code === "EPERM") {
+            locked.push(full);
+          } else {
+            locked.push(`${full}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+      try {
+        fs.rmdirSync(dir);
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code || "";
         if (code === "EBUSY" || code === "EPERM") {
-          locked.push(full);
-        } else {
-          locked.push(`${full}: ${error instanceof Error ? error.message : String(error)}`);
+          locked.push(dir);
         }
       }
+    } else {
+      try {
+        fs.rmSync(dir, { force: true, maxRetries: 2, retryDelay: 50 });
+      } catch (error) {
+        locked.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
-    // 尝试删除空目录，忽略错误。
-    try {
-      fs.rmdirSync(dir);
-    } catch {}
     return locked;
   }
 
