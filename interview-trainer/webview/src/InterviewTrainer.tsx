@@ -157,6 +157,9 @@ const InterviewTrainer: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [questionError, setQuestionError] = useState(false);
+  const [recordingSession, setRecordingSession] = useState<{ startedAt: number | null }>({
+    startedAt: null,
+  });
   const [micDiagnostic, setMicDiagnostic] = useState<{
     status: "idle" | "running" | "done" | "error";
     permissionState?: string;
@@ -169,8 +172,7 @@ const InterviewTrainer: React.FC = () => {
     status: "idle" | "running" | "done" | "error";
     message?: string;
   }>({ status: "idle" });
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiLocked = !config;
 
   useEffect(() => {
@@ -261,82 +263,85 @@ const InterviewTrainer: React.FC = () => {
   }, [questionError, hasQuestion]);
 
   const handleStartRecording = async () => {
+    if (recordingSession.startedAt) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      recordingChunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordingChunksRef.current.push(event.data);
-        }
-      };
-      recorder.onstop = async () => {
-        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
-        const arrayBuffer = await blob.arrayBuffer();
-        const decoded = await it_decodeToPcm16(arrayBuffer, 16000);
-        setAudioPayload({
-          format: "pcm",
-          sampleRate: decoded.sampleRate,
-          byteLength: decoded.pcm.length * 2,
-          durationSec: decoded.durationSec,
-          base64: it_pcmToBase64(decoded.pcm),
-        });
+      const resp = await request("it/startNativeRecording", undefined);
+      if (resp?.status === "success" && resp.content) {
+        const startedAt = resp.content.startedAt || Date.now();
+        setRecordingSession({ startedAt });
         setRecordingTime(0);
-      };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setItState((prev) => ({
-        ...prev,
-        recordingState: "recording",
-        statusMessage: "录音中...",
-        lastError: undefined,
-      }));
-      const interval = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
-      }, 1000);
-      recorder.addEventListener("stop", () => clearInterval(interval));
-    } catch (err) {
-      const errorName =
-        err instanceof DOMException ? err.name : err instanceof Error ? err.name : "";
-      let reason = "录音启动失败";
-      let solution = "请检查麦克风权限或设备状态。";
-      let errorType = "recording_error";
-      if (["NotAllowedError", "SecurityError"].includes(errorName)) {
-        reason = "麦克风权限被拒绝";
-        solution = "请在系统设置与 IDE 权限中允许访问麦克风。";
-        errorType = "recording_permission";
-      } else if (errorName === "NotFoundError") {
-        reason = "未检测到麦克风设备";
-        solution = "请连接麦克风或检查设备是否被禁用。";
-        errorType = "recording_device";
-      } else if (errorName === "NotReadableError") {
-        reason = "麦克风被占用或无法读取";
-        solution = "请关闭其他占用麦克风的应用后重试。";
-        errorType = "recording_busy";
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+        }
+        recordingTimerRef.current = setInterval(() => {
+          setRecordingTime((prev) => prev + 1);
+        }, 1000);
+      } else {
+        throw new Error(resp?.error || "无法启动录音");
       }
       setItState((prev) => ({
         ...prev,
-        statusMessage: `${reason}（${solution}）`,
+        recordingState: "recording",
+        statusMessage: "正在录音（系统麦克风）...",
+        lastError: undefined,
+      }));
+    } catch (err) {
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: `录音启动失败：${err instanceof Error ? err.message : String(err)}`,
         lastError: {
-          type: errorType,
-          reason,
-          solution,
+          type: "recording_error",
+          reason: err instanceof Error ? err.message : String(err),
+          solution: "请确认 ffmpeg 可用，并检查系统麦克风权限。",
         },
       }));
     }
   };
 
   const handleStopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    mediaRecorderRef.current = null;
-    const nextMessage = hasQuestion
-      ? "录音结束，可开始分析。"
-      : "录音结束，请先填写题干或导入题干文件。";
-    setItState((prev) => ({
-      ...prev,
-      recordingState: "idle",
-      statusMessage: nextMessage,
-    }));
+    if (!recordingSession.startedAt) return;
+    request("it/stopNativeRecording", undefined)
+      .then((resp) => {
+        if (resp?.status === "success" && resp.content?.audio) {
+          const audio = resp.content.audio;
+          setAudioPayload(audio);
+          setRecordingTime(0);
+          setRecordingSession({ startedAt: null });
+          const nextMessage = hasQuestion
+            ? "录音结束，可开始分析。"
+            : "录音结束，请先填写题干或导入题干文件。";
+          setItState((prev) => ({
+            ...prev,
+            recordingState: "idle",
+            statusMessage: nextMessage,
+          }));
+          if (resp.content.locked?.length) {
+            setMicFixStatus({
+              status: "error",
+              message: `缓存清理部分失败，锁定文件：${resp.content.locked.join("；")}`,
+            });
+          }
+          return;
+        }
+        throw new Error(resp?.error || "录音停止失败");
+      })
+      .catch((err) => {
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: `录音停止失败：${err instanceof Error ? err.message : String(err)}`,
+          lastError: {
+            type: "recording_error",
+            reason: err instanceof Error ? err.message : String(err),
+            solution: "请确认 ffmpeg 可用，或重试启动/停止。",
+          },
+        }));
+      })
+      .finally(() => {
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+      });
   };
 
   const handleImportAudio = async (
@@ -589,59 +594,22 @@ const InterviewTrainer: React.FC = () => {
     await request("it/selectWorkspaceDir", { kind });
   };
   const handleMicDiagnostic = async () => {
-    setMicDiagnostic({ status: "running" });
-    try {
-      let permissionState = "unknown";
-      if (navigator.permissions?.query) {
-        try {
-          const status = await navigator.permissions.query({
-            name: "microphone" as PermissionName,
-          });
-          permissionState = status.state || "unknown";
-        } catch {
-          permissionState = "unknown";
-        }
-      }
-
-      let audioInputs: Array<{ label: string; deviceId: string }> = [];
-      if (navigator.mediaDevices?.enumerateDevices) {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        audioInputs = devices
-          .filter((device) => device.kind === "audioinput")
-          .map((device) => ({
-            label: device.label || "（未授权时不可见设备名称）",
-            deviceId: device.deviceId,
-          }));
-      }
-
-      setMicDiagnostic({
-        status: "done",
-        permissionState,
-        audioInputCount: audioInputs.length,
-        audioInputs,
-        updatedAt: new Date().toLocaleString(),
-      });
-    } catch (err) {
-      setMicDiagnostic({
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-        updatedAt: new Date().toLocaleString(),
-      });
-    }
+    setMicDiagnostic({
+      status: "done",
+      permissionState: "unknown",
+      audioInputCount: undefined,
+      audioInputs: [],
+      updatedAt: new Date().toLocaleString(),
+    });
   };
   const handleRequestMicPermission = async () => {
-    setMicDiagnostic({ status: "running" });
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      await handleMicDiagnostic();
-    } catch (err) {
-      setMicDiagnostic({
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-        updatedAt: new Date().toLocaleString(),
-      });
-    }
+    setMicDiagnostic({
+      status: "done",
+      permissionState: "unknown",
+      audioInputCount: undefined,
+      audioInputs: [],
+      updatedAt: new Date().toLocaleString(),
+    });
   };
   const handleFixMicPermission = async () => {
     setMicFixStatus({ status: "running", message: "正在清理权限缓存..." });
@@ -1179,8 +1147,8 @@ const InterviewTrainer: React.FC = () => {
                     )}
                     <div className="it-diagnostic__hint">
                       {micDiagnostic.permissionState === "denied"
-                        ? "若权限被拒绝，请确认 VS Code 不是以管理员身份运行，并重启 VS Code。若已开启系统权限仍被拒绝，可点击“一键修复权限”（清理 Webview 权限缓存并重启）。"
-                        : "如权限待确认，请点击“开始录音”触发授权弹窗。"}
+                        ? "若权限被拒绝，请确认 VS Code 非管理员运行，并在系统设置中为 VS Code 开启麦克风权限后重启。"
+                        : "录音改用系统通道，点击“开始录音”即可触发系统授权或报错。若失败可尝试“一键修复权限”清理缓存后重试。"}
                     </div>
                   </>
                 )}

@@ -55,6 +55,9 @@ export class InterviewTrainerExtension {
   private state: ItState = { ...IT_STATUS_INIT };
   private configSnapshot: ItConfigSnapshot;
   private configBundle: ReturnType<typeof it_loadConfigBundle>;
+  private recordingChild: import("child_process").ChildProcess | null = null;
+  private recordingTempDir: string | null = null;
+  private recordingStartAt: number | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -388,6 +391,12 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/reloadWindow", async () => {
       await vscode.commands.executeCommand("workbench.action.reloadWindow");
     });
+    this.webviewProtocol.on("it/startNativeRecording", async () => {
+      return await this.it_startNativeRecording();
+    });
+    this.webviewProtocol.on("it/stopNativeRecording", async () => {
+      return await this.it_stopNativeRecording();
+    });
     this.webviewProtocol.on("it/parseQuestions", async (msg) => {
       const text = String(msg.data?.text || "");
       this.configBundle = it_loadConfigBundle(this.context);
@@ -588,6 +597,112 @@ export class InterviewTrainerExtension {
       }
     }
     return null;
+  }
+
+  private async it_startNativeRecording(): Promise<{
+    tmpDir: string;
+    tmpPath: string;
+    startedAt: number;
+  }> {
+    if (this.recordingChild) {
+      throw new Error("recording already running");
+    }
+    const ffmpeg = await this.it_findFfmpeg();
+    if (!ffmpeg) {
+      throw new Error("未找到 ffmpeg，请先安装并配置环境变量或 IT_FFMPEG_PATH");
+    }
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "it-record-"));
+    const tmpPath = path.join(tmpDir, "capture.pcm");
+    const commonArgs = ["-y", "-ac", "1", "-ar", "16000", "-f", "s16le", tmpPath];
+    let inputArgs: string[];
+    if (process.platform === "win32") {
+      inputArgs = ["-f", "dshow", "-i", "audio=default"];
+    } else if (process.platform === "darwin") {
+      inputArgs = ["-f", "avfoundation", "-i", ":0"];
+    } else {
+      inputArgs = ["-f", "pulse", "-i", "default"];
+    }
+    const args = [...inputArgs, ...commonArgs];
+    const child = spawn(ffmpeg, args, { windowsHide: true });
+    child.on("error", () => {});
+    this.recordingChild = child;
+    this.recordingTempDir = tmpDir;
+    this.recordingStartAt = Date.now();
+    return {
+      tmpDir,
+      tmpPath,
+      startedAt: this.recordingStartAt,
+    };
+  }
+
+  private async it_stopNativeRecording(): Promise<{
+    audio: ItAnalyzeRequest["audio"];
+    locked?: string[];
+  }> {
+    if (!this.recordingChild || !this.recordingTempDir) {
+      throw new Error("no recording in progress");
+    }
+    const child = this.recordingChild;
+    this.recordingChild = null;
+    let killed = false;
+    try {
+      if (child.stdin) {
+        child.stdin.write("q");
+      }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          if (!child.killed) {
+            child.kill("SIGTERM");
+            killed = true;
+          }
+          resolve();
+        }, 500);
+        child.on("close", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    } catch {
+      // ignore
+    }
+
+    const tmpPath = path.join(this.recordingTempDir, "capture.pcm");
+    if (!fs.existsSync(tmpPath)) {
+      throw new Error(
+        `录音文件不存在${killed ? "（进程被强制结束）" : ""}，请检查麦克风设备或 ffmpeg 输入参数`,
+      );
+    }
+    const pcm = fs.readFileSync(tmpPath);
+    const byteLength = pcm.byteLength;
+    const durationSec = byteLength / (2 * 16000);
+
+    // cleanup
+    const locked: string[] = [];
+    try {
+      fs.rmSync(this.recordingTempDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 2,
+        retryDelay: 50,
+      });
+    } catch (error) {
+      locked.push(
+        `${this.recordingTempDir}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    this.recordingTempDir = null;
+    this.recordingStartAt = null;
+
+    return {
+      audio: {
+        format: "pcm",
+        sampleRate: 16000,
+        byteLength,
+        durationSec,
+        base64: pcm.toString("base64"),
+      },
+      locked: locked.length ? locked : undefined,
+    };
   }
 
   private async handleAnalyze(
