@@ -529,7 +529,9 @@ const demoPrompt =
           .join("\n")}`
       : "考生回答(按题): 无",
     "要求: strengths/issues/improvements 至少各3条，nextFocus 至少2条。",
-    "revisedAnswers 必须基于对应题目的原回答，并综合 improvements 的改进意见进行润色、删冗与补充逻辑。",
+    "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
+    "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），若内容过长需压缩到对应时长。",
+    "revised 必须基于原回答重写（禁止照搬原句），结构为 总-分-总 或 问题-原因-对策-预期/风险，至少 2-3 条可执行动作（责任人/时间节点/指标/风险兜底），删除口头禅、问候语、重复表述。",
     "示范答案写作指引:",
     demoPrompt,
     "请输出完整、流畅的段落式回答：开头一句给结论，随后用“第一/第二/第三/第四”展开要点，最后收束总结。",
