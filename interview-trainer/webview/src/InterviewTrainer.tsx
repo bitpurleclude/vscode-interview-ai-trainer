@@ -166,6 +166,33 @@ const InterviewTrainer: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [nativeInputs, setNativeInputs] = useState<string[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>("");
+  const [apiForm, setApiForm] = useState({
+    environment: "prod",
+    llm: {
+      provider: "baidu_qianfan",
+      baseUrl: "https://qianfan.baidubce.com/v2",
+      model: "ernie-4.5-turbo-128k",
+      apiKey: "",
+      temperature: 0.8,
+      topP: 0.8,
+      timeoutSec: 60,
+      maxRetries: 1,
+    },
+    asr: {
+      provider: "baidu_vop",
+      baseUrl: "https://vop.baidu.com/server_api",
+      apiKey: "",
+      secretKey: "",
+      language: "zh",
+      devPid: 1537,
+      mockText: "",
+      maxChunkSec: 50,
+      timeoutSec: 120,
+      maxRetries: 1,
+    },
+  });
+  const [savingApiConfig, setSavingApiConfig] = useState(false);
+  const [apiSaveMessage, setApiSaveMessage] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -202,9 +229,32 @@ const InterviewTrainer: React.FC = () => {
         // fallback to unlock UI even if后端出错
         setConfig({
           activeEnvironment: "prod",
+          envList: ["prod"],
           llmProvider: "baidu_qianfan",
           asrProvider: "baidu_vop",
           acousticProvider: "api",
+          llm: {
+            provider: "baidu_qianfan",
+            baseUrl: "https://qianfan.baidubce.com/v2",
+            model: "ernie-4.5-turbo-128k",
+            apiKey: "",
+            temperature: 0.8,
+            topP: 0.8,
+            timeoutSec: 60,
+            maxRetries: 1,
+          },
+          asr: {
+            provider: "baidu_vop",
+            baseUrl: "https://vop.baidu.com/server_api",
+            apiKey: "",
+            secretKey: "",
+            language: "zh",
+            devPid: 1537,
+            mockText: "",
+            maxChunkSec: 50,
+            timeoutSec: 120,
+            maxRetries: 1,
+          },
           sessionsDir: "sessions",
           retrievalEnabled: true,
           workspaceDirs: {
@@ -228,6 +278,35 @@ const InterviewTrainer: React.FC = () => {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!config) return;
+    setApiForm({
+      environment: config.activeEnvironment || "prod",
+      llm: {
+        provider: config.llm?.provider || config.llmProvider || "baidu_qianfan",
+        baseUrl: config.llm?.baseUrl || "https://qianfan.baidubce.com/v2",
+        model: config.llm?.model || "ernie-4.5-turbo-128k",
+        apiKey: config.llm?.apiKey || "",
+        temperature: Number(config.llm?.temperature ?? 0.8),
+        topP: Number(config.llm?.topP ?? 0.8),
+        timeoutSec: Number(config.llm?.timeoutSec ?? 60),
+        maxRetries: Number(config.llm?.maxRetries ?? 1),
+      },
+      asr: {
+        provider: config.asr?.provider || config.asrProvider || "baidu_vop",
+        baseUrl: config.asr?.baseUrl || "https://vop.baidu.com/server_api",
+        apiKey: config.asr?.apiKey || "",
+        secretKey: config.asr?.secretKey || "",
+        language: config.asr?.language || "zh",
+        devPid: Number(config.asr?.devPid ?? 1537),
+        mockText: config.asr?.mockText || "",
+        maxChunkSec: Number(config.asr?.maxChunkSec ?? 50),
+        timeoutSec: Number(config.asr?.timeoutSec ?? 120),
+        maxRetries: Number(config.asr?.maxRetries ?? 1),
+      },
+    });
+  }, [config]);
 
   useEffect(() => {
     const disposeState = on("it/stateUpdate", (data) => {
@@ -613,6 +692,75 @@ const InterviewTrainer: React.FC = () => {
       setActivePage("practice");
     }
   }, []);
+  const handleApiFieldChange = (
+    scope: "llm" | "asr",
+    key: string,
+    value: string | number,
+  ) => {
+    setApiForm((prev) => ({
+      ...prev,
+      [scope]: {
+        ...prev[scope],
+        [key]: value,
+      },
+    }));
+  };
+  const handleSaveApiConfig = async () => {
+    if (!apiForm.environment.trim()) {
+      setApiSaveMessage("请填写环境名称（如 prod / test）。");
+      return;
+    }
+    setSavingApiConfig(true);
+    setApiSaveMessage(null);
+    const payload = {
+      environment: apiForm.environment.trim(),
+      llm: {
+        provider: apiForm.llm.provider,
+        baseUrl: apiForm.llm.baseUrl,
+        model: apiForm.llm.model,
+        apiKey: apiForm.llm.apiKey,
+        temperature: Number(apiForm.llm.temperature),
+        topP: Number(apiForm.llm.topP),
+        timeoutSec: Number(apiForm.llm.timeoutSec),
+        maxRetries: Number(apiForm.llm.maxRetries),
+      },
+      asr: {
+        provider: apiForm.asr.provider,
+        baseUrl: apiForm.asr.baseUrl,
+        apiKey: apiForm.asr.apiKey,
+        secretKey: apiForm.asr.secretKey,
+        language: apiForm.asr.language,
+        devPid: Number(apiForm.asr.devPid),
+        mockText: apiForm.asr.mockText,
+        maxChunkSec: Number(apiForm.asr.maxChunkSec),
+        timeoutSec: Number(apiForm.asr.timeoutSec),
+        maxRetries: Number(apiForm.asr.maxRetries),
+      },
+    };
+    try {
+      const resp = await request("it/updateApiSettings", payload);
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setApiSaveMessage("已保存，重试录音即可生效。");
+      } else {
+        setApiSaveMessage("保存失败，请检查输入后重试。");
+      }
+    } catch (err) {
+      setApiSaveMessage(
+        `保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingApiConfig(false);
+  };
+  const handleReloadConfig = async () => {
+    const resp = await request("it/getConfig", undefined);
+    if (resp?.status === "success" && resp.content) {
+      setConfig(resp.content);
+      setApiSaveMessage("已重新加载配置。");
+    }
+  };
   const handleToggleRetrieval = async (enabled: boolean) => {
     await request("it/setRetrievalEnabled", { enabled });
   };
@@ -1102,31 +1250,284 @@ const InterviewTrainer: React.FC = () => {
               <div className="it-settings__header">
                 <div>
                   <div className="it-settings__title">通用配置</div>
-                  <div className="it-settings__desc">ASR / LLM / 保存目录</div>
+                  <div className="it-settings__desc">ASR / LLM / 保存目录 · 直接在此修改</div>
                 </div>
                 <div className="it-settings__actions">
                   <button
-                    className="it-button it-button--secondary it-button--compact"
-                    onClick={() => request("it/openSettings", undefined)}
+                    className="it-button it-button--primary it-button--compact"
+                    disabled={uiLocked || savingApiConfig}
+                    onClick={handleSaveApiConfig}
                   >
-                    打开配置文件
+                    {savingApiConfig ? "保存中..." : "保存接口配置"}
                   </button>
                   <button
                     className="it-button it-button--secondary it-button--compact"
                     disabled={uiLocked}
-                    onClick={() => request("it/selectSessionsDir", undefined)}
+                    onClick={handleReloadConfig}
                   >
-                    选择保存目录
+                    重载配置
+                  </button>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    onClick={() => request("it/openSettings", undefined)}
+                  >
+                    查看配置文件
                   </button>
                 </div>
               </div>
               {config ? (
-                <div className="it-settings__meta">
-                  <span>ASR: {config.asrProvider}</span>
-                  <span>LLM: {config.llmProvider}</span>
-                  <span>环境: {config.activeEnvironment}</span>
-                  <span>保存目录: {config.sessionsDir}</span>
-                </div>
+                <>
+                  <div className="it-input-row">
+                    <div style={{ minWidth: 64 }}>环境</div>
+                    <input
+                      className="it-input"
+                      list="it-env-list"
+                      value={apiForm.environment}
+                      onChange={(event) =>
+                        setApiForm((prev) => ({ ...prev, environment: event.target.value }))
+                      }
+                      placeholder="prod / test / dev"
+                    />
+                    <datalist id="it-env-list">
+                      {(config.envList || []).map((env) => (
+                        <option key={env} value={env} />
+                      ))}
+                    </datalist>
+                    <span className="it-settings__hint">
+                      可直接输入新环境名称，保存后自动创建并切换
+                    </span>
+                  </div>
+                  <div className="it-settings__meta">
+                    <span>ASR: {config.asrProvider}</span>
+                    <span>LLM: {config.llmProvider}</span>
+                    <span>当前环境: {config.activeEnvironment}</span>
+                    <span>保存目录: {config.sessionsDir}</span>
+                  </div>
+                  <div className="it-settings__hint">
+                    API Key 会写入 VS Code Secret 存储，表单留空则保持原值。
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                      gap: "10px",
+                    }}
+                  >
+                    <div className="it-question">
+                      <div className="it-settings__title">LLM（评分/问答）</div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Provider</div>
+                        <select
+                          className="it-select"
+                          value={apiForm.llm.provider}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "provider", event.target.value)
+                          }
+                        >
+                          <option value="baidu_qianfan">baidu_qianfan</option>
+                          <option value="heuristic">heuristic（本地规则）</option>
+                        </select>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Model</div>
+                        <input
+                          className="it-input"
+                          value={apiForm.llm.model}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "model", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Base URL</div>
+                        <input
+                          className="it-input"
+                          value={apiForm.llm.baseUrl}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "baseUrl", event.target.value)
+                          }
+                          placeholder="https://qianfan.baidubce.com/v2"
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>API Key</div>
+                        <input
+                          className="it-input"
+                          type="password"
+                          value={apiForm.llm.apiKey}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "apiKey", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>温度</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          step="0.05"
+                          value={apiForm.llm.temperature}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "temperature", Number(event.target.value))
+                          }
+                        />
+                        <div style={{ minWidth: 70 }}>Top P</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          step="0.05"
+                          value={apiForm.llm.topP}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "topP", Number(event.target.value))
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>超时(s)</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.llm.timeoutSec}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "timeoutSec", Number(event.target.value))
+                          }
+                        />
+                        <div style={{ minWidth: 80 }}>重试</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.llm.maxRetries}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "maxRetries", Number(event.target.value))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="it-question">
+                      <div className="it-settings__title">ASR（语音转写）</div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Provider</div>
+                        <select
+                          className="it-select"
+                          value={apiForm.asr.provider}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "provider", event.target.value)
+                          }
+                        >
+                          <option value="baidu_vop">baidu_vop</option>
+                          <option value="mock">mock（使用示例文本）</option>
+                        </select>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Base URL</div>
+                        <input
+                          className="it-input"
+                          value={apiForm.asr.baseUrl}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "baseUrl", event.target.value)
+                          }
+                          placeholder="https://vop.baidu.com/server_api"
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>API Key</div>
+                        <input
+                          className="it-input"
+                          type="password"
+                          value={apiForm.asr.apiKey}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "apiKey", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Secret</div>
+                        <input
+                          className="it-input"
+                          type="password"
+                          value={apiForm.asr.secretKey}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "secretKey", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>语言</div>
+                        <input
+                          className="it-input"
+                          value={apiForm.asr.language}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "language", event.target.value)
+                          }
+                        />
+                        <div style={{ minWidth: 80 }}>dev_pid</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.asr.devPid}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "devPid", Number(event.target.value))
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>分片(s)</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.asr.maxChunkSec}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "maxChunkSec", Number(event.target.value))
+                          }
+                        />
+                        <div style={{ minWidth: 80 }}>超时(s)</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.asr.timeoutSec}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "timeoutSec", Number(event.target.value))
+                          }
+                        />
+                        <div style={{ minWidth: 60 }}>重试</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.asr.maxRetries}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "maxRetries", Number(event.target.value))
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Mock 文本</div>
+                        <input
+                          className="it-input"
+                          value={apiForm.asr.mockText}
+                          onChange={(event) =>
+                            handleApiFieldChange("asr", "mockText", event.target.value)
+                          }
+                          placeholder="仅在 provider=mock 时使用"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="it-input-row">
+                    <div style={{ minWidth: 80 }}>保存目录</div>
+                    <div className="it-settings__meta" style={{ flex: 1 }}>
+                      {config.sessionsDir}
+                    </div>
+                    <button
+                      className="it-button it-button--secondary it-button--compact"
+                      disabled={uiLocked}
+                      onClick={() => request("it/selectSessionsDir", undefined)}
+                    >
+                      选择保存目录
+                    </button>
+                  </div>
+                  {apiSaveMessage && <div className="it-settings__hint">{apiSaveMessage}</div>}
+                </>
               ) : (
                 <div className="it-placeholder">配置加载中...</div>
               )}

@@ -19,6 +19,7 @@ import {
   ItApiConfig,
   it_applySecretOverrides,
   it_ensureConfigFiles,
+  it_saveApiConfig,
   it_saveSkillConfig,
 } from "./api/it_apiConfig";
 import { it_runAnalysis } from "./core/it_analyze";
@@ -86,12 +87,39 @@ export class InterviewTrainerExtension {
   }
 
   private buildConfigSnapshot(apiConfig: ItApiConfig): ItConfigSnapshot {
+    const env = apiConfig.active?.environment || "prod";
+    const envConfig = apiConfig.environments?.[env] ?? {};
+    const llmConfig = envConfig.llm ?? {};
+    const asrConfig = envConfig.asr ?? {};
     const workspace = this.configBundle.skill.workspace ?? {};
     return {
-      activeEnvironment: apiConfig.active?.environment || "prod",
-      llmProvider: apiConfig.active?.llm || "baidu_qianfan",
-      asrProvider: apiConfig.active?.asr || "baidu_vop",
+      activeEnvironment: env,
+      envList: Object.keys(apiConfig.environments || {}),
+      llmProvider: apiConfig.active?.llm || llmConfig.provider || "baidu_qianfan",
+      asrProvider: apiConfig.active?.asr || asrConfig.provider || "baidu_vop",
       acousticProvider: apiConfig.active?.acoustic || "api",
+      llm: {
+        provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
+        baseUrl: llmConfig.base_url || "https://qianfan.baidubce.com/v2",
+        model: llmConfig.model || "ernie-4.5-turbo-128k",
+        apiKey: llmConfig.api_key || "",
+        temperature: Number(llmConfig.temperature ?? 0.8),
+        topP: Number(llmConfig.top_p ?? 0.8),
+        timeoutSec: Number(llmConfig.timeout_sec ?? 60),
+        maxRetries: Number(llmConfig.max_retries ?? 1),
+      },
+      asr: {
+        provider: asrConfig.provider || apiConfig.active?.asr || "baidu_vop",
+        baseUrl: asrConfig.base_url || "https://vop.baidu.com/server_api",
+        apiKey: asrConfig.api_key || "",
+        secretKey: asrConfig.secret_key || "",
+        language: asrConfig.language || "zh",
+        devPid: Number(asrConfig.dev_pid ?? 1537),
+        mockText: asrConfig.mock_text || "",
+        maxChunkSec: Number(asrConfig.max_chunk_sec ?? 50),
+        timeoutSec: Number(asrConfig.timeout_sec ?? 120),
+        maxRetries: Number(asrConfig.max_retries ?? 1),
+      },
       sessionsDir: this.configBundle.skill.sessions_dir || "sessions",
       retrievalEnabled: this.configBundle.skill.retrieval?.enabled !== false,
       workspaceDirs: {
@@ -516,6 +544,77 @@ export class InterviewTrainerExtension {
       this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { sessionsDir: normalized || "sessions" };
+    });
+    this.webviewProtocol.on("it/updateApiSettings", async (msg) => {
+      const payload = msg.data || {};
+      const environment =
+        String(payload.environment || "").trim() ||
+        this.configBundle.api.active?.environment ||
+        "prod";
+
+      this.configBundle = it_loadConfigBundle(this.context);
+      const apiConfig = { ...this.configBundle.api };
+      const envConfig = {
+        ...(apiConfig.environments?.[environment] || {}),
+      };
+      const llmForm = payload.llm || {};
+      const asrForm = payload.asr || {};
+
+      envConfig.llm = {
+        ...(envConfig.llm || {}),
+        provider: llmForm.provider || envConfig.llm?.provider || apiConfig.active?.llm || "baidu_qianfan",
+        base_url: llmForm.baseUrl ?? envConfig.llm?.base_url ?? "https://qianfan.baidubce.com/v2",
+        model: llmForm.model ?? envConfig.llm?.model ?? "ernie-4.5-turbo-128k",
+        api_key: llmForm.apiKey ?? envConfig.llm?.api_key ?? "",
+        temperature: Number(llmForm.temperature ?? envConfig.llm?.temperature ?? 0.8),
+        top_p: Number(llmForm.topP ?? envConfig.llm?.top_p ?? 0.8),
+        timeout_sec: Number(llmForm.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
+        max_retries: Number(llmForm.maxRetries ?? envConfig.llm?.max_retries ?? 1),
+      };
+
+      envConfig.asr = {
+        ...(envConfig.asr || {}),
+        provider: asrForm.provider || envConfig.asr?.provider || apiConfig.active?.asr || "baidu_vop",
+        base_url: asrForm.baseUrl ?? envConfig.asr?.base_url ?? "https://vop.baidu.com/server_api",
+        api_key: asrForm.apiKey ?? envConfig.asr?.api_key ?? "",
+        secret_key: asrForm.secretKey ?? envConfig.asr?.secret_key ?? "",
+        mock_text: asrForm.mockText ?? envConfig.asr?.mock_text ?? "",
+        language: asrForm.language ?? envConfig.asr?.language ?? "zh",
+        dev_pid: Number(asrForm.devPid ?? envConfig.asr?.dev_pid ?? 1537),
+        max_chunk_sec: Number(asrForm.maxChunkSec ?? envConfig.asr?.max_chunk_sec ?? 50),
+        timeout_sec: Number(asrForm.timeoutSec ?? envConfig.asr?.timeout_sec ?? 120),
+        max_retries: Number(asrForm.maxRetries ?? envConfig.asr?.max_retries ?? 1),
+      };
+
+      apiConfig.active = {
+        ...apiConfig.active,
+        environment,
+        llm: envConfig.llm.provider || apiConfig.active?.llm || "baidu_qianfan",
+        asr: envConfig.asr.provider || apiConfig.active?.asr || "baidu_vop",
+      };
+      apiConfig.environments = {
+        ...apiConfig.environments,
+        [environment]: envConfig,
+      };
+
+      await this.context.secrets.store(
+        `interviewTrainer.${environment}.llm.apiKey`,
+        envConfig.llm.api_key || "",
+      );
+      await this.context.secrets.store(
+        `interviewTrainer.${environment}.asr.apiKey`,
+        envConfig.asr.api_key || "",
+      );
+      await this.context.secrets.store(
+        `interviewTrainer.${environment}.asr.secretKey`,
+        envConfig.asr.secret_key || "",
+      );
+
+      it_saveApiConfig(this.context, apiConfig);
+      this.configBundle.api = apiConfig;
+      this.configSnapshot = this.buildConfigSnapshot(apiConfig);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
     });
     this.webviewProtocol.on("openFile", async (msg) => {
       const target = msg.data?.path;

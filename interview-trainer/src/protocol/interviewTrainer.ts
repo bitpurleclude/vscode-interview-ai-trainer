@@ -128,9 +128,32 @@ export interface ItHistoryItem {
 
 export interface ItConfigSnapshot {
   activeEnvironment: string;
+  envList: string[];
   llmProvider: string;
   asrProvider: string;
   acousticProvider: string;
+  llm: {
+    provider: string;
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    temperature: number;
+    topP: number;
+    timeoutSec: number;
+    maxRetries: number;
+  };
+  asr: {
+    provider: string;
+    baseUrl: string;
+    apiKey: string;
+    secretKey: string;
+    language: string;
+    devPid: number;
+    mockText: string;
+    maxChunkSec: number;
+    timeoutSec: number;
+    maxRetries: number;
+  };
   sessionsDir: string;
   retrievalEnabled: boolean;
   workspaceDirs: {
