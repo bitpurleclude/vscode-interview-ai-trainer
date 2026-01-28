@@ -659,12 +659,16 @@ const InterviewTrainer: React.FC = () => {
       const cleared = Array.isArray(resp.content?.clearedPreferences)
         ? resp.content.clearedPreferences
         : [];
+      const locked = Array.isArray(resp.content?.locked) ? resp.content.locked : [];
       const hints: string[] = [];
       if (cleared.length) {
         hints.push(`已移除权限记录 ${cleared.length} 条；`);
       }
       if (moved.length) {
         hints.push(`已备份 ${moved.join("、")} 缓存目录`);
+      }
+      if (locked.length) {
+        hints.push(`部分文件被占用，请关闭所有 VS Code 窗口后重试（锁定: ${locked.length}）`);
       }
       const detail = hints.length ? `（${hints.join(" ")}）` : "";
       setMicFixStatus({

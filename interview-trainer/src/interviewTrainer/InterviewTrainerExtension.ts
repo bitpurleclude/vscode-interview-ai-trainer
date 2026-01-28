@@ -157,12 +157,14 @@ export class InterviewTrainerExtension {
     missing: string[];
     failed: string[];
     clearedPreferences: string[];
+    locked: string[];
   } {
     const userDataDir = this.it_getUserDataDir();
     const targets = ["WebStorage", "Local Storage", "SharedStorage"];
     const moved: string[] = [];
     const missing: string[] = [];
     const failed: string[] = [];
+    const locked: string[] = [];
     const clearedPreferences: string[] = [];
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -185,8 +187,13 @@ export class InterviewTrainerExtension {
         // Windows 上文件句柄占用时 rename 可能失败，尝试复制备份后删除源目录。
         try {
           fs.cpSync(fullPath, backupPath, { recursive: true, errorOnExist: false });
-          fs.rmSync(fullPath, { recursive: true, force: true });
-          moved.push(`${backupName} (copied)`);
+          const lockedEntries = this.it_removeDirLoose(fullPath);
+          if (lockedEntries.length) {
+            locked.push(...lockedEntries);
+            moved.push(`${backupName} (partial)`);
+          } else {
+            moved.push(`${backupName} (copied)`);
+          }
         } catch (fallbackError) {
           failed.push(
             `${target}: ${error instanceof Error ? error.message : String(error)}; fallback: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
@@ -247,7 +254,34 @@ export class InterviewTrainerExtension {
       missing,
       failed,
       clearedPreferences,
+      locked,
     };
+  }
+
+  private it_removeDirLoose(dir: string): string[] {
+    const locked: string[] = [];
+    if (!fs.existsSync(dir)) {
+      return locked;
+    }
+    const entries = fs.readdirSync(dir);
+    for (const entry of entries) {
+      const full = path.join(dir, entry);
+      try {
+        fs.rmSync(full, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code || "";
+        if (code === "EBUSY" || code === "EPERM") {
+          locked.push(full);
+        } else {
+          locked.push(`${full}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
+    // 尝试删除空目录，忽略错误。
+    try {
+      fs.rmdirSync(dir);
+    } catch {}
+    return locked;
   }
 
   private updateProgress(update: {
