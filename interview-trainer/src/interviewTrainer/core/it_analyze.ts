@@ -365,6 +365,119 @@ async function it_assignSegmentsWithLlm(
   }
 }
 
+async function it_splitAnswersWithLlm(
+  llmConfig: ItQianfanConfig,
+  questions: string[],
+  transcript: string,
+): Promise<Array<{ question: string; answer: string }> | null> {
+  if (!questions.length || !transcript.trim()) {
+    return null;
+  }
+
+  const systemPrompt =
+    "你是中文面试逐题拆分助手。请把考生完整回答按题目顺序拆分为逐题答案，仅输出 JSON。";
+  const userPrompt = [
+    "题目列表:",
+    questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n"),
+    "",
+    "考生完整转写:",
+    transcript.trim(),
+    "",
+    "输出要求:",
+    "1) 仅输出 JSON: {answers:[\"题1回答\",\"题2回答\",...]}。",
+    "2) answers 数组长度必须等于题目数，顺序一致。",
+    "3) 不要输出多余文字或解释。",
+  ].join("\n");
+
+  try {
+    const content = await it_callQianfanChat(llmConfig, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ]);
+    const parsed = it_extractJson(content);
+    const answers = Array.isArray(parsed?.answers) ? parsed.answers : [];
+    if (answers.length !== questions.length) {
+      return null;
+    }
+    return answers.map((item: any, idx: number) => ({
+      question: questions[idx],
+      answer: typeof item === "string" ? item.trim() : String(item?.answer ?? item ?? "").trim(),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function it_alignAnswerToSegments(
+  answer: string,
+  segments: ItAudioSegment[],
+): { startSec: number; endSec: number } | null {
+  const normalizedTarget = it_normalizeText(answer);
+  if (!normalizedTarget) {
+    return null;
+  }
+
+  const speechSegments = segments.filter(
+    (seg) => seg.type === "speech" && seg.text && it_normalizeText(seg.text),
+  );
+  if (!speechSegments.length) {
+    return null;
+  }
+
+  const normalizedSegments = speechSegments.map((seg) => it_normalizeText(seg.text || ""));
+  const offsets: number[] = [];
+  let cursor = 0;
+  for (const text of normalizedSegments) {
+    offsets.push(cursor);
+    cursor += text.length;
+  }
+  const joined = normalizedSegments.join("");
+
+  const findSegmentIndex = (pos: number): number => {
+    for (let i = 0; i < normalizedSegments.length; i += 1) {
+      const start = offsets[i];
+      const end = start + normalizedSegments[i].length;
+      if (pos < end) {
+        return i;
+      }
+    }
+    return normalizedSegments.length - 1;
+  };
+
+  const locateRange = (startPos: number, length: number): { startSec: number; endSec: number } => {
+    const startIdx = findSegmentIndex(startPos);
+    const endIdx = findSegmentIndex(startPos + Math.max(0, length - 1));
+    return {
+      startSec: speechSegments[startIdx].startSec,
+      endSec: speechSegments[endIdx].endSec,
+    };
+  };
+
+  let startPos = joined.indexOf(normalizedTarget);
+  let matchLen = normalizedTarget.length;
+  if (startPos === -1) {
+    const prefix = normalizedTarget.slice(0, Math.min(32, normalizedTarget.length));
+    const suffix = normalizedTarget.slice(-Math.min(32, normalizedTarget.length));
+    const prefixPos = prefix ? joined.indexOf(prefix) : -1;
+    const suffixPos = suffix ? joined.lastIndexOf(suffix) : -1;
+    if (prefixPos === -1 && suffixPos === -1) {
+      return null;
+    }
+    if (prefixPos !== -1 && suffixPos !== -1 && suffixPos >= prefixPos) {
+      startPos = prefixPos;
+      matchLen = suffixPos - prefixPos + suffix.length;
+    } else if (prefixPos !== -1) {
+      startPos = prefixPos;
+      matchLen = prefix.length;
+    } else {
+      startPos = Math.max(0, suffixPos);
+      matchLen = suffix.length;
+    }
+  }
+
+  return locateRange(startPos, matchLen);
+}
+
 async function it_transcribePcmWithChunks(
   asrConfig: {
     apiKey: string;
@@ -431,6 +544,7 @@ export async function it_runAnalysis(
   };
   const env = deps.apiConfig.active?.environment || "prod";
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
+  const llmConfig = it_getLlmConfig(envConfig);
   const questionText = request.questionText?.trim() || "";
   const questionList = (request.questionList ?? []).filter((q) => q.trim());
   if (!questionText && !questionList.length) {
@@ -528,9 +642,37 @@ export async function it_runAnalysis(
   let questionTimings: ItQuestionTiming[] = [];
   let questionAnswers: Array<{ question: string; answer: string }> | undefined =
     undefined;
-  if (audioSegments && questionList.length > 1) {
-    const llmConfig = it_getLlmConfig(envConfig);
-    if (llmConfig) {
+  if (audioSegments && questionList.length > 1 && llmConfig) {
+    const splitAnswers = await it_splitAnswersWithLlm(
+      llmConfig,
+      questionList,
+      transcript,
+    );
+    if (splitAnswers) {
+      const alignedTimings: ItQuestionTiming[] = [];
+      for (let idx = 0; idx < splitAnswers.length; idx += 1) {
+        const aligned = it_alignAnswerToSegments(
+          splitAnswers[idx].answer,
+          audioSegments,
+        );
+        if (!aligned) {
+          alignedTimings.length = 0;
+          break;
+        }
+        alignedTimings.push({
+          question: splitAnswers[idx].question,
+          startSec: aligned.startSec,
+          endSec: aligned.endSec,
+          durationSec: Math.max(0, aligned.endSec - aligned.startSec),
+          note: "LLM逐题对齐",
+        });
+      }
+      if (alignedTimings.length === questionList.length) {
+        questionTimings = alignedTimings;
+        questionAnswers = splitAnswers;
+      }
+    }
+    if (!questionTimings.length) {
       const assigned = await it_assignSegmentsWithLlm(
         llmConfig,
         questionList,
@@ -556,9 +698,9 @@ export async function it_runAnalysis(
   if (!retrievalEnabled) {
     reportProgress("notes", 100, "笔记检索 已关闭 · 本地", "success");
   } else {
-    reportProgress("notes", 15, "笔记检索 15% · 本地", "running");
     const workspaceCfg = deps.skillConfig.workspace ?? {};
     const notesStart = Date.now();
+    reportProgress("notes", 10, "笔记检索/文件扫描中 · 本地", "running");
     const corpus = it_buildCorpus({
       notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
       prompts: path.join(
@@ -578,6 +720,14 @@ export async function it_runAnalysis(
         workspaceCfg.examples_dir || "inputs/examples",
       ),
     });
+    const scanElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
+    const sourceCount = new Set(corpus.map((item) => item.source)).size;
+    reportProgress(
+      "notes",
+      60,
+      `笔记加载：${sourceCount}份/${corpus.length}段 · ${scanElapsedSec}s · 本地`,
+      "running",
+    );
     notes = it_retrieveNotes(
       transcript,
       corpus,
@@ -585,10 +735,9 @@ export async function it_runAnalysis(
       Number(deps.skillConfig.retrieval?.min_score ?? 0.1),
     );
     const notesElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
-    const sourceCount = new Set(corpus.map((item) => item.source)).size;
     const slowHint =
       sourceCount > 200 ? "文件较多，建议精简 inputs 目录" : undefined;
-    const notesMessage = `笔记检索 ${sourceCount}份 · ${notesElapsedSec}s · 本地${
+    const notesMessage = `笔记检索/扫描 ${sourceCount} 份，过滤 ${corpus.length} 段，命中 ${notes.length} 条 · ${notesElapsedSec}s · 本地${
       slowHint ? `（${slowHint}）` : ""
     }`;
     reportProgress("notes", 100, notesMessage, "success");
