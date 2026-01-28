@@ -143,6 +143,57 @@ export class InterviewTrainerExtension {
     return Math.round((weighted / totalWeight) * 100);
   }
 
+  private it_getUserDataDir(): string {
+    const storagePath = this.context.globalStorageUri?.fsPath;
+    if (!storagePath) {
+      throw new Error("无法定位 VS Code 用户数据目录。");
+    }
+    return path.resolve(storagePath, "..", "..", "..");
+  }
+
+  private it_resetWebviewStorage(): {
+    userDataDir: string;
+    moved: string[];
+    missing: string[];
+    failed: string[];
+  } {
+    const userDataDir = this.it_getUserDataDir();
+    const targets = ["WebStorage", "Local Storage", "SharedStorage"];
+    const moved: string[] = [];
+    const missing: string[] = [];
+    const failed: string[] = [];
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    for (const target of targets) {
+      const fullPath = path.join(userDataDir, target);
+      if (!fs.existsSync(fullPath)) {
+        missing.push(target);
+        continue;
+      }
+      let backupName = `${target}.bak-${stamp}`;
+      let backupPath = path.join(userDataDir, backupName);
+      if (fs.existsSync(backupPath)) {
+        backupName = `${target}.bak-${stamp}-${Math.random().toString(16).slice(2, 8)}`;
+        backupPath = path.join(userDataDir, backupName);
+      }
+      try {
+        fs.renameSync(fullPath, backupPath);
+        moved.push(backupName);
+      } catch (error) {
+        failed.push(
+          `${target}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return {
+      userDataDir,
+      moved,
+      missing,
+      failed,
+    };
+  }
+
   private updateProgress(update: {
     step: ItWorkflowStep;
     progress: number;
@@ -206,6 +257,9 @@ export class InterviewTrainerExtension {
       void vscode.window.showInformationMessage(
         "请在系统设置中开启麦克风权限后重试。",
       );
+    });
+    this.webviewProtocol.on("it/resetMicPermissionCache", async () => {
+      return this.it_resetWebviewStorage();
     });
     this.webviewProtocol.on("it/reloadWindow", async () => {
       await vscode.commands.executeCommand("workbench.action.reloadWindow");

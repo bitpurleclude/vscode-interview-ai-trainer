@@ -165,6 +165,10 @@ const InterviewTrainer: React.FC = () => {
     error?: string;
     updatedAt?: string;
   }>({ status: "idle" });
+  const [micFixStatus, setMicFixStatus] = useState<{
+    status: "idle" | "running" | "done" | "error";
+    message?: string;
+  }>({ status: "idle" });
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const uiLocked = !config;
@@ -639,6 +643,32 @@ const InterviewTrainer: React.FC = () => {
       });
     }
   };
+  const handleFixMicPermission = async () => {
+    setMicFixStatus({ status: "running", message: "正在清理权限缓存..." });
+    const resp = await request("it/resetMicPermissionCache", undefined);
+    if (resp?.status === "success") {
+      const failed = Array.isArray(resp.content?.failed) ? resp.content.failed : [];
+      if (failed.length) {
+        setMicFixStatus({
+          status: "error",
+          message: `权限重置失败：${failed.join("；")}`,
+        });
+        return;
+      }
+      setMicFixStatus({
+        status: "done",
+        message: "权限缓存已清理，正在重启 VS Code...",
+      });
+      setTimeout(() => {
+        void request("it/reloadWindow", undefined);
+      }, 400);
+      return;
+    }
+    setMicFixStatus({
+      status: "error",
+      message: resp?.error ? `权限重置失败：${resp.error}` : "权限重置失败",
+    });
+  };
 
   const it_formatPermissionState = (state?: string) => {
     switch (state) {
@@ -1066,6 +1096,13 @@ const InterviewTrainer: React.FC = () => {
               <div className="it-diagnostic__actions">
                 <button
                   className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || micFixStatus.status === "running"}
+                  onClick={handleFixMicPermission}
+                >
+                  一键修复权限
+                </button>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
                   disabled={uiLocked || micDiagnostic.status === "running"}
                   onClick={handleRequestMicPermission}
                 >
@@ -1083,6 +1120,17 @@ const InterviewTrainer: React.FC = () => {
             {micDiagnostic.status === "idle" && (
               <div className="it-diagnostic__hint">
                 点击“开始诊断”查看权限状态与设备列表。
+              </div>
+            )}
+            {micFixStatus.status !== "idle" && (
+              <div
+                className={
+                  micFixStatus.status === "error"
+                    ? "it-diagnostic__error"
+                    : "it-diagnostic__hint"
+                }
+              >
+                {micFixStatus.message}
               </div>
             )}
             {(micDiagnostic.status === "done" ||
@@ -1115,7 +1163,7 @@ const InterviewTrainer: React.FC = () => {
                     )}
                     <div className="it-diagnostic__hint">
                       {micDiagnostic.permissionState === "denied"
-                        ? "若权限被拒绝，请确认 VS Code 不是以管理员身份运行，并重启 VS Code。"
+                        ? "若权限被拒绝，请确认 VS Code 不是以管理员身份运行，并重启 VS Code。若已开启系统权限仍被拒绝，可点击“一键修复权限”（清理 Webview 权限缓存并重启）。"
                         : "如权限待确认，请点击“开始录音”触发授权弹窗。"}
                     </div>
                   </>
