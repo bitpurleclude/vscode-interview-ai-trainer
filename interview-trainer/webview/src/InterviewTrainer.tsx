@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
+﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
@@ -655,9 +655,21 @@ const InterviewTrainer: React.FC = () => {
         });
         return;
       }
+      const moved = Array.isArray(resp.content?.moved) ? resp.content.moved : [];
+      const cleared = Array.isArray(resp.content?.clearedPreferences)
+        ? resp.content.clearedPreferences
+        : [];
+      const hints: string[] = [];
+      if (cleared.length) {
+        hints.push(`已移除权限记录 ${cleared.length} 条；`);
+      }
+      if (moved.length) {
+        hints.push(`已备份 ${moved.join("、")} 缓存目录`);
+      }
+      const detail = hints.length ? `（${hints.join(" ")}）` : "";
       setMicFixStatus({
         status: "done",
-        message: "权限缓存已清理，正在重启 VS Code...",
+        message: `权限缓存已清理，正在重启 VS Code...${detail}`,
       });
       setTimeout(() => {
         void request("it/reloadWindow", undefined);

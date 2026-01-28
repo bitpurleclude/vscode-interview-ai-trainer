@@ -156,12 +156,14 @@ export class InterviewTrainerExtension {
     moved: string[];
     missing: string[];
     failed: string[];
+    clearedPreferences: string[];
   } {
     const userDataDir = this.it_getUserDataDir();
     const targets = ["WebStorage", "Local Storage", "SharedStorage"];
     const moved: string[] = [];
     const missing: string[] = [];
     const failed: string[] = [];
+    const clearedPreferences: string[] = [];
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 
     for (const target of targets) {
@@ -186,11 +188,58 @@ export class InterviewTrainerExtension {
       }
     }
 
+    // Clear persisted media permission decisions so the webview can re-prompt.
+    const preferencePath = path.join(userDataDir, "Preferences");
+    if (fs.existsSync(preferencePath)) {
+      try {
+        const raw = fs.readFileSync(preferencePath, "utf8");
+        const json = JSON.parse(raw);
+        const profile = (json.profile = json.profile ?? {});
+        const contentSettingsContainer = (profile.content_settings =
+          profile.content_settings ?? {});
+        const exceptions = (contentSettingsContainer.exceptions =
+          contentSettingsContainer.exceptions ?? {});
+
+        const permissionKeys = [
+          "media_stream_mic",
+          "media_stream_camera",
+          "media_stream",
+        ];
+
+        let changed = false;
+        for (const key of permissionKeys) {
+          const rules = exceptions[key];
+          if (!rules || typeof rules !== "object") {
+            continue;
+          }
+          for (const origin of Object.keys(rules)) {
+            if (origin.includes("vscode-webview") || origin.includes("vscode-file")) {
+              delete rules[origin];
+              clearedPreferences.push(`${key}:${origin}`);
+              changed = true;
+            }
+          }
+          if (Object.keys(rules).length === 0) {
+            delete exceptions[key];
+          }
+        }
+
+        if (changed) {
+          fs.writeFileSync(preferencePath, JSON.stringify(json, null, 2), "utf8");
+        }
+      } catch (error) {
+        failed.push(
+          `Preferences: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     return {
       userDataDir,
       moved,
       missing,
       failed,
+      clearedPreferences,
     };
   }
 
