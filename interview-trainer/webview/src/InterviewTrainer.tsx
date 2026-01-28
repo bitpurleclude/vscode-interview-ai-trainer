@@ -288,21 +288,25 @@ const InterviewTrainer: React.FC = () => {
         err instanceof DOMException ? err.name : err instanceof Error ? err.name : "";
       let reason = "录音启动失败";
       let solution = "请检查麦克风权限或设备状态。";
+      let errorType = "recording_error";
       if (["NotAllowedError", "SecurityError"].includes(errorName)) {
         reason = "麦克风权限被拒绝";
         solution = "请在系统设置与 IDE 权限中允许访问麦克风。";
+        errorType = "recording_permission";
       } else if (errorName === "NotFoundError") {
         reason = "未检测到麦克风设备";
         solution = "请连接麦克风或检查设备是否被禁用。";
+        errorType = "recording_device";
       } else if (errorName === "NotReadableError") {
         reason = "麦克风被占用或无法读取";
         solution = "请关闭其他占用麦克风的应用后重试。";
+        errorType = "recording_busy";
       }
       setItState((prev) => ({
         ...prev,
-        statusMessage: `${reason}，请检查麦克风权限`,
+        statusMessage: `${reason}（${solution}）`,
         lastError: {
-          type: "recording",
+          type: errorType,
           reason,
           solution,
         },
@@ -682,7 +686,7 @@ const InterviewTrainer: React.FC = () => {
         {itState.lastError && (
           <span className="it-status__error">{itState.lastError.reason}</span>
         )}
-        {itState.lastError?.type === "recording" && (
+        {itState.lastError?.type === "recording_permission" && (
           <button
             className="it-link-button"
             type="button"
