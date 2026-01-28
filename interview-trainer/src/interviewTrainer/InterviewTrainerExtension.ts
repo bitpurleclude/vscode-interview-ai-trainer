@@ -64,6 +64,7 @@ export class InterviewTrainerExtension {
     exitSignal: string | null;
     stderr: string;
   } | null = null;
+  private detectedInput: string | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -609,6 +610,80 @@ export class InterviewTrainerExtension {
     return null;
   }
 
+  private async it_detectDefaultInput(ffmpeg: string): Promise<string | null> {
+    if (this.detectedInput) return this.detectedInput;
+    if (process.platform === "win32") {
+      const scan = await this.it_runFfmpegProbe(ffmpeg, ["-list_devices", "true", "-f", "dshow", "-i", "dummy"]);
+      const audioLines = scan.stderr
+        .split(/\r?\n/)
+        .filter((line) => line.includes("(audio)") && line.includes('"'));
+      const parsed = audioLines
+        .map((line) => {
+          const match = line.match(/"([^"]+)"/);
+          return match ? match[1] : null;
+        })
+        .filter(Boolean) as string[];
+      if (parsed.length) {
+        this.detectedInput = `audio=${parsed[0]}`;
+        return this.detectedInput;
+      }
+      return null;
+    }
+    if (process.platform === "darwin") {
+      const scan = await this.it_runFfmpegProbe(ffmpeg, [
+        "-f",
+        "avfoundation",
+        "-list_devices",
+        "true",
+        "-i",
+        '""',
+      ]);
+      const audioLines = scan.stderr
+        .split(/\r?\n/)
+        .filter((line) => /\[\d+\].*\(audio\)/.test(line));
+      const parsed = audioLines
+        .map((line) => {
+          const match = line.match(/\[(\d+)\]\s+(.+?)\s+\(audio\)/);
+          return match ? `:${match[1]}` : null;
+        })
+        .filter(Boolean) as string[];
+      if (parsed.length) {
+        this.detectedInput = parsed[0];
+        return this.detectedInput;
+      }
+      return null;
+    }
+    // Linux 上默认用 pulse default，暂不探测。
+    return null;
+  }
+
+  private async it_runFfmpegProbe(
+    ffmpeg: string,
+    args: string[],
+  ): Promise<{ stderr: string; exitCode: number | null; exitSignal: string | null }> {
+    return await new Promise((resolve) => {
+      const child = spawn(ffmpeg, args, { windowsHide: true });
+      let stderr = "";
+      child.stderr?.on("data", (d) => {
+        stderr += String(d);
+      });
+      let exitCode: number | null = null;
+      let exitSignal: string | null = null;
+      child.on("close", (code, signal) => {
+        exitCode = code;
+        exitSignal = signal;
+        resolve({ stderr, exitCode, exitSignal });
+      });
+      child.on("error", (err) => {
+        resolve({
+          stderr: err instanceof Error ? err.message : String(err),
+          exitCode,
+          exitSignal,
+        });
+      });
+    });
+  }
+
   private async it_startNativeRecording(): Promise<{
     tmpDir: string;
     tmpPath: string;
@@ -626,12 +701,16 @@ export class InterviewTrainerExtension {
     const commonArgs = ["-y", "-ac", "1", "-ar", "16000", "-f", "s16le", tmpPath];
     let inputArgs: string[];
     const customInput = process.env.IT_FFMPEG_INPUT;
+    const detectedInput =
+      customInput || (await this.it_detectDefaultInput(ffmpeg)) || (process.platform === "win32" ? null : undefined);
     if (process.platform === "win32") {
-      inputArgs = ["-f", "dshow", "-i", `audio=${customInput || "default"}`];
+      const device = detectedInput || "audio=default";
+      inputArgs = ["-f", "dshow", "-i", device.startsWith("audio=") ? device : `audio=${device}`];
     } else if (process.platform === "darwin") {
-      inputArgs = ["-f", "avfoundation", "-i", customInput || ":0"];
+      const device = detectedInput || ":0";
+      inputArgs = ["-f", "avfoundation", "-i", device];
     } else {
-      inputArgs = ["-f", "pulse", "-i", customInput || "default"];
+      inputArgs = ["-f", "pulse", "-i", detectedInput || "default"];
     }
     const args = [...inputArgs, ...commonArgs];
     const child = spawn(ffmpeg, args, { windowsHide: true });

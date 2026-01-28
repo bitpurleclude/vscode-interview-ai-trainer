@@ -292,7 +292,8 @@ const InterviewTrainer: React.FC = () => {
         lastError: {
           type: "recording_error",
           reason: err instanceof Error ? err.message : String(err),
-          solution: "请确认内置 ffmpeg 可执行，并检查系统麦克风权限。",
+          solution:
+            "请确认内置 ffmpeg 可执行，并检查系统麦克风权限。若 Windows 默认设备不可用，可在系统“声音-输入”查看设备名称，设置 IT_FFMPEG_INPUT=audio=设备全名 后重试。",
         },
       }));
     }
