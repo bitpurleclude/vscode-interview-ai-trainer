@@ -182,9 +182,16 @@ export class InterviewTrainerExtension {
         fs.renameSync(fullPath, backupPath);
         moved.push(backupName);
       } catch (error) {
-        failed.push(
-          `${target}: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        // Windows 上文件句柄占用时 rename 可能失败，尝试复制备份后删除源目录。
+        try {
+          fs.cpSync(fullPath, backupPath, { recursive: true, errorOnExist: false });
+          fs.rmSync(fullPath, { recursive: true, force: true });
+          moved.push(`${backupName} (copied)`);
+        } catch (fallbackError) {
+          failed.push(
+            `${target}: ${error instanceof Error ? error.message : String(error)}; fallback: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+          );
+        }
       }
     }
 
