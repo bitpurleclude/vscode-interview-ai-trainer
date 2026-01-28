@@ -644,49 +644,52 @@ export class InterviewTrainerExtension {
     audio: ItAnalyzeRequest["audio"];
     locked?: string[];
   }> {
-    if (!this.recordingChild || !this.recordingTempDir) {
-      throw new Error("no recording in progress");
-    }
+    const tmpRoot = this.recordingTempDir;
     const child = this.recordingChild;
+    if (!tmpRoot) {
+      throw new Error("录音尚未开始或已被终止，请重新开始录音");
+    }
+    const tmpPath = path.join(tmpRoot, "capture.pcm");
     this.recordingChild = null;
     let killed = false;
     let exitCode: number | null = null;
     let exitSignal: string | null = null;
     let stderr = "";
-    child.stderr?.on("data", (d) => {
-      stderr += String(d);
-    });
-    try {
-      const exitPromise = new Promise<void>((resolve) => {
-        child.on("close", (code, signal) => {
-          exitCode = code;
-          exitSignal = signal;
-          resolve();
-        });
+    if (child) {
+      child.stderr?.on("data", (d) => {
+        stderr += String(d);
       });
-      if (child.stdin) {
-        child.stdin.write("q\n");
-      } else {
-        child.kill("SIGTERM");
-      }
-      const completed = await Promise.race([
-        exitPromise.then(() => true),
-        new Promise<boolean>((resolve) =>
-          setTimeout(() => resolve(false), 3000),
-        ),
-      ]);
-      if (!completed) {
-        if (!child.killed) {
+      try {
+        const exitPromise = new Promise<void>((resolve) => {
+          child.on("close", (code, signal) => {
+            exitCode = code;
+            exitSignal = signal;
+            resolve();
+          });
+        });
+        if (child.stdin) {
+          child.stdin.write("q\n");
+        } else {
           child.kill("SIGTERM");
-          killed = true;
         }
-        await exitPromise;
+        const completed = await Promise.race([
+          exitPromise.then(() => true),
+          new Promise<boolean>((resolve) =>
+            setTimeout(() => resolve(false), 3000),
+          ),
+        ]);
+        if (!completed) {
+          if (!child.killed) {
+            child.kill("SIGTERM");
+            killed = true;
+          }
+          await exitPromise;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
 
-    const tmpPath = path.join(this.recordingTempDir, "capture.pcm");
     if (!fs.existsSync(tmpPath)) {
       const detail =
         `ffmpeg 退出码=${exitCode ?? "未知"}, 信号=${exitSignal ?? "无"}, ` +
@@ -702,7 +705,7 @@ export class InterviewTrainerExtension {
     // cleanup
     const locked: string[] = [];
     try {
-      fs.rmSync(this.recordingTempDir, {
+      fs.rmSync(tmpRoot, {
         recursive: true,
         force: true,
         maxRetries: 2,
@@ -710,7 +713,7 @@ export class InterviewTrainerExtension {
       });
     } catch (error) {
       locked.push(
-        `${this.recordingTempDir}: ${error instanceof Error ? error.message : String(error)}`,
+        `${tmpRoot}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
     this.recordingTempDir = null;

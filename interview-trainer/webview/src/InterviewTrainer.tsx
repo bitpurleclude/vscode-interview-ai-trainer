@@ -341,6 +341,7 @@ const InterviewTrainer: React.FC = () => {
           clearInterval(recordingTimerRef.current);
           recordingTimerRef.current = null;
         }
+        setRecordingSession({ startedAt: null });
       });
   };
 
