@@ -141,6 +141,15 @@ const DEFAULT_STATE: ItState = {
   ],
 };
 
+const STRICT_SYSTEM_PROMPT = [
+  "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
+  "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
+  "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
+  "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
+  "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
+  "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
+].join("\n");
+
 const InterviewTrainer: React.FC = () => {
   const [itState, setItState] = useState<ItState>(DEFAULT_STATE);
   const [config, setConfig] = useState<ItConfigSnapshot | null>(null);
@@ -156,6 +165,7 @@ const InterviewTrainer: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [nativeInputs, setNativeInputs] = useState<string[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>("");
+  const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [questionError, setQuestionError] = useState(false);
@@ -598,6 +608,7 @@ const InterviewTrainer: React.FC = () => {
     if (response?.status === "success") {
       setHistoryItems(response.content ?? []);
       setActiveTab("history");
+      setActivePage("practice");
     }
   }, []);
   const handleToggleRetrieval = async (enabled: boolean) => {
@@ -605,6 +616,21 @@ const InterviewTrainer: React.FC = () => {
   };
   const handleSelectWorkspaceDir = async (kind: string) => {
     await request("it/selectWorkspaceDir", { kind });
+  };
+  const handleRefreshInputs = async () => {
+    const resp = await request("it/listNativeInputs", undefined);
+    if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
+      const inputs = resp.content.inputs;
+      setNativeInputs(inputs);
+      if (inputs.length && !inputs.includes(selectedInput)) {
+        setSelectedInput(inputs[0] || "");
+      }
+      return;
+    }
+    setItState((prev) => ({
+      ...prev,
+      statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
+    }));
   };
   const handleMicDiagnostic = async () => {
     setMicDiagnostic({
@@ -685,7 +711,7 @@ const InterviewTrainer: React.FC = () => {
       void handleLoadHistory();
     });
     const disposeSettings = on("it/showSettings", () => {
-      void request("it/openSettings", undefined);
+      setActivePage("settings");
     });
     return () => {
       disposeHistory();
@@ -715,83 +741,77 @@ const InterviewTrainer: React.FC = () => {
     <div className="it-root">
       <div className="it-header">
         <div className="it-title">面试训练助手</div>
-        <div className="it-actions">
-          <div className="it-input-select">
-            <label>输入设备</label>
-            <select
-              value={selectedInput}
-              onChange={(e) => setSelectedInput(e.target.value)}
-              disabled={uiLocked || itState.recordingState === "recording"}
-            >
-              {nativeInputs.length === 0 && <option value="">自动</option>}
-              {nativeInputs.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="it-page-tabs">
           <button
-            className="it-button it-button--primary"
-            disabled={uiLocked || itState.recordingState === "recording"}
-            onClick={handleStartRecording}
+            className={`it-tab ${activePage === "practice" ? "active" : ""}`}
+            onClick={() => setActivePage("practice")}
           >
-            开始录音
+            练习
           </button>
           <button
-            className="it-button it-button--danger"
-            disabled={uiLocked || itState.recordingState !== "recording"}
-            onClick={handleStopRecording}
-          >
-            停止录音
-          </button>
-          <label className="it-button it-button--secondary">
-            导入音频
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={handleImportAudio}
-              disabled={uiLocked}
-            />
-          </label>
-          <label className="it-button it-button--secondary">
-            导入题干
-            <input
-              type="file"
-              accept=".txt,.md,text/plain,text/markdown"
-              onChange={handleImportQuestions}
-              disabled={uiLocked}
-            />
-          </label>
-          <button
-            className="it-button"
-            disabled={uiLocked || !audioPayload || !hasQuestion || isProcessing || isImporting}
-            onClick={handleAnalyze}
-          >
-            开始分析
-          </button>
-          <button
-            className="it-button"
-            disabled={uiLocked}
-            onClick={handleOpenReport}
-          >
-            保存结果
-          </button>
-          <button
-            className="it-button"
-            disabled={uiLocked}
-            onClick={handleLoadHistory}
-          >
-            历史记录
-          </button>
-          <button
-            className="it-button"
-            disabled={uiLocked}
-            onClick={() => request("it/openSettings", undefined)}
+            className={`it-tab ${activePage === "settings" ? "active" : ""}`}
+            onClick={() => setActivePage("settings")}
           >
             设置
           </button>
         </div>
+        {activePage === "practice" && (
+          <div className="it-actions">
+            <button
+              className="it-button it-button--primary"
+              disabled={uiLocked || itState.recordingState === "recording"}
+              onClick={handleStartRecording}
+            >
+              开始录音
+            </button>
+            <button
+              className="it-button it-button--danger"
+              disabled={uiLocked || itState.recordingState !== "recording"}
+              onClick={handleStopRecording}
+            >
+              停止录音
+            </button>
+            <label className="it-button it-button--secondary">
+              导入音频
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleImportAudio}
+                disabled={uiLocked}
+              />
+            </label>
+            <label className="it-button it-button--secondary">
+              导入题干
+              <input
+                type="file"
+                accept=".txt,.md,text/plain,text/markdown"
+                onChange={handleImportQuestions}
+                disabled={uiLocked}
+              />
+            </label>
+            <button
+              className="it-button"
+              disabled={uiLocked || !audioPayload || !hasQuestion || isProcessing || isImporting}
+              onClick={handleAnalyze}
+            >
+              开始分析
+            </button>
+            <button
+              className="it-button"
+              disabled={uiLocked}
+              onClick={handleOpenReport}
+            >
+              保存结果
+            </button>
+            <button
+              className="it-button"
+              disabled={uiLocked}
+              onClick={handleLoadHistory}
+            >
+              历史记录
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="it-status">
@@ -815,407 +835,486 @@ const InterviewTrainer: React.FC = () => {
         )}
       </div>
 
-      <div className="it-flow">
-        <div className="it-flow__left">{renderSteps(itState.steps)}</div>
-        <div className="it-flow__right">
-          <div className="it-progress">
-            <div className="it-progress__label">
-              总进度：{Math.round(itState.overallProgress)}%
-            </div>
-            <div className="it-progress__bar">
-              <div
-                className="it-progress__fill"
-                style={{ width: `${itState.overallProgress}%` }}
-              />
+      {activePage === "practice" && (
+        <>
+          <div className="it-flow">
+            <div className="it-flow__left">{renderSteps(itState.steps)}</div>
+            <div className="it-flow__right">
+              <div className="it-progress">
+                <div className="it-progress__label">
+                  总进度：{Math.round(itState.overallProgress)}%
+                </div>
+                <div className="it-progress__bar">
+                  <div
+                    className="it-progress__fill"
+                    style={{ width: `${itState.overallProgress}%` }}
+                  />
+                </div>
+              </div>
+              {audioPayload && (
+                <div className="it-audio-summary">
+                  音频时长：{audioPayload.durationSec.toFixed(1)}s
+                </div>
+              )}
+              {thinkingVisible && (
+                <div className="it-thinking">
+                  <div className="it-thinking__title">正在思考：分析处理中</div>
+                  <div className="it-thinking__body">
+                    1. 解析语音特征与转写文本
+                    <br />
+                    2. 检索相似笔记与评分标准
+                    <br />
+                    3. 生成结构化面试评价
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          {audioPayload && (
-            <div className="it-audio-summary">
-              音频时长：{audioPayload.durationSec.toFixed(1)}s
-            </div>
-          )}
-          {thinkingVisible && (
-            <div className="it-thinking">
-              <div className="it-thinking__title">正在思考：分析处理中</div>
-              <div className="it-thinking__body">
-                1. 解析语音特征与转写文本
-                <br />
-                2. 检索相似笔记与评分标准
-                <br />
-                3. 生成结构化面试评价
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="it-results">
-        <div className="it-tabs">
-          <button
-            className={`it-tab ${activeTab === "transcript" ? "active" : ""}`}
-            onClick={() => setActiveTab("transcript")}
-          >
-            转录文本
-          </button>
-          <button
-            className={`it-tab ${activeTab === "acoustic" ? "active" : ""}`}
-            onClick={() => setActiveTab("acoustic")}
-          >
-            声学分析
-          </button>
-          <button
-            className={`it-tab ${activeTab === "evaluation" ? "active" : ""}`}
-            onClick={() => setActiveTab("evaluation")}
-          >
-            面试评价
-          </button>
-          <button
-            className={`it-tab ${activeTab === "history" ? "active" : ""}`}
-            onClick={() => setActiveTab("history")}
-          >
-            历史记录
-          </button>
-        </div>
-        <div className="it-result-panel">
-          {!analysisResult && (
-            <div className="it-placeholder">等待分析结果...</div>
-          )}
-          {analysisResult && activeTab === "transcript" && (
-            <div className="it-transcript">
-              {analysisResult.detailedTranscript ? (
-                <>
-                  <div className="it-section-title">带时间标注</div>
-                  <textarea
-                    className="it-textarea it-textarea--tall"
-                    value={analysisResult.detailedTranscript}
-                    readOnly
-                  />
-                  <div className="it-section-title">原始转写</div>
-                  <textarea
-                    className="it-textarea"
-                    value={analysisResult.transcript}
-                    readOnly
-                  />
-                </>
-              ) : (
-                <textarea
-                  className="it-textarea"
-                  value={analysisResult.transcript}
-                  readOnly
-                />
-              )}
-            </div>
-          )}
-          {analysisResult && activeTab === "acoustic" && (
-            <div className="it-metrics">
-              <div>时长：{analysisResult.acoustic.durationSec.toFixed(2)}s</div>
-              <div>语速：{analysisResult.acoustic.speechRateWpm ?? "-"}</div>
-              <div>停顿次数：{analysisResult.acoustic.pauseCount}</div>
-              <div>平均停顿：{analysisResult.acoustic.pauseAvgSec}s</div>
-              <div>最长停顿：{analysisResult.acoustic.pauseMaxSec}s</div>
-              <div>RMS均值：{analysisResult.acoustic.rmsDbMean}dB</div>
-              <div>RMS波动：{analysisResult.acoustic.rmsDbStd}dB</div>
-              <div>SNR：{analysisResult.acoustic.snrDb ?? "-"}</div>
-            </div>
-          )}
-          {analysisResult && activeTab === "evaluation" && (
-            <div className="it-evaluation">
-              {analysisResult.questionTimings &&
-              analysisResult.questionTimings.length > 0 && (
-                <div className="it-question-timings">
-                  <div className="it-question-timings__title">
-                    题目用时
-                  </div>
-                  {analysisResult.questionTimings.map((item, idx) => (
-                    <div key={`${idx}-${item.question}`} className="it-question-timings__item">
-                      <div className="it-question-timings__label">
-                        {idx + 1}. {item.question}
-                      </div>
-                      <div className="it-question-timings__value">
-                        {it_formatSeconds(item.durationSec)}
-                        {item.note ? ` (${item.note})` : ""}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="it-evaluation__summary">
-                {analysisResult.evaluation.topicSummary}
-              </div>
-              <div className="it-evaluation__overall">
-                <span>总分</span>
-                <span className="it-evaluation__overall-value">
-                  {analysisResult.evaluation.overallScore ?? "-"}
-                </span>
-              </div>
-              <div className="it-evaluation__scores">
-                {Object.entries(analysisResult.evaluation.scores || {}).map(
-                  ([key, value]) => (
-                    <div key={key} className="it-score">
-                      <span>{key}</span>
-                      <span>{value}</span>
-                    </div>
-                  ),
-                )}
-              </div>
-              <div className="it-evaluation__section">
-                <h4>优点</h4>
-                <ul>
-                  {analysisResult.evaluation.strengths.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="it-evaluation__section">
-                <h4>问题</h4>
-                <ul>
-                  {analysisResult.evaluation.issues.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="it-evaluation__section">
-                <h4>改进建议</h4>
-                <ul>
-                  {analysisResult.evaluation.improvements.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="it-evaluation__section">
-                <h4>练习重点</h4>
-                <ul>
-                  {analysisResult.evaluation.nextFocus.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              {analysisResult.evaluation.revisedAnswers &&
-              analysisResult.evaluation.revisedAnswers.length > 0 && (
-                <div className="it-evaluation__section">
-                  <h4>示范性修改</h4>
-                  <div className="it-revised-list">
-                    {analysisResult.evaluation.revisedAnswers.map((item, idx) => (
-                      <div key={`${idx}-${item.question}`} className="it-revised-item">
-                        <div className="it-revised-item__title">
-                          {idx + 1}. {item.question}
-                        </div>
-                        <div className="it-revised-item__block">
-                          <span>原回答：</span>
-                          <span>{item.original}</span>
-                        </div>
-                        <div className="it-revised-item__block">
-                          <span>示范：</span>
-                          <span>{item.revised}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {analysisResult.evaluation.prompt && (
-                <div className="it-evaluation__section">
-                  <h4>示范答题提示词</h4>
-                  <textarea
-                    className="it-textarea it-textarea--prompt"
-                    value={analysisResult.evaluation.prompt}
-                    readOnly
-                  />
-                </div>
-              )}
-            </div>
-          )}
-          {activeTab === "history" && (
-            <div className="it-history">
-              {historyItems.length === 0 ? (
-                <div className="it-placeholder">暂无历史记录</div>
-              ) : (
-                historyItems.map((item) => (
-                  <div key={item.reportPath} className="it-history__item">
-                    <div>
-                      <div className="it-history__title">{item.topicTitle}</div>
-                      <div className="it-history__meta">
-                        {item.timestamp || "未知时间"}
-                      </div>
-                    </div>
-                    <button
-                      className="it-button it-button--secondary"
-                      onClick={() => request("openFile", { path: item.reportPath })}
-                    >
-                      打开报告
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="it-footer">
-        <div className="it-config-panel">
-          <div className="it-config">
-            {config ? (
-              <>
-                <span>ASR: {config.asrProvider}</span>
-                <span>LLM: {config.llmProvider}</span>
-                <span>环境: {config.activeEnvironment}</span>
-                <span>保存目录: {config.sessionsDir}</span>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked}
-                  onClick={() => request("it/selectSessionsDir", undefined)}
-                >
-                  选择保存目录
-                </button>
-              </>
-            ) : (
-              <span>配置加载中...</span>
-            )}
-          </div>
-          <div className="it-retrieval">
-            <div className="it-retrieval__header">
-              <div className="it-retrieval__title">检索配置</div>
-              <label className="it-toggle">
-                <input
-                  type="checkbox"
-                  checked={config?.retrievalEnabled ?? true}
-                  disabled={uiLocked}
-                  onChange={(event) => handleToggleRetrieval(event.target.checked)}
-                />
-                <span>启用检索</span>
-              </label>
-            </div>
-            <div className="it-retrieval__list">
-              {retrievalDirs.map((item) => (
-                <div key={item.key} className="it-retrieval__item">
-                  <div className="it-retrieval__label">{item.label}</div>
-                  <div className="it-retrieval__path">{item.value}</div>
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked}
-                    onClick={() => handleSelectWorkspaceDir(item.key)}
-                  >
-                    选择目录
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="it-diagnostic">
-            <div className="it-diagnostic__header">
-              <div className="it-diagnostic__title">麦克风诊断</div>
-              <div className="it-diagnostic__actions">
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || micFixStatus.status === "running"}
-                  onClick={handleFixMicPermission}
-                >
-                  一键修复权限
-                </button>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || micDiagnostic.status === "running"}
-                  onClick={handleRequestMicPermission}
-                >
-                  一键申请权限
-                </button>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || micDiagnostic.status === "running"}
-                  onClick={handleMicDiagnostic}
-                >
-                  {micDiagnostic.status === "running" ? "诊断中..." : "开始诊断"}
-                </button>
-              </div>
-            </div>
-            {micDiagnostic.status === "idle" && (
-              <div className="it-diagnostic__hint">
-                点击“开始诊断”查看权限状态与设备列表。
-              </div>
-            )}
-            {micFixStatus.status !== "idle" && (
-              <div
-                className={
-                  micFixStatus.status === "error"
-                    ? "it-diagnostic__error"
-                    : "it-diagnostic__hint"
-                }
+          <div className="it-results">
+            <div className="it-tabs">
+              <button
+                className={`it-tab ${activeTab === "transcript" ? "active" : ""}`}
+                onClick={() => setActiveTab("transcript")}
               >
-                {micFixStatus.message}
-              </div>
-            )}
-            {(micDiagnostic.status === "done" ||
-              micDiagnostic.status === "error") && (
-              <div className="it-diagnostic__body">
-                {micDiagnostic.status === "error" ? (
-                  <div className="it-diagnostic__error">
-                    诊断失败：{micDiagnostic.error}
+                转录文本
+              </button>
+              <button
+                className={`it-tab ${activeTab === "acoustic" ? "active" : ""}`}
+                onClick={() => setActiveTab("acoustic")}
+              >
+                声学分析
+              </button>
+              <button
+                className={`it-tab ${activeTab === "evaluation" ? "active" : ""}`}
+                onClick={() => setActiveTab("evaluation")}
+              >
+                面试评价
+              </button>
+              <button
+                className={`it-tab ${activeTab === "history" ? "active" : ""}`}
+                onClick={() => setActiveTab("history")}
+              >
+                历史记录
+              </button>
+            </div>
+            <div className="it-result-panel">
+              {!analysisResult && (
+                <div className="it-placeholder">等待分析结果...</div>
+              )}
+              {analysisResult && activeTab === "transcript" && (
+                <div className="it-transcript">
+                  {analysisResult.detailedTranscript ? (
+                    <>
+                      <div className="it-section-title">带时间标注</div>
+                      <textarea
+                        className="it-textarea it-textarea--tall"
+                        value={analysisResult.detailedTranscript}
+                        readOnly
+                      />
+                      <div className="it-section-title">原始转写</div>
+                      <textarea
+                        className="it-textarea"
+                        value={analysisResult.transcript}
+                        readOnly
+                      />
+                    </>
+                  ) : (
+                    <textarea
+                      className="it-textarea"
+                      value={analysisResult.transcript}
+                      readOnly
+                    />
+                  )}
+                </div>
+              )}
+              {analysisResult && activeTab === "acoustic" && (
+                <div className="it-metrics">
+                  <div>时长：{analysisResult.acoustic.durationSec.toFixed(2)}s</div>
+                  <div>语速：{analysisResult.acoustic.speechRateWpm ?? "-"}</div>
+                  <div>停顿次数：{analysisResult.acoustic.pauseCount}</div>
+                  <div>平均停顿：{analysisResult.acoustic.pauseAvgSec}s</div>
+                  <div>最长停顿：{analysisResult.acoustic.pauseMaxSec}s</div>
+                  <div>RMS均值：{analysisResult.acoustic.rmsDbMean}dB</div>
+                  <div>RMS波动：{analysisResult.acoustic.rmsDbStd}dB</div>
+                  <div>SNR：{analysisResult.acoustic.snrDb ?? "-"}</div>
+                </div>
+              )}
+              {analysisResult && activeTab === "evaluation" && (
+                <div className="it-evaluation">
+                  {analysisResult.questionTimings &&
+                  analysisResult.questionTimings.length > 0 && (
+                    <div className="it-question-timings">
+                      <div className="it-question-timings__title">
+                        题目用时
+                      </div>
+                      {analysisResult.questionTimings.map((item, idx) => (
+                        <div key={`${idx}-${item.question}`} className="it-question-timings__item">
+                          <div className="it-question-timings__label">
+                            {idx + 1}. {item.question}
+                          </div>
+                          <div className="it-question-timings__value">
+                            {it_formatSeconds(item.durationSec)}
+                            {item.note ? ` (${item.note})` : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="it-evaluation__summary">
+                    {analysisResult.evaluation.topicSummary}
                   </div>
-                ) : (
-                  <>
-                    <div>
-                      权限状态：{it_formatPermissionState(micDiagnostic.permissionState)}
-                    </div>
-                    <div>
-                      麦克风设备数：{micDiagnostic.audioInputCount ?? 0}
-                    </div>
-                    {micDiagnostic.audioInputs?.length ? (
-                      <div className="it-diagnostic__devices">
-                        {micDiagnostic.audioInputs.map((device, idx) => (
-                          <div key={`${device.deviceId}-${idx}`}>
-                            {idx + 1}. {device.label}
+                  <div className="it-evaluation__overall">
+                    <span>总分</span>
+                    <span className="it-evaluation__overall-value">
+                      {analysisResult.evaluation.overallScore ?? "-"}
+                    </span>
+                  </div>
+                  <div className="it-evaluation__scores">
+                    {Object.entries(analysisResult.evaluation.scores || {}).map(
+                      ([key, value]) => (
+                        <div key={key} className="it-score">
+                          <span>{key}</span>
+                          <span>{value}</span>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  <div className="it-evaluation__section">
+                    <h4>优点</h4>
+                    <ul>
+                      {analysisResult.evaluation.strengths.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="it-evaluation__section">
+                    <h4>问题</h4>
+                    <ul>
+                      {analysisResult.evaluation.issues.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="it-evaluation__section">
+                    <h4>改进建议</h4>
+                    <ul>
+                      {analysisResult.evaluation.improvements.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="it-evaluation__section">
+                    <h4>练习重点</h4>
+                    <ul>
+                      {analysisResult.evaluation.nextFocus.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {analysisResult.evaluation.revisedAnswers &&
+                  analysisResult.evaluation.revisedAnswers.length > 0 && (
+                    <div className="it-evaluation__section">
+                      <h4>示范性修改</h4>
+                      <div className="it-revised-list">
+                        {analysisResult.evaluation.revisedAnswers.map((item, idx) => (
+                          <div key={`${idx}-${item.question}`} className="it-revised-item">
+                            <div className="it-revised-item__title">
+                              {idx + 1}. {item.question}
+                            </div>
+                            <div className="it-revised-item__block">
+                              <span>原回答：</span>
+                              <span>{item.original}</span>
+                            </div>
+                            <div className="it-revised-item__block">
+                              <span>示范：</span>
+                              <span>{item.revised}</span>
+                            </div>
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <div className="it-diagnostic__hint">
-                        未检测到麦克风设备或权限不足。
-                      </div>
-                    )}
-                    <div className="it-diagnostic__hint">
-                      {micDiagnostic.permissionState === "denied"
-                        ? "若权限被拒绝，请确认 VS Code 非管理员运行，并在系统设置中为 VS Code 开启麦克风权限后重启。"
-                        : "录音改用系统通道，点击“开始录音”即可触发系统授权或报错。若失败可尝试“一键修复权限”清理缓存后重试。"}
                     </div>
-                  </>
-                )}
-                <div className="it-diagnostic__actions">
+                  )}
+                  {analysisResult.evaluation.prompt && (
+                    <div className="it-evaluation__section">
+                      <h4>示范答题提示词</h4>
+                      <textarea
+                        className="it-textarea it-textarea--prompt"
+                        value={analysisResult.evaluation.prompt}
+                        readOnly
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeTab === "history" && (
+                <div className="it-history">
+                  {historyItems.length === 0 ? (
+                    <div className="it-placeholder">暂无历史记录</div>
+                  ) : (
+                    historyItems.map((item) => (
+                      <div key={item.reportPath} className="it-history__item">
+                        <div>
+                          <div className="it-history__title">{item.topicTitle}</div>
+                          <div className="it-history__meta">
+                            {item.timestamp || "未知时间"}
+                          </div>
+                        </div>
+                        <button
+                          className="it-button it-button--secondary"
+                          onClick={() => request("openFile", { path: item.reportPath })}
+                        >
+                          打开报告
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="it-question">
+            <textarea
+              className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
+              placeholder="题干材料（可选）"
+              value={questionText}
+              onChange={(event) => setQuestionText(event.target.value)}
+            />
+            <textarea
+              className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
+              placeholder="小题列表（一行一个，可选）"
+              value={questionList}
+              onChange={(event) => setQuestionList(event.target.value)}
+            />
+            <div className="it-question__hint">
+              题干或小题列表为必填，支持直接粘贴完整材料并自动识别第N题。
+            </div>
+          </div>
+        </>
+      )}
+
+      {activePage === "settings" && (
+        <div className="it-settings">
+          <div className="it-settings__grid">
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">通用配置</div>
+                  <div className="it-settings__desc">ASR / LLM / 保存目录</div>
+                </div>
+                <div className="it-settings__actions">
                   <button
                     className="it-button it-button--secondary it-button--compact"
-                    onClick={() => request("it/openMicSettings", undefined)}
+                    onClick={() => request("it/openSettings", undefined)}
                   >
-                    打开系统麦克风设置
+                    打开配置文件
                   </button>
                   <button
                     className="it-button it-button--secondary it-button--compact"
-                    onClick={() => request("it/reloadWindow", undefined)}
+                    disabled={uiLocked}
+                    onClick={() => request("it/selectSessionsDir", undefined)}
                   >
-                    重启 VS Code
+                    选择保存目录
                   </button>
                 </div>
               </div>
-            )}
+              {config ? (
+                <div className="it-settings__meta">
+                  <span>ASR: {config.asrProvider}</span>
+                  <span>LLM: {config.llmProvider}</span>
+                  <span>环境: {config.activeEnvironment}</span>
+                  <span>保存目录: {config.sessionsDir}</span>
+                </div>
+              ) : (
+                <div className="it-placeholder">配置加载中...</div>
+              )}
+            </div>
+
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">评分提示词</div>
+                  <div className="it-settings__desc">严格高标准，不输出安慰语</div>
+                </div>
+              </div>
+              <textarea
+                className="it-textarea it-textarea--prompt"
+                value={STRICT_SYSTEM_PROMPT}
+                readOnly
+              />
+            </div>
+
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">输入设备</div>
+                  <div className="it-settings__desc">选择录音采集的麦克风来源</div>
+                </div>
+                <div className="it-settings__actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked}
+                    onClick={handleRefreshInputs}
+                  >
+                    刷新列表
+                  </button>
+                </div>
+              </div>
+              <div className="it-input-row">
+                <select
+                  className="it-select"
+                  value={selectedInput}
+                  onChange={(event) => setSelectedInput(event.target.value)}
+                  disabled={uiLocked}
+                >
+                  <option value="">系统默认</option>
+                  {nativeInputs.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="it-settings__hint">
+                未选择时使用系统默认输入设备；若需要手动指定 ffmpeg 输入，可在环境变量 IT_FFMPEG_INPUT 中填 audio=设备名。
+              </div>
+            </div>
+
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">检索配置</div>
+                  <div className="it-settings__desc">知识库目录与开关</div>
+                </div>
+                <label className="it-toggle">
+                  <input
+                    type="checkbox"
+                    checked={config?.retrievalEnabled ?? true}
+                    disabled={uiLocked}
+                    onChange={(event) => handleToggleRetrieval(event.target.checked)}
+                  />
+                  <span>启用检索</span>
+                </label>
+              </div>
+              <div className="it-retrieval__list">
+                {retrievalDirs.map((item) => (
+                  <div key={item.key} className="it-retrieval__item">
+                    <div className="it-retrieval__label">{item.label}</div>
+                    <div className="it-retrieval__path">{item.value}</div>
+                    <button
+                      className="it-button it-button--secondary it-button--compact"
+                      disabled={uiLocked}
+                      onClick={() => handleSelectWorkspaceDir(item.key)}
+                    >
+                      选择目录
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="it-settings__section it-settings__section--full">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">麦克风诊断</div>
+                  <div className="it-settings__desc">查看权限状态并尝试清理</div>
+                </div>
+                <div className="it-settings__actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked || micFixStatus.status === "running"}
+                    onClick={handleFixMicPermission}
+                  >
+                    一键修复权限
+                  </button>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked || micDiagnostic.status === "running"}
+                    onClick={handleRequestMicPermission}
+                  >
+                    一键申请权限
+                  </button>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked || micDiagnostic.status === "running"}
+                    onClick={handleMicDiagnostic}
+                  >
+                    {micDiagnostic.status === "running" ? "诊断中..." : "开始诊断"}
+                  </button>
+                </div>
+              </div>
+              {micDiagnostic.status === "idle" && (
+                <div className="it-diagnostic__hint">
+                  点击“开始诊断”查看权限状态与设备列表。
+                </div>
+              )}
+              {micFixStatus.status !== "idle" && (
+                <div
+                  className={
+                    micFixStatus.status === "error"
+                      ? "it-diagnostic__error"
+                      : "it-diagnostic__hint"
+                  }
+                >
+                  {micFixStatus.message}
+                </div>
+              )}
+              {(micDiagnostic.status === "done" ||
+                micDiagnostic.status === "error") && (
+                <div className="it-diagnostic__body">
+                  {micDiagnostic.status === "error" ? (
+                    <div className="it-diagnostic__error">
+                      诊断失败：{micDiagnostic.error}
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        权限状态：{it_formatPermissionState(micDiagnostic.permissionState)}
+                      </div>
+                      <div>
+                        麦克风设备数：{micDiagnostic.audioInputCount ?? 0}
+                      </div>
+                      {micDiagnostic.audioInputs?.length ? (
+                        <div className="it-diagnostic__devices">
+                          {micDiagnostic.audioInputs.map((device, idx) => (
+                            <div key={`${device.deviceId}-${idx}`}>
+                              {idx + 1}. {device.label}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="it-diagnostic__hint">
+                          未检测到麦克风设备或权限不足。
+                        </div>
+                      )}
+                      <div className="it-diagnostic__hint">
+                        {micDiagnostic.permissionState === "denied"
+                          ? "若权限被拒绝，请确认 VS Code 非管理员运行，并在系统设置中为 VS Code 开启麦克风权限后重启。"
+                          : "录音改用系统通道，点击“开始录音”即可触发系统授权或报错。若失败可尝试“一键修复权限”清理缓存后重试。"}
+                      </div>
+                    </>
+                  )}
+                  <div className="it-diagnostic__actions">
+                    <button
+                      className="it-button it-button--secondary it-button--compact"
+                      onClick={() => request("it/openMicSettings", undefined)}
+                    >
+                      打开系统麦克风设置
+                    </button>
+                    <button
+                      className="it-button it-button--secondary it-button--compact"
+                      onClick={() => request("it/reloadWindow", undefined)}
+                    >
+                      重启 VS Code
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="it-question">
-          <textarea
-            className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
-            placeholder="题干材料（可选）"
-            value={questionText}
-            onChange={(event) => setQuestionText(event.target.value)}
-          />
-          <textarea
-            className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
-            placeholder="小题列表（一行一个，可选）"
-            value={questionList}
-            onChange={(event) => setQuestionList(event.target.value)}
-          />
-          <div className="it-question__hint">
-            题干或小题列表为必填，支持直接粘贴完整材料并自动识别第N题。
-          </div>
-        </div>
-      </div>
+      )}
 
     </div>
   );

@@ -25,6 +25,29 @@
   font-weight: 600;
 }
 
+.it-page-tabs {
+  display: inline-flex;
+  border: 1px solid var(--vscode-sideBar-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--vscode-sideBarSectionHeader-background);
+}
+
+.it-page-tabs .it-tab {
+  flex: 1 1 0;
+  padding: 6px 12px;
+  border-right: 1px solid var(--vscode-sideBar-border);
+}
+
+.it-page-tabs .it-tab:last-child {
+  border-right: none;
+}
+
+.it-page-tabs .it-tab.active {
+  background: var(--vscode-editorWidget-background);
+  font-weight: 600;
+}
+
 .it-actions {
   display: flex;
   gap: 8px;
@@ -570,6 +593,84 @@
 .it-question-timings__value {
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
+}
+
+.it-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.it-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.it-settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+}
+
+.it-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.it-settings__title {
+  font-weight: 600;
+}
+
+.it-settings__desc {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.it-settings__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-settings__hint {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-settings__section--full {
+  grid-column: 1 / -1;
+}
+
+.it-input-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.it-select {
+  min-width: 220px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
 }
 
 .it-thinking {
