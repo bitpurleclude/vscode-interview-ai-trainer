@@ -1562,7 +1562,7 @@ const InterviewTrainer: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="it-input-row">
+                      <div className="it-input-row it-input-row--nowrap">
                         <div style={{ minWidth: 80 }}>温度</div>
                         <input
                           className="it-input"
@@ -1584,7 +1584,7 @@ const InterviewTrainer: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="it-input-row">
+                      <div className="it-input-row it-input-row--nowrap">
                         <div style={{ minWidth: 80 }}>超时(s)</div>
                         <input
                           className="it-input"
@@ -1666,7 +1666,7 @@ const InterviewTrainer: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="it-input-row">
+                      <div className="it-input-row it-input-row--nowrap">
                         <div style={{ minWidth: 80 }}>语言</div>
                         <input
                           className="it-input"
@@ -1685,7 +1685,7 @@ const InterviewTrainer: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="it-input-row">
+                      <div className="it-input-row it-input-row--nowrap">
                         <div style={{ minWidth: 80 }}>分片(s)</div>
                         <input
                           className="it-input"
@@ -1842,104 +1842,6 @@ const InterviewTrainer: React.FC = () => {
               </div>
             </div>
 
-            <div className="it-settings__section it-settings__section--full">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">麦克风诊断</div>
-                  <div className="it-settings__desc">查看权限状态并尝试清理</div>
-                </div>
-                <div className="it-settings__actions">
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked || micFixStatus.status === "running"}
-                    onClick={handleFixMicPermission}
-                  >
-                    一键修复权限
-                  </button>
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked || micDiagnostic.status === "running"}
-                    onClick={handleRequestMicPermission}
-                  >
-                    一键申请权限
-                  </button>
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked || micDiagnostic.status === "running"}
-                    onClick={handleMicDiagnostic}
-                  >
-                    {micDiagnostic.status === "running" ? "诊断中..." : "开始诊断"}
-                  </button>
-                </div>
-              </div>
-              {micDiagnostic.status === "idle" && (
-                <div className="it-diagnostic__hint">
-                  点击“开始诊断”查看权限状态与设备列表。
-                </div>
-              )}
-              {micFixStatus.status !== "idle" && (
-                <div
-                  className={
-                    micFixStatus.status === "error"
-                      ? "it-diagnostic__error"
-                      : "it-diagnostic__hint"
-                  }
-                >
-                  {micFixStatus.message}
-                </div>
-              )}
-              {(micDiagnostic.status === "done" ||
-                micDiagnostic.status === "error") && (
-                <div className="it-diagnostic__body">
-                  {micDiagnostic.status === "error" ? (
-                    <div className="it-diagnostic__error">
-                      诊断失败：{micDiagnostic.error}
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        权限状态：{it_formatPermissionState(micDiagnostic.permissionState)}
-                      </div>
-                      <div>
-                        麦克风设备数：{micDiagnostic.audioInputCount ?? 0}
-                      </div>
-                      {micDiagnostic.audioInputs?.length ? (
-                        <div className="it-diagnostic__devices">
-                          {micDiagnostic.audioInputs.map((device, idx) => (
-                            <div key={`${device.deviceId}-${idx}`}>
-                              {idx + 1}. {device.label}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="it-diagnostic__hint">
-                          未检测到麦克风设备或权限不足。
-                        </div>
-                      )}
-                      <div className="it-diagnostic__hint">
-                        {micDiagnostic.permissionState === "denied"
-                          ? "若权限被拒绝，请确认 VS Code 非管理员运行，并在系统设置中为 VS Code 开启麦克风权限后重启。"
-                          : "录音改用系统通道，点击“开始录音”即可触发系统授权或报错。若失败可尝试“一键修复权限”清理缓存后重试。"}
-                      </div>
-                    </>
-                  )}
-                  <div className="it-diagnostic__actions">
-                    <button
-                      className="it-button it-button--secondary it-button--compact"
-                      onClick={() => request("it/openMicSettings", undefined)}
-                    >
-                      打开系统麦克风设置
-                    </button>
-                    <button
-                      className="it-button it-button--secondary it-button--compact"
-                      onClick={() => request("it/reloadWindow", undefined)}
-                    >
-                      重启 VS Code
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}

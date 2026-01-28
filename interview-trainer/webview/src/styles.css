@@ -666,6 +666,16 @@
   align-items: center;
 }
 
+.it-input-row--nowrap {
+  flex-wrap: nowrap;
+}
+
+.it-input-row--nowrap .it-input,
+.it-input-row--nowrap .it-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .it-select {
   min-width: 220px;
   padding: 6px 8px;
