@@ -461,6 +461,7 @@ export async function it_evaluateAnswer(
   questionList: string[],
   questionAnswers?: Array<{ question: string; answer: string }>,
   customSystemPrompt?: string,
+  customDemoPrompt?: string,
 ): Promise<ItEvaluation> {
   const lowSpeech =
     (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
@@ -491,16 +492,24 @@ export async function it_evaluateAnswer(
     };
   }
 
-  const systemPrompt =
-    customSystemPrompt?.trim() ||
-    [
-      "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
-      "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
-      "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
-      "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
-      "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
-      "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
-    ].join("\n");
+const systemPrompt =
+  customSystemPrompt?.trim() ||
+  [
+    "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
+    "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
+    "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
+    "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
+    "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
+    "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
+  ].join("\n");
+const demoPrompt =
+  customDemoPrompt?.trim() ||
+  [
+    "示范答案需控制 3 题总时长 ≤ 10 分钟，按 4:3:3 分配，正常语速可读完。",
+    "采用公务人员/政务思维，总-分-总或“提出问题-分析原因-对策执行-风险管控”结构。",
+    "每题至少细化 1-2 个要点（数据/案例/措施/落地步骤），避免空话、套话。",
+    "语言简洁，删去冗余赘述，突出可执行行动与成效。",
+  ].join("\n");
   const userPrompt = [
     `题干:\\n${question || "未提供"}`,
     `回答文本:\\n${transcript}`,
@@ -521,6 +530,8 @@ export async function it_evaluateAnswer(
       : "考生回答(按题): 无",
     "要求: strengths/issues/improvements 至少各3条，nextFocus 至少2条。",
     "revisedAnswers 必须基于对应题目的原回答，并综合 improvements 的改进意见进行润色、删冗与补充逻辑。",
+    "示范答案写作指引:",
+    demoPrompt,
     "请输出完整、流畅的段落式回答：开头一句给结论，随后用“第一/第二/第三/第四”展开要点，最后收束总结。",
     "不要使用“结论/背景/对策/总结”等标题，也不要出现“示范答题/改进要点”等提示语。",
     "可用 **加粗** 标记关键观点或结论。",

@@ -814,6 +814,7 @@ export async function it_runAnalysis(
     questionList,
     questionAnswers,
     request.systemPrompt,
+    request.demoPrompt,
   );
   reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
 

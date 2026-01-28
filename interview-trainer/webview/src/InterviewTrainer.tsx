@@ -149,6 +149,11 @@ const STRICT_SYSTEM_PROMPT = [
   "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
   "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
 ].join("\n");
+const DEFAULT_DEMO_PROMPT = [
+  "示范答案须控制 3 题总时长 ≤ 10 分钟，按 4:3:3 分配，正常语速可读完。",
+  "采用公务人员/政务思维，总-分-总或“提出问题-分析原因-对策执行-风险管控”结构。",
+  "每题至少细化 1-2 个要点（数据/案例/措施/落地步骤），避免空话套话；强调可执行行动、预期成效与风险兜底。",
+].join("\n");
 
 const InterviewTrainer: React.FC = () => {
   const [itState, setItState] = useState<ItState>(DEFAULT_STATE);
@@ -157,6 +162,7 @@ const InterviewTrainer: React.FC = () => {
   const [questionText, setQuestionText] = useState("");
   const [questionList, setQuestionList] = useState("");
   const [customPrompt, setCustomPrompt] = useState(STRICT_SYSTEM_PROMPT);
+  const [demoPrompt, setDemoPrompt] = useState(DEFAULT_DEMO_PROMPT);
   const [analysisResult, setAnalysisResult] = useState<ItAnalyzeResponse | null>(
     null,
   );
@@ -698,6 +704,7 @@ const InterviewTrainer: React.FC = () => {
       questionText: finalQuestionText || undefined,
       questionList: finalQuestionList,
       systemPrompt: customPrompt?.trim() || undefined,
+      demoPrompt: demoPrompt?.trim() || undefined,
     };
     try {
       const response = await request("it/analyzeAudio", payload);
@@ -1770,6 +1777,20 @@ const InterviewTrainer: React.FC = () => {
                 className="it-textarea it-textarea--prompt"
                 value={customPrompt}
                 onChange={(event) => setCustomPrompt(event.target.value)}
+              />
+            </div>
+
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">示范答案提示词</div>
+                  <div className="it-settings__desc">控制总时长≤10分钟，公务员思维、结构清晰</div>
+                </div>
+              </div>
+              <textarea
+                className="it-textarea it-textarea--prompt"
+                value={demoPrompt}
+                onChange={(event) => setDemoPrompt(event.target.value)}
               />
             </div>
 

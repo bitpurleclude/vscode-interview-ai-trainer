@@ -42,6 +42,7 @@ export interface ItAnalyzeRequest {
   questionList?: string[];
   sessionLabel?: string;
   systemPrompt?: string;
+  demoPrompt?: string;
 }
 
 export interface ItAcousticMetrics {
