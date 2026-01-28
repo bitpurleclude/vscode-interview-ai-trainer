@@ -956,8 +956,7 @@ const InterviewTrainer: React.FC = () => {
                             {idx + 1}. {item.question}
                           </div>
                           <div className="it-question-timings__value">
-                            {it_formatSeconds(item.durationSec)}
-                            {item.note ? ` (${item.note})` : ""}
+                            {`${it_formatSeconds(item.startSec)} - ${it_formatSeconds(item.endSec)} （用时 ${it_formatSeconds(item.durationSec)}${item.note ? `，${item.note}` : ""}）`}
                           </div>
                         </div>
                       ))}

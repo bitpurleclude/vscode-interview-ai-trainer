@@ -95,12 +95,11 @@ export function it_renderReport(
   if (response.questionTimings && response.questionTimings.length) {
     lines.push("### 题目用时\n\n");
     response.questionTimings.forEach((item, idx) => {
-      const note = item.note ? ` (${item.note})` : "";
-      lines.push(
-        `${idx + 1}. ${item.question} - ${it_formatSeconds(
-          item.durationSec,
-        )}${note}\n`,
-      );
+      const note = item.note ? `，${item.note}` : "";
+      const start = it_formatSeconds(item.startSec);
+      const end = it_formatSeconds(item.endSec);
+      const duration = it_formatSeconds(item.durationSec);
+      lines.push(`${idx + 1}. ${item.question} - [${start}-${end}] 用时 ${duration}${note}\n`);
     });
     lines.push("\n");
   }
