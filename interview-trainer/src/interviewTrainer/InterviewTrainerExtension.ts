@@ -645,31 +645,49 @@ export class InterviewTrainerExtension {
     const child = this.recordingChild;
     this.recordingChild = null;
     let killed = false;
+    let exitCode: number | null = null;
+    let exitSignal: string | null = null;
+    let stderr = "";
+    child.stderr?.on("data", (d) => {
+      stderr += String(d);
+    });
     try {
-      if (child.stdin) {
-        child.stdin.write("q");
-      }
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          if (!child.killed) {
-            child.kill("SIGTERM");
-            killed = true;
-          }
-          resolve();
-        }, 500);
-        child.on("close", () => {
-          clearTimeout(timer);
+      const exitPromise = new Promise<void>((resolve) => {
+        child.on("close", (code, signal) => {
+          exitCode = code;
+          exitSignal = signal;
           resolve();
         });
       });
+      if (child.stdin) {
+        child.stdin.write("q\n");
+      } else {
+        child.kill("SIGTERM");
+      }
+      const completed = await Promise.race([
+        exitPromise.then(() => true),
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(false), 3000),
+        ),
+      ]);
+      if (!completed) {
+        if (!child.killed) {
+          child.kill("SIGTERM");
+          killed = true;
+        }
+        await exitPromise;
+      }
     } catch {
       // ignore
     }
 
     const tmpPath = path.join(this.recordingTempDir, "capture.pcm");
     if (!fs.existsSync(tmpPath)) {
+      const detail =
+        `ffmpeg 退出码=${exitCode ?? "未知"}, 信号=${exitSignal ?? "无"}, ` +
+        `stderr=${stderr.trim() || "无"}`;
       throw new Error(
-        `录音文件不存在${killed ? "（进程被强制结束）" : ""}，请检查麦克风设备或 ffmpeg 输入参数`,
+        `录音文件不存在${killed ? "（进程被强制结束）" : ""}，请检查麦克风设备或 ffmpeg 输入参数。${detail}`,
       );
     }
     const pcm = fs.readFileSync(tmpPath);

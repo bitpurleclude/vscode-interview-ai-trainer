@@ -323,7 +323,7 @@ const InterviewTrainer: React.FC = () => {
           }
           return;
         }
-        throw new Error(resp?.error || "录音停止失败");
+        throw new Error(resp?.error || "录音停止失败，录音文件缺失或 ffmpeg 退出异常。");
       })
       .catch((err) => {
         setItState((prev) => ({
