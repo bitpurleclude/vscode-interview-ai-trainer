@@ -65,6 +65,7 @@ export class InterviewTrainerExtension {
     stderr: string;
   } | null = null;
   private detectedInput: string | null = null;
+  private availableInputs: string[] | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -404,6 +405,14 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/stopNativeRecording", async () => {
       return await this.it_stopNativeRecording();
     });
+    this.webviewProtocol.on("it/listNativeInputs", async () => {
+      const ffmpeg = await this.it_findFfmpeg();
+      if (!ffmpeg) {
+        throw new Error("未找到 ffmpeg，无法列出输入设备");
+      }
+      const inputs = await this.it_listInputs(ffmpeg);
+      return { inputs };
+    });
     this.webviewProtocol.on("it/parseQuestions", async (msg) => {
       const text = String(msg.data?.text || "");
       this.configBundle = it_loadConfigBundle(this.context);
@@ -612,48 +621,11 @@ export class InterviewTrainerExtension {
 
   private async it_detectDefaultInput(ffmpeg: string): Promise<string | null> {
     if (this.detectedInput) return this.detectedInput;
-    if (process.platform === "win32") {
-      const scan = await this.it_runFfmpegProbe(ffmpeg, ["-list_devices", "true", "-f", "dshow", "-i", "dummy"]);
-      const audioLines = scan.stderr
-        .split(/\r?\n/)
-        .filter((line) => line.includes("(audio)") && line.includes('"'));
-      const parsed = audioLines
-        .map((line) => {
-          const match = line.match(/"([^"]+)"/);
-          return match ? match[1] : null;
-        })
-        .filter(Boolean) as string[];
-      if (parsed.length) {
-        this.detectedInput = `audio=${parsed[0]}`;
-        return this.detectedInput;
-      }
-      return null;
+    const inputs = await this.it_listInputs(ffmpeg);
+    if (inputs.length) {
+      this.detectedInput = inputs[0];
+      return this.detectedInput;
     }
-    if (process.platform === "darwin") {
-      const scan = await this.it_runFfmpegProbe(ffmpeg, [
-        "-f",
-        "avfoundation",
-        "-list_devices",
-        "true",
-        "-i",
-        '""',
-      ]);
-      const audioLines = scan.stderr
-        .split(/\r?\n/)
-        .filter((line) => /\[\d+\].*\(audio\)/.test(line));
-      const parsed = audioLines
-        .map((line) => {
-          const match = line.match(/\[(\d+)\]\s+(.+?)\s+\(audio\)/);
-          return match ? `:${match[1]}` : null;
-        })
-        .filter(Boolean) as string[];
-      if (parsed.length) {
-        this.detectedInput = parsed[0];
-        return this.detectedInput;
-      }
-      return null;
-    }
-    // Linux 上默认用 pulse default，暂不探测。
     return null;
   }
 
@@ -684,7 +656,49 @@ export class InterviewTrainerExtension {
     });
   }
 
-  private async it_startNativeRecording(): Promise<{
+  private async it_listInputs(ffmpeg: string): Promise<string[]> {
+    if (this.availableInputs) return this.availableInputs;
+    if (process.platform === "win32") {
+      const scan = await this.it_runFfmpegProbe(ffmpeg, ["-list_devices", "true", "-f", "dshow", "-i", "dummy"]);
+      const audioLines = scan.stderr
+        .split(/\r?\n/)
+        .filter((line) => line.includes("(audio)") && line.includes('"'));
+      const parsed = audioLines
+        .map((line) => {
+          const match = line.match(/"([^"]+)"/);
+          return match ? `audio=${match[1]}` : null;
+        })
+        .filter(Boolean) as string[];
+      this.availableInputs = parsed;
+      return parsed;
+    }
+    if (process.platform === "darwin") {
+      const scan = await this.it_runFfmpegProbe(ffmpeg, [
+        "-f",
+        "avfoundation",
+        "-list_devices",
+        "true",
+        "-i",
+        '""',
+      ]);
+      const audioLines = scan.stderr
+        .split(/\r?\n/)
+        .filter((line) => /\[\d+\].*\(audio\)/.test(line));
+      const parsed = audioLines
+        .map((line) => {
+          const match = line.match(/\[(\d+)\]\s+(.+?)\s+\(audio\)/);
+          return match ? `:${match[1]}` : null;
+        })
+        .filter(Boolean) as string[];
+      this.availableInputs = parsed;
+      return parsed;
+    }
+    // Linux: 暂不枚举，直接使用默认
+    this.availableInputs = [];
+    return [];
+  }
+
+  private async it_startNativeRecording(deviceOverride?: string): Promise<{
     tmpDir: string;
     tmpPath: string;
     startedAt: number;
@@ -700,9 +714,11 @@ export class InterviewTrainerExtension {
     const tmpPath = path.join(tmpDir, "capture.pcm");
     const commonArgs = ["-y", "-ac", "1", "-ar", "16000", "-f", "s16le", tmpPath];
     let inputArgs: string[];
-    const customInput = process.env.IT_FFMPEG_INPUT;
+    const customInput = deviceOverride || process.env.IT_FFMPEG_INPUT;
     const detectedInput =
-      customInput || (await this.it_detectDefaultInput(ffmpeg)) || (process.platform === "win32" ? null : undefined);
+      customInput ||
+      (await this.it_detectDefaultInput(ffmpeg)) ||
+      (process.platform === "win32" ? null : undefined);
     if (process.platform === "win32") {
       const device = detectedInput || "audio=default";
       inputArgs = ["-f", "dshow", "-i", device.startsWith("audio=") ? device : `audio=${device}`];

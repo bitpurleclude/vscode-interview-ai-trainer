@@ -154,6 +154,8 @@ const InterviewTrainer: React.FC = () => {
   const [audioPayload, setAudioPayload] =
     useState<ItAnalyzeRequest["audio"] | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [nativeInputs, setNativeInputs] = useState<string[]>([]);
+  const [selectedInput, setSelectedInput] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [questionError, setQuestionError] = useState(false);
@@ -206,6 +208,12 @@ const InterviewTrainer: React.FC = () => {
           ...prev,
           statusMessage: "配置加载失败，已使用默认配置",
         }));
+      }
+    });
+    request("it/listNativeInputs", undefined).then((resp) => {
+      if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
+        setNativeInputs(resp.content.inputs);
+        setSelectedInput(resp.content.inputs[0] || "");
       }
     });
   }, []);
@@ -265,7 +273,9 @@ const InterviewTrainer: React.FC = () => {
   const handleStartRecording = async () => {
     if (recordingSession.startedAt) return;
     try {
-      const resp = await request("it/startNativeRecording", undefined);
+      const resp = await request("it/startNativeRecording", {
+        device: selectedInput || undefined,
+      });
       if (resp?.status === "success" && resp.content) {
         const startedAt = resp.content.startedAt || Date.now();
         setRecordingSession({ startedAt });
@@ -706,6 +716,21 @@ const InterviewTrainer: React.FC = () => {
       <div className="it-header">
         <div className="it-title">面试训练助手</div>
         <div className="it-actions">
+          <div className="it-input-select">
+            <label>输入设备</label>
+            <select
+              value={selectedInput}
+              onChange={(e) => setSelectedInput(e.target.value)}
+              disabled={uiLocked || itState.recordingState === "recording"}
+            >
+              {nativeInputs.length === 0 && <option value="">自动</option>}
+              {nativeInputs.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             className="it-button it-button--primary"
             disabled={uiLocked || itState.recordingState === "recording"}
