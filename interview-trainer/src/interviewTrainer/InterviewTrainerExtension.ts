@@ -22,10 +22,11 @@ import {
   it_saveApiConfig,
   it_saveSkillConfig,
 } from "./api/it_apiConfig";
+import { it_callLlmChat, ItLlmConfig } from "./api/it_llm";
+import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_runAnalysis } from "./core/it_analyze";
 import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
-import { ItQianfanConfig } from "./api/it_qianfan";
 import { it_parseQuestions } from "./core/it_questionParser";
 
 const IT_STATUS_INIT: ItState = {
@@ -91,6 +92,10 @@ export class InterviewTrainerExtension {
     const envConfig = apiConfig.environments?.[env] ?? {};
     const llmConfig = envConfig.llm ?? {};
     const asrConfig = envConfig.asr ?? {};
+    const llmDefaultBase =
+      llmConfig.provider === "volc_doubao"
+        ? "https://ark.cn-beijing.volces.com"
+        : "https://qianfan.baidubce.com/v2";
     const workspace = this.configBundle.skill.workspace ?? {};
     return {
       activeEnvironment: env,
@@ -100,8 +105,12 @@ export class InterviewTrainerExtension {
       acousticProvider: apiConfig.active?.acoustic || "api",
       llm: {
         provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
-        baseUrl: llmConfig.base_url || "https://qianfan.baidubce.com/v2",
-        model: llmConfig.model || "ernie-4.5-turbo-128k",
+        baseUrl: llmConfig.base_url || llmDefaultBase,
+        model:
+          llmConfig.model ||
+          (llmConfig.provider === "volc_doubao"
+            ? "doubao-1-5-pro-32k-250115"
+            : "ernie-4.5-turbo-128k"),
         apiKey: llmConfig.api_key || "",
         temperature: Number(llmConfig.temperature ?? 0.8),
         topP: Number(llmConfig.top_p ?? 0.8),
@@ -132,17 +141,26 @@ export class InterviewTrainerExtension {
     };
   }
 
-  private it_getLlmConfig(): ItQianfanConfig | null {
+  private it_getLlmConfig(): ItLlmConfig | null {
     const env = this.configBundle.api.active?.environment || "prod";
     const envConfig = this.configBundle.api.environments?.[env] ?? {};
     const llm = envConfig.llm ?? {};
-    if (llm.provider !== "baidu_qianfan" || !llm.api_key) {
+    if (!llm.provider || !llm.api_key) {
       return null;
     }
+    const defaultBase =
+      llm.provider === "volc_doubao"
+        ? "https://ark.cn-beijing.volces.com"
+        : "https://qianfan.baidubce.com/v2";
     return {
+      provider: llm.provider,
       apiKey: llm.api_key || "",
-      baseUrl: llm.base_url || "https://qianfan.baidubce.com/v2",
-      model: llm.model || "ernie-4.5-turbo-128k",
+      baseUrl: llm.base_url || defaultBase,
+      model:
+        llm.model ||
+        (llm.provider === "volc_doubao"
+          ? "doubao-1-5-pro-32k-250115"
+          : "ernie-4.5-turbo-128k"),
       temperature: Number(llm.temperature ?? 0.8),
       topP: Number(llm.top_p ?? 0.8),
       timeoutSec: Number(llm.timeout_sec ?? 60),
@@ -560,11 +578,20 @@ export class InterviewTrainerExtension {
       const llmForm = payload.llm || {};
       const asrForm = payload.asr || {};
 
+      const llmDefaultBase =
+        llmForm.provider === "volc_doubao"
+          ? "https://ark.cn-beijing.volces.com"
+          : "https://qianfan.baidubce.com/v2";
+      const llmDefaultModel =
+        llmForm.provider === "volc_doubao"
+          ? "doubao-1-5-pro-32k-250115"
+          : "ernie-4.5-turbo-128k";
+
       envConfig.llm = {
         ...(envConfig.llm || {}),
         provider: llmForm.provider || envConfig.llm?.provider || apiConfig.active?.llm || "baidu_qianfan",
-        base_url: llmForm.baseUrl ?? envConfig.llm?.base_url ?? "https://qianfan.baidubce.com/v2",
-        model: llmForm.model ?? envConfig.llm?.model ?? "ernie-4.5-turbo-128k",
+        base_url: llmForm.baseUrl ?? envConfig.llm?.base_url ?? llmDefaultBase,
+        model: llmForm.model ?? envConfig.llm?.model ?? llmDefaultModel,
         api_key: llmForm.apiKey ?? envConfig.llm?.api_key ?? "",
         temperature: Number(llmForm.temperature ?? envConfig.llm?.temperature ?? 0.8),
         top_p: Number(llmForm.topP ?? envConfig.llm?.top_p ?? 0.8),
@@ -615,6 +642,75 @@ export class InterviewTrainerExtension {
       this.configSnapshot = this.buildConfigSnapshot(apiConfig);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/testLlm", async (msg) => {
+      const payload = msg.data || {};
+      const llmForm = payload.llm || {};
+      const provider = llmForm.provider || "baidu_qianfan";
+      const defaultBase =
+        provider === "volc_doubao"
+          ? "https://ark.cn-beijing.volces.com"
+          : "https://qianfan.baidubce.com/v2";
+      const defaultModel =
+        provider === "volc_doubao"
+          ? "doubao-1-5-pro-32k-250115"
+          : "ernie-4.5-turbo-128k";
+
+      const cfg: ItLlmConfig = {
+        provider,
+        apiKey: llmForm.apiKey || "",
+        baseUrl: llmForm.baseUrl || defaultBase,
+        model: llmForm.model || defaultModel,
+        temperature: Number(llmForm.temperature ?? 0.8),
+        topP: Number(llmForm.topP ?? 0.8),
+        timeoutSec: Number(llmForm.timeoutSec ?? 30),
+        maxRetries: Number(llmForm.maxRetries ?? 0),
+      };
+      if (!cfg.apiKey) {
+        throw new Error("缺少 LLM API Key");
+      }
+      const content = await it_callLlmChat(cfg, [
+        { role: "system", content: "你是健康检查助手，请用12个字内回复“接口可用”" },
+        { role: "user", content: "ping" },
+      ]);
+      return { ok: true, content };
+    });
+    this.webviewProtocol.on("it/testAsr", async (msg) => {
+      const asrForm = msg.data?.asr || {};
+      const provider = asrForm.provider || "baidu_vop";
+      if (provider === "mock") {
+        return { ok: true, content: asrForm.mockText || "mock 文本" };
+      }
+      if (provider !== "baidu_vop") {
+        throw new Error("当前仅支持百度 ASR 测试。");
+      }
+      if (!asrForm.apiKey || !asrForm.secretKey) {
+        throw new Error("缺少 ASR API Key 或 Secret Key。");
+      }
+      const sampleRate = 16000;
+      const durationSec = 1;
+      const buffer = Buffer.alloc(sampleRate * durationSec * 2, 0);
+      const base64 = buffer.toString("base64");
+      const text = await it_callBaiduAsr(
+        {
+          apiKey: asrForm.apiKey,
+          secretKey: asrForm.secretKey,
+          baseUrl: asrForm.baseUrl || "https://vop.baidu.com/server_api",
+          devPid: Number(asrForm.devPid ?? 1537),
+          language: asrForm.language || "zh",
+          timeoutSec: Number(asrForm.timeoutSec ?? 30),
+          maxRetries: Number(asrForm.maxRetries ?? 0),
+        },
+        {
+          format: "pcm",
+          rate: sampleRate,
+          channel: 1,
+          cuid: "it-asr-test",
+          speech: base64,
+          len: buffer.length,
+        },
+      );
+      return { ok: true, content: text || "(无识别结果，接口可用)" };
     });
     this.webviewProtocol.on("openFile", async (msg) => {
       const target = msg.data?.path;

@@ -193,6 +193,10 @@ const InterviewTrainer: React.FC = () => {
   });
   const [savingApiConfig, setSavingApiConfig] = useState(false);
   const [apiSaveMessage, setApiSaveMessage] = useState<string | null>(null);
+  const [testingLlm, setTestingLlm] = useState(false);
+  const [testingAsr, setTestingAsr] = useState(false);
+  const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
+  const [asrTestMessage, setAsrTestMessage] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -697,13 +701,39 @@ const InterviewTrainer: React.FC = () => {
     key: string,
     value: string | number,
   ) => {
-    setApiForm((prev) => ({
-      ...prev,
-      [scope]: {
-        ...prev[scope],
-        [key]: value,
-      },
-    }));
+    setLlmTestMessage(null);
+    setAsrTestMessage(null);
+    setApiForm((prev) => {
+      if (scope === "llm" && key === "provider") {
+        const provider = String(value);
+        const defaults =
+          provider === "volc_doubao"
+            ? {
+                baseUrl: "https://ark.cn-beijing.volces.com",
+                model: "doubao-1-5-pro-32k-250115",
+              }
+            : {
+                baseUrl: "https://qianfan.baidubce.com/v2",
+                model: "ernie-4.5-turbo-128k",
+              };
+        return {
+          ...prev,
+          llm: {
+            ...prev.llm,
+            provider,
+            baseUrl: prev.llm.baseUrl || defaults.baseUrl,
+            model: prev.llm.model || defaults.model,
+          },
+        };
+      }
+      return {
+        ...prev,
+        [scope]: {
+          ...prev[scope],
+          [key]: value,
+        },
+      };
+    });
   };
   const handleSaveApiConfig = async () => {
     if (!apiForm.environment.trim()) {
@@ -753,6 +783,47 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingApiConfig(false);
+  };
+  const handleTestLlm = async () => {
+    setTestingLlm(true);
+    setLlmTestMessage(null);
+    try {
+      const resp = await request("it/testLlm", {
+        environment: apiForm.environment,
+        llm: apiForm.llm,
+      });
+      if (resp?.status === "success") {
+        const content = resp.content?.content || resp.content;
+        setLlmTestMessage(`LLM 接口正常：${String(content || "").slice(0, 80)}`);
+      } else {
+        setLlmTestMessage("LLM 测试失败，请检查配置。");
+      }
+    } catch (err) {
+      setLlmTestMessage(
+        `LLM 测试失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setTestingLlm(false);
+  };
+  const handleTestAsr = async () => {
+    setTestingAsr(true);
+    setAsrTestMessage(null);
+    try {
+      const resp = await request("it/testAsr", { asr: apiForm.asr });
+      if (resp?.status === "success") {
+        const content = resp.content?.content || resp.content;
+        setAsrTestMessage(
+          `ASR 接口正常：${String(content || "").slice(0, 40) || "(无识别结果)"}`,
+        );
+      } else {
+        setAsrTestMessage("ASR 测试失败，请检查配置。");
+      }
+    } catch (err) {
+      setAsrTestMessage(
+        `ASR 测试失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setTestingAsr(false);
   };
   const handleReloadConfig = async () => {
     const resp = await request("it/getConfig", undefined);
@@ -1325,6 +1396,7 @@ const InterviewTrainer: React.FC = () => {
                           }
                         >
                           <option value="baidu_qianfan">baidu_qianfan</option>
+                          <option value="volc_doubao">volc_doubao</option>
                           <option value="heuristic">heuristic（本地规则）</option>
                         </select>
                       </div>
@@ -1402,6 +1474,18 @@ const InterviewTrainer: React.FC = () => {
                           }
                         />
                       </div>
+                      <div className="it-settings__actions">
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={uiLocked || testingLlm}
+                          onClick={handleTestLlm}
+                        >
+                          {testingLlm ? "测试中..." : "测试 LLM 接口"}
+                        </button>
+                      </div>
+                      {llmTestMessage && (
+                        <div className="it-settings__hint">{llmTestMessage}</div>
+                      )}
                     </div>
 
                     <div className="it-question">
@@ -1505,14 +1589,26 @@ const InterviewTrainer: React.FC = () => {
                         <input
                           className="it-input"
                           value={apiForm.asr.mockText}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "mockText", event.target.value)
-                          }
-                          placeholder="仅在 provider=mock 时使用"
-                        />
-                      </div>
+                        onChange={(event) =>
+                          handleApiFieldChange("asr", "mockText", event.target.value)
+                        }
+                        placeholder="仅在 provider=mock 时使用"
+                      />
                     </div>
+                    <div className="it-settings__actions">
+                      <button
+                        className="it-button it-button--secondary it-button--compact"
+                        disabled={uiLocked || testingAsr}
+                        onClick={handleTestAsr}
+                      >
+                        {testingAsr ? "测试中..." : "测试 ASR 接口"}
+                      </button>
+                    </div>
+                    {asrTestMessage && (
+                      <div className="it-settings__hint">{asrTestMessage}</div>
+                    )}
                   </div>
+                </div>
                   <div className="it-input-row">
                     <div style={{ minWidth: 80 }}>保存目录</div>
                     <div className="it-settings__meta" style={{ flex: 1 }}>

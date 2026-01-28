@@ -1,4 +1,4 @@
-import { ItQianfanConfig, it_callQianfanChat } from "../api/it_qianfan";
+import { ItLlmConfig, it_callLlmChat } from "../api/it_llm";
 
 export interface ItParsedQuestions {
   material: string;
@@ -73,7 +73,7 @@ function it_extractJson(text: string): any | null {
 
 export async function it_parseQuestions(
   text: string,
-  llmConfig?: ItQianfanConfig | null,
+  llmConfig?: ItLlmConfig | null,
 ): Promise<ItParsedQuestions> {
   const fallback = it_parseQuestionsHeuristic(text);
   if (!llmConfig || !text.trim()) {
@@ -94,7 +94,7 @@ export async function it_parseQuestions(
   ].join("\n");
 
   try {
-    const content = await it_callQianfanChat(llmConfig, [
+    const content = await it_callLlmChat(llmConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);

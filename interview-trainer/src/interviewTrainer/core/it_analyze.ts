@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { it_callBaiduAsr } from "../api/it_baidu";
 import { ItApiConfig } from "../api/it_apiConfig";
-import { ItQianfanConfig, it_callQianfanChat } from "../api/it_qianfan";
+import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
 import { it_buildCorpus, it_retrieveNotes } from "./it_notes";
 import {
@@ -243,15 +243,24 @@ function it_isBaiduContentTooLong(error: unknown): boolean {
   );
 }
 
-function it_getLlmConfig(envConfig: any): ItQianfanConfig | null {
+function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
   const llm = envConfig?.llm ?? {};
-  if (llm.provider !== "baidu_qianfan" || !llm.api_key) {
+  if (!llm.provider || !llm.api_key) {
     return null;
   }
+  const defaultBase =
+    llm.provider === "volc_doubao"
+      ? "https://ark.cn-beijing.volces.com"
+      : "https://qianfan.baidubce.com/v2";
   return {
+    provider: llm.provider,
     apiKey: llm.api_key || "",
-    baseUrl: llm.base_url || "https://qianfan.baidubce.com/v2",
-    model: llm.model || "ernie-4.5-turbo-128k",
+    baseUrl: llm.base_url || defaultBase,
+    model:
+      llm.model ||
+      (llm.provider === "volc_doubao"
+        ? "doubao-1-5-pro-32k-250115"
+        : "ernie-4.5-turbo-128k"),
     temperature: Number(llm.temperature ?? 0.2),
     topP: Number(llm.top_p ?? 0.8),
     timeoutSec: Number(llm.timeout_sec ?? 60),
@@ -273,7 +282,7 @@ function it_extractJson(text: string): any | null {
 }
 
 async function it_assignSegmentsWithLlm(
-  llmConfig: ItQianfanConfig,
+  llmConfig: ItLlmConfig,
   questions: string[],
   segments: ItAudioSegment[],
 ): Promise<
@@ -313,7 +322,7 @@ async function it_assignSegmentsWithLlm(
   ].join("\n");
 
   try {
-    const content = await it_callQianfanChat(llmConfig, [
+    const content = await it_callLlmChat(llmConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
@@ -366,7 +375,7 @@ async function it_assignSegmentsWithLlm(
 }
 
 async function it_splitAnswersWithLlm(
-  llmConfig: ItQianfanConfig,
+  llmConfig: ItLlmConfig,
   questions: string[],
   transcript: string,
 ): Promise<Array<{ question: string; answer: string }> | null> {
@@ -390,7 +399,7 @@ async function it_splitAnswersWithLlm(
   ].join("\n");
 
   try {
-    const content = await it_callQianfanChat(llmConfig, [
+    const content = await it_callLlmChat(llmConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
@@ -769,10 +778,19 @@ export async function it_runAnalysis(
   const attemptIndex = it_nextAttemptIndex(reportPath);
   const storedAudioPath = it_storeRecording(topicDir, attemptIndex, request.audio);
 
+  const evalProvider = envConfig.llm?.provider || "heuristic";
+  const evalDefaultBase =
+    evalProvider === "volc_doubao"
+      ? "https://ark.cn-beijing.volces.com"
+      : "https://qianfan.baidubce.com/v2";
+  const evalDefaultModel =
+    evalProvider === "volc_doubao"
+      ? "doubao-1-5-pro-32k-250115"
+      : "ernie-4.5-turbo-128k";
   const evaluationConfig = {
-    provider: envConfig.llm?.provider || "heuristic",
-    model: envConfig.llm?.model || "ernie-4.5-turbo-128k",
-    baseUrl: envConfig.llm?.base_url || "https://qianfan.baidubce.com/v2",
+    provider: evalProvider,
+    model: envConfig.llm?.model || evalDefaultModel,
+    baseUrl: envConfig.llm?.base_url || evalDefaultBase,
     apiKey: envConfig.llm?.api_key || "",
     temperature: Number(envConfig.llm?.temperature ?? 0.8),
     topP: Number(envConfig.llm?.top_p ?? 0.8),
@@ -783,7 +801,7 @@ export async function it_runAnalysis(
   };
 
   const evalUsesApi = Boolean(
-    envConfig.llm?.provider === "baidu_qianfan" && envConfig.llm?.api_key,
+    envConfig.llm?.provider && envConfig.llm?.provider !== "heuristic" && envConfig.llm?.api_key,
   );
   const evalLabel = evalUsesApi ? "API" : "启发式";
   reportProgress("evaluation", 10, `面试评价 10% · ${evalLabel}`, "running");

@@ -3,17 +3,10 @@ import {
   ItEvaluation,
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
-import { it_callQianfanChat } from "../api/it_qianfan";
+import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 
-export interface ItEvaluationConfig {
-  provider: "baidu_qianfan" | "heuristic";
-  model: string;
-  baseUrl: string;
-  apiKey: string;
-  temperature: number;
-  topP: number;
-  timeoutSec: number;
-  maxRetries: number;
+export interface ItEvaluationConfig extends ItLlmConfig {
+  provider: "baidu_qianfan" | "heuristic" | "volc_doubao";
   language: string;
   dimensions: string[];
 }
@@ -535,7 +528,7 @@ export async function it_evaluateAnswer(
     "scores 中的键必须与评分维度名称完全一致。",
   ].join("\\n\\n");
   const promptText = `System:\\n${systemPrompt}\\n\\nUser:\\n${userPrompt}`;
-  if (config.provider !== "baidu_qianfan" || !config.apiKey) {
+  if (!config.apiKey || config.provider === "heuristic") {
     const fallback = it_heuristicEvaluation(
       question,
       transcript,
@@ -551,21 +544,40 @@ export async function it_evaluateAnswer(
     };
   }
 
-  const content = await it_callQianfanChat(
-    {
-      apiKey: config.apiKey,
-      baseUrl: config.baseUrl,
-      model: config.model,
-      temperature: config.temperature,
-      topP: config.topP,
-      timeoutSec: config.timeoutSec,
-      maxRetries: config.maxRetries,
-    },
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-  );
+  let content: string;
+  try {
+    content = await it_callLlmChat(
+      {
+        provider: config.provider,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        temperature: config.temperature,
+        topP: config.topP,
+        timeoutSec: config.timeoutSec,
+        maxRetries: config.maxRetries,
+      },
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    );
+  } catch (err) {
+    const fallback = it_heuristicEvaluation(
+      question,
+      transcript,
+      acoustic,
+      notes,
+      dimensions,
+      config.language,
+      questions,
+    );
+    return {
+      ...fallback,
+      raw: err instanceof Error ? err.message : String(err),
+      prompt: promptText,
+    };
+  }
 
   try {
     const parsed = JSON.parse(content);
