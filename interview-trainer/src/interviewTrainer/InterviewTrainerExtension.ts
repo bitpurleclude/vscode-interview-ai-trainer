@@ -75,12 +75,21 @@ export class InterviewTrainerExtension {
   }
 
   private buildConfigSnapshot(apiConfig: ItApiConfig): ItConfigSnapshot {
+    const workspace = this.configBundle.skill.workspace ?? {};
     return {
       activeEnvironment: apiConfig.active?.environment || "prod",
       llmProvider: apiConfig.active?.llm || "baidu_qianfan",
       asrProvider: apiConfig.active?.asr || "baidu_vop",
       acousticProvider: apiConfig.active?.acoustic || "api",
       sessionsDir: this.configBundle.skill.sessions_dir || "sessions",
+      retrievalEnabled: this.configBundle.skill.retrieval?.enabled !== false,
+      workspaceDirs: {
+        notesDir: workspace.notes_dir || "inputs/notes",
+        promptsDir: workspace.prompts_dir || "inputs/prompts/guangdong",
+        rubricsDir: workspace.rubrics_dir || "inputs/rubrics",
+        knowledgeDir: workspace.knowledge_dir || "inputs/knowledge",
+        examplesDir: workspace.examples_dir || "inputs/examples",
+      },
     };
   }
 
@@ -207,6 +216,70 @@ export class InterviewTrainerExtension {
       );
       const llmConfig = this.it_getLlmConfig();
       return await it_parseQuestions(text, llmConfig);
+    });
+    this.webviewProtocol.on("it/setRetrievalEnabled", async (msg) => {
+      const enabled = Boolean(msg.data?.enabled);
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        retrieval: {
+          ...this.configBundle.skill.retrieval,
+          enabled,
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return { enabled };
+    });
+    this.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
+      const kind = String(msg.data?.kind || "");
+      const keyMap: Record<string, string> = {
+        notes: "notes_dir",
+        prompts: "prompts_dir",
+        rubrics: "rubrics_dir",
+        knowledge: "knowledge_dir",
+        examples: "examples_dir",
+      };
+      const targetKey = keyMap[kind];
+      if (!targetKey) {
+        return { error: "invalid kind" };
+      }
+      const workspaceRoot = this.requireWorkspaceRoot();
+      const current =
+        this.configBundle.skill.workspace?.[targetKey] ||
+        this.buildConfigSnapshot(this.configBundle.api).workspaceDirs[
+          `${kind}Dir` as keyof ItConfigSnapshot["workspaceDirs"]
+        ];
+      const selection = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        openLabel: "选择检索目录",
+        defaultUri: vscode.Uri.file(path.join(workspaceRoot, current)),
+      });
+      if (!selection || selection.length === 0) {
+        return { canceled: true };
+      }
+      const selected = selection[0].fsPath;
+      const relative = path.relative(workspaceRoot, selected);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        void vscode.window.showWarningMessage("请选择当前工作区内的目录。");
+        return { canceled: true };
+      }
+      const normalized = relative ? relative.split(path.sep).join("/") : ".";
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        workspace: {
+          ...this.configBundle.skill.workspace,
+          [targetKey]: normalized,
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return { kind, dir: normalized };
     });
     this.webviewProtocol.on("it/selectSessionsDir", async () => {
       const workspaceRoot = this.requireWorkspaceRoot();

@@ -387,6 +387,12 @@
   gap: 12px;
 }
 
+.it-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .it-config {
   display: flex;
   gap: 8px;
@@ -402,6 +408,63 @@
 .it-button--compact {
   padding: 4px 8px;
   font-size: 11px;
+}
+
+.it-retrieval {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.it-retrieval__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.it-retrieval__title {
+  font-weight: 600;
+}
+
+.it-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.it-toggle input {
+  accent-color: var(--vscode-button-background);
+}
+
+.it-retrieval__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.it-retrieval__item {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--vscode-sideBarSectionHeader-background);
+}
+
+.it-retrieval__label {
+  font-weight: 600;
+}
+
+.it-retrieval__path {
+  color: var(--vscode-descriptionForeground);
+  word-break: break-all;
 }
 
 .it-question {

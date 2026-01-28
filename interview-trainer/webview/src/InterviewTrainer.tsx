@@ -179,6 +179,14 @@ const InterviewTrainer: React.FC = () => {
           asrProvider: "baidu_vop",
           acousticProvider: "api",
           sessionsDir: "sessions",
+          retrievalEnabled: true,
+          workspaceDirs: {
+            notesDir: "inputs/notes",
+            promptsDir: "inputs/prompts/guangdong",
+            rubricsDir: "inputs/rubrics",
+            knowledgeDir: "inputs/knowledge",
+            examplesDir: "inputs/examples",
+          },
         });
         setItState((prev) => ({
           ...prev,
@@ -217,6 +225,18 @@ const InterviewTrainer: React.FC = () => {
         .filter(Boolean),
     [questionList],
   );
+  const retrievalDirs = useMemo(() => {
+    if (!config) {
+      return [];
+    }
+    return [
+      { key: "notes", label: "笔记", value: config.workspaceDirs.notesDir },
+      { key: "prompts", label: "题干材料", value: config.workspaceDirs.promptsDir },
+      { key: "rubrics", label: "评分标准", value: config.workspaceDirs.rubricsDir },
+      { key: "knowledge", label: "知识库", value: config.workspaceDirs.knowledgeDir },
+      { key: "examples", label: "示例答案", value: config.workspaceDirs.examplesDir },
+    ];
+  }, [config]);
   const hasQuestion = useMemo(
     () => questionText.trim().length > 0 || parsedQuestionList.length > 0,
     [questionText, parsedQuestionList],
@@ -546,6 +566,12 @@ const InterviewTrainer: React.FC = () => {
       setActiveTab("history");
     }
   }, []);
+  const handleToggleRetrieval = async (enabled: boolean) => {
+    await request("it/setRetrievalEnabled", { enabled });
+  };
+  const handleSelectWorkspaceDir = async (kind: string) => {
+    await request("it/selectWorkspaceDir", { kind });
+  };
 
   useEffect(() => {
     const disposeHistory = on("it/showHistory", () => {
@@ -905,24 +931,55 @@ const InterviewTrainer: React.FC = () => {
       </div>
 
       <div className="it-footer">
-        <div className="it-config">
-          {config ? (
-            <>
-              <span>ASR: {config.asrProvider}</span>
-              <span>LLM: {config.llmProvider}</span>
-              <span>环境: {config.activeEnvironment}</span>
-              <span>保存目录: {config.sessionsDir}</span>
-              <button
-                className="it-button it-button--secondary it-button--compact"
-                disabled={uiLocked}
-                onClick={() => request("it/selectSessionsDir", undefined)}
-              >
-                选择保存目录
-              </button>
-            </>
-          ) : (
-            <span>配置加载中...</span>
-          )}
+        <div className="it-config-panel">
+          <div className="it-config">
+            {config ? (
+              <>
+                <span>ASR: {config.asrProvider}</span>
+                <span>LLM: {config.llmProvider}</span>
+                <span>环境: {config.activeEnvironment}</span>
+                <span>保存目录: {config.sessionsDir}</span>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked}
+                  onClick={() => request("it/selectSessionsDir", undefined)}
+                >
+                  选择保存目录
+                </button>
+              </>
+            ) : (
+              <span>配置加载中...</span>
+            )}
+          </div>
+          <div className="it-retrieval">
+            <div className="it-retrieval__header">
+              <div className="it-retrieval__title">检索配置</div>
+              <label className="it-toggle">
+                <input
+                  type="checkbox"
+                  checked={config?.retrievalEnabled ?? true}
+                  disabled={uiLocked}
+                  onChange={(event) => handleToggleRetrieval(event.target.checked)}
+                />
+                <span>启用检索</span>
+              </label>
+            </div>
+            <div className="it-retrieval__list">
+              {retrievalDirs.map((item) => (
+                <div key={item.key} className="it-retrieval__item">
+                  <div className="it-retrieval__label">{item.label}</div>
+                  <div className="it-retrieval__path">{item.value}</div>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked}
+                    onClick={() => handleSelectWorkspaceDir(item.key)}
+                  >
+                    选择目录
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="it-question">
           <textarea

@@ -131,6 +131,14 @@ export interface ItConfigSnapshot {
   asrProvider: string;
   acousticProvider: string;
   sessionsDir: string;
+  retrievalEnabled: boolean;
+  workspaceDirs: {
+    notesDir: string;
+    promptsDir: string;
+    rubricsDir: string;
+    knowledgeDir: string;
+    examplesDir: string;
+  };
 }
 
 export interface ItUserError {

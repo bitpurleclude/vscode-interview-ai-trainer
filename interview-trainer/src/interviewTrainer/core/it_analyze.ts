@@ -551,39 +551,48 @@ export async function it_runAnalysis(
     );
   }
 
-  reportProgress("notes", 15, "笔记检索 15% · 本地", "running");
-  const workspaceCfg = deps.skillConfig.workspace ?? {};
-  const notesStart = Date.now();
-  const corpus = it_buildCorpus({
-    notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
-    prompts: path.join(
-      deps.workspaceRoot,
-      workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
-    ),
-    rubrics: path.join(deps.workspaceRoot, workspaceCfg.rubrics_dir || "inputs/rubrics"),
-    knowledge: path.join(
-      deps.workspaceRoot,
-      workspaceCfg.knowledge_dir || "inputs/knowledge",
-    ),
-    examples: path.join(
-      deps.workspaceRoot,
-      workspaceCfg.examples_dir || "inputs/examples",
-    ),
-  });
-  const notes = it_retrieveNotes(
-    transcript,
-    corpus,
-    Number(deps.skillConfig.retrieval?.top_k ?? 5),
-    Number(deps.skillConfig.retrieval?.min_score ?? 0.1),
-  );
-  const notesElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
-  const sourceCount = new Set(corpus.map((item) => item.source)).size;
-  const slowHint =
-    sourceCount > 200 ? "文件较多，建议精简 inputs 目录" : undefined;
-  const notesMessage = `笔记检索 ${sourceCount}份 · ${notesElapsedSec}s · 本地${
-    slowHint ? `（${slowHint}）` : ""
-  }`;
-  reportProgress("notes", 100, notesMessage, "success");
+  let notes: ReturnType<typeof it_retrieveNotes> = [];
+  const retrievalEnabled = deps.skillConfig.retrieval?.enabled !== false;
+  if (!retrievalEnabled) {
+    reportProgress("notes", 100, "笔记检索 已关闭 · 本地", "success");
+  } else {
+    reportProgress("notes", 15, "笔记检索 15% · 本地", "running");
+    const workspaceCfg = deps.skillConfig.workspace ?? {};
+    const notesStart = Date.now();
+    const corpus = it_buildCorpus({
+      notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
+      prompts: path.join(
+        deps.workspaceRoot,
+        workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
+      ),
+      rubrics: path.join(
+        deps.workspaceRoot,
+        workspaceCfg.rubrics_dir || "inputs/rubrics",
+      ),
+      knowledge: path.join(
+        deps.workspaceRoot,
+        workspaceCfg.knowledge_dir || "inputs/knowledge",
+      ),
+      examples: path.join(
+        deps.workspaceRoot,
+        workspaceCfg.examples_dir || "inputs/examples",
+      ),
+    });
+    notes = it_retrieveNotes(
+      transcript,
+      corpus,
+      Number(deps.skillConfig.retrieval?.top_k ?? 5),
+      Number(deps.skillConfig.retrieval?.min_score ?? 0.1),
+    );
+    const notesElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
+    const sourceCount = new Set(corpus.map((item) => item.source)).size;
+    const slowHint =
+      sourceCount > 200 ? "文件较多，建议精简 inputs 目录" : undefined;
+    const notesMessage = `笔记检索 ${sourceCount}份 · ${notesElapsedSec}s · 本地${
+      slowHint ? `（${slowHint}）` : ""
+    }`;
+    reportProgress("notes", 100, notesMessage, "success");
+  }
 
   const topicTitle = it_deriveTopicTitle(
     questionText,
