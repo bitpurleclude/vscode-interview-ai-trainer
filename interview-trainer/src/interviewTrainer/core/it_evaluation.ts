@@ -178,9 +178,6 @@ function it_buildUnavailableEvaluation(params: {
   raw?: string;
 }): ItEvaluation {
   const scores: Record<string, number> = {};
-  params.dimensions.forEach((dim) => {
-    scores[dim] = 1;
-  });
   const noteUsage = params.notes.length
     ? params.notes.slice(0, 3).map((note) => `${note.source} :: ${note.snippet}`)
     : [];
@@ -191,7 +188,7 @@ function it_buildUnavailableEvaluation(params: {
     topicTitle: params.question || "未命名",
     topicSummary: params.reason,
     scores,
-    overallScore: 1,
+    overallScore: 0,
     strengths: [],
     issues: [params.reason],
     improvements: [],
