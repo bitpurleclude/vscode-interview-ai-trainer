@@ -82,31 +82,89 @@ function it_toStringArray(value: unknown): string[] {
   return [];
 }
 
+function it_pickRevisedAnswers(payload: any): any[] {
+  if (!payload) {
+    return [];
+  }
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  const candidates = [
+    payload.revisedAnswers,
+    payload.revised_answers,
+    payload.revisedAnswer,
+    payload.revised_answer,
+  ];
+  for (const item of candidates) {
+    if (Array.isArray(item)) {
+      return item;
+    }
+  }
+  return [];
+}
+
+function it_extractJsonCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  const fencedMatches = Array.from(
+    text.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi),
+  );
+  fencedMatches.forEach((match) => {
+    if (match[1]) {
+      candidates.push(match[1]);
+    }
+  });
+  const blocks: string[] = [];
+  const stack: string[] = [];
+  let start = -1;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "{" || ch === "[") {
+      if (stack.length === 0) {
+        start = i;
+      }
+      stack.push(ch);
+      continue;
+    }
+    if (ch === "}" || ch === "]") {
+      const last = stack[stack.length - 1];
+      if (
+        (ch === "}" && last === "{") ||
+        (ch === "]" && last === "[")
+      ) {
+        stack.pop();
+        if (stack.length === 0 && start !== -1) {
+          blocks.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+  blocks.forEach((block) => candidates.push(block));
+  return candidates;
+}
+
 function it_extractJsonPayload(text: string): any | null {
   if (!text) {
     return null;
   }
-  const candidates: string[] = [];
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced && fenced[1]) {
-    candidates.push(fenced[1]);
-  }
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    candidates.push(text.slice(start, end + 1));
-  }
+  const candidates = it_extractJsonCandidates(text);
+  let fallback: any | null = null;
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(candidate);
       if (parsed && typeof parsed === "object") {
-        return parsed;
+        if (it_pickRevisedAnswers(parsed).length) {
+          return parsed;
+        }
+        if (!fallback) {
+          fallback = parsed;
+        }
       }
     } catch {
       continue;
     }
   }
-  return null;
+  return fallback;
 }
 
 function it_parseQuestionIndex(marker: string): number | null {
@@ -312,52 +370,73 @@ export async function it_evaluateAnswer(
   }
 
   const resolvedRetries = Math.max(5, Number(config.maxRetries ?? 0));
-  let content: string;
-  try {
-    content = await it_callLlmChat(
-      {
-        provider: config.provider,
-        apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
-        model: config.model,
-        temperature: config.temperature,
-        topP: config.topP,
-        timeoutSec: config.timeoutSec,
-        maxRetries: resolvedRetries,
-      },
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    );
-  } catch (err) {
+  const formatGuard =
+    "上次输出未通过 JSON 校验。请仅输出合法 JSON 对象，不要代码块或多余文本。";
+  const parseAttempts = 2;
+  let content = "";
+  let parsed: any | null = null;
+  let parsedRevised: any[] = [];
+  let lastError: string | undefined;
+  let finalPromptText = promptText;
+
+  for (let attempt = 0; attempt < parseAttempts; attempt += 1) {
+    const attemptPrompt =
+      attempt === 0 ? userPrompt : `${userPrompt}\n\n${formatGuard}`;
+    finalPromptText = `System:\n${systemPrompt}\n\nUser:\n${attemptPrompt}`;
+    try {
+      content = await it_callLlmChat(
+        {
+          provider: config.provider,
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+          model: config.model,
+          temperature: config.temperature,
+          topP: config.topP,
+          timeoutSec: config.timeoutSec,
+          maxRetries: resolvedRetries,
+        },
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: attemptPrompt },
+        ],
+      );
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      continue;
+    }
+    parsed = it_extractJsonPayload(content);
+    if (parsed) {
+      parsedRevised = it_pickRevisedAnswers(parsed);
+      if (parsedRevised.length) {
+        break;
+      }
+    }
+  }
+
+  if (!parsed) {
     return it_buildUnavailableEvaluation({
       question,
-      reason: "LLM 调用失败，无法生成评分与示范。",
+      reason: lastError
+        ? "LLM 调用失败，无法生成评分与示范。"
+        : "LLM 输出解析失败，无法生成评分与示范。",
       dimensions,
       notes,
-      raw: err instanceof Error ? err.message : String(err),
-      promptText,
+      raw: lastError || content,
+      promptText: finalPromptText,
+    });
+  }
+  if (!parsedRevised.length) {
+    return it_buildUnavailableEvaluation({
+      question,
+      reason: "LLM 输出缺少 revisedAnswers，无法生成评分与示范。",
+      dimensions,
+      notes,
+      raw: content,
+      promptText: finalPromptText,
     });
   }
 
   try {
-    let parsed: any;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      parsed = it_extractJsonPayload(content);
-    }
-    if (!parsed) {
-      return it_buildUnavailableEvaluation({
-        question,
-        reason: "LLM 输出解析失败，无法生成评分与示范。",
-        dimensions,
-        notes,
-        raw: content,
-        promptText,
-      });
-    }
     const mappedScores = it_mapScoreKeys(parsed.scores || {});
     const overallScore =
       parsed.overallScore || it_computeOverallScore(mappedScores, dimensions);
@@ -379,19 +458,6 @@ export async function it_evaluateAnswer(
       notes.length && !parsedNoteSuggestions.length
         ? notes.slice(0, 3).map((note) => `鍙互鍙傝€? ${note.snippet}`)
         : parsedNoteSuggestions;
-    const parsedRevised = Array.isArray(parsed.revisedAnswers)
-      ? parsed.revisedAnswers
-      : [];
-    if (!parsedRevised.length) {
-      return it_buildUnavailableEvaluation({
-        question,
-        reason: "LLM 输出缺少 revisedAnswers，无法生成评分与示范。",
-        dimensions,
-        notes,
-        raw: content,
-        promptText,
-      });
-    }
     const revisedAnswers = parsedRevised.map((item: any, idx: number) => {
       const estimated =
         Number(item?.estimatedTimeMin ?? item?.estimated_time_min) ||
@@ -418,7 +484,7 @@ export async function it_evaluateAnswer(
       revisedAnswers,
       mode: "llm",
       raw: content,
-      prompt: promptText,
+      prompt: finalPromptText,
     };
   } catch {
     return it_buildUnavailableEvaluation({
@@ -427,7 +493,7 @@ export async function it_evaluateAnswer(
       dimensions,
       notes,
       raw: content,
-      promptText,
+      promptText: finalPromptText,
     });
   }
 }
