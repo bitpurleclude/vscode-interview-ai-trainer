@@ -1378,6 +1378,8 @@ export async function it_runAnalysis(
         evaluationConfig,
         [question],
         [{ question, answer: evalAnswers[idx]?.answer || "" }],
+        questionText,
+        evalQuestions,
         request.systemPrompt,
         request.demoPrompt,
       ),

@@ -295,6 +295,8 @@ export async function it_evaluateAnswer(
   config: ItEvaluationConfig,
   questionList: string[],
   questionAnswers?: Array<{ question: string; answer: string }>,
+  materialText?: string,
+  contextQuestions?: string[],
   customSystemPrompt?: string,
   customDemoPrompt?: string,
 ): Promise<ItEvaluation> {
@@ -331,9 +333,18 @@ export async function it_evaluateAnswer(
       "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
     ].join("\n");
   const demoPrompt = customDemoPrompt?.trim();
+  const material = materialText?.trim() || "";
+  const backgroundQuestions =
+    contextQuestions && contextQuestions.length ? contextQuestions : [];
   const userPromptParts = [
-    `题干:\n${question || "未提供"}`,
-    `回答文本:\n${transcript}`,
+    material ? `材料:\n${material}` : "材料: 无",
+    backgroundQuestions.length
+      ? `背景题目列表(仅供参考):\n${backgroundQuestions
+          .map((q, idx) => `${idx + 1}. ${q}`)
+          .join("\n")}`
+      : "背景题目列表(仅供参考): 无",
+    `本题题干:\n${question || "未提供"}`,
+    `本题回答:\n${transcript || "未提供"}`,
     `声学摘要:\n${it_buildSummary(acoustic)}`,
     notes.length
       ? `检索笔记:\n${notes
@@ -342,13 +353,15 @@ export async function it_evaluateAnswer(
       : "检索笔记: 无",
     `评分维度(每项1-10分): ${dimensions.join("。")}`,
     questions.length
-      ? `题目列表:\n${questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n")}`
-      : "题目列表: 无",
+      ? `本次评审题目列表:\n${questions
+          .map((q, idx) => `${idx + 1}. ${q}`)
+          .join("\n")}`
+      : "本次评审题目列表: 无",
     questions.length
-      ? `考生回答(按题):\n${resolvedAnswers
+      ? `本次评审回答:\n${resolvedAnswers
           .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
           .join("\n")}`
-      : "考生回答(按题): 无",
+      : "本次评审回答: 无",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
   ];
 
