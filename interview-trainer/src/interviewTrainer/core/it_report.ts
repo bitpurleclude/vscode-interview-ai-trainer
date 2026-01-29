@@ -101,6 +101,9 @@ export function it_renderReport(
     lines.push("### 示范性修改\n\n");
     response.evaluation.revisedAnswers.forEach((item, idx) => {
       lines.push(`${idx + 1}. ${item.question}\n`);
+      if (item.estimatedTimeMin !== undefined) {
+        lines.push(`- 建议用时: ${item.estimatedTimeMin}分钟\n`);
+      }
       lines.push(`- 原回答: ${item.original}\n`);
       lines.push(`- 示范: ${item.revised}\n`);
     });

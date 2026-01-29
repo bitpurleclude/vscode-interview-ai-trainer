@@ -1,4 +1,4 @@
-import {
+﻿import {
   ItAcousticMetrics,
   ItEvaluation,
   ItNoteHit,
@@ -244,8 +244,9 @@ function it_splitTranscriptByQuestions(
 function it_buildFallbackRevisions(
   questionAnswers: Array<{ question: string; answer: string }>,
   improvements: string[],
-): Array<{ question: string; original: string; revised: string }> {
-  return questionAnswers.map((item) => {
+  timePlan: number[] = [4, 3, 3],
+): Array<{ question: string; original: string; revised: string; estimatedTimeMin: number }> {
+  return questionAnswers.map((item, idx) => {
     const base = item.answer || "（作答略）";
     const cleaned = base
       .replace(/考生回答完毕|回答完毕|考生回答/g, "")
@@ -292,8 +293,11 @@ function it_buildFallbackRevisions(
       return bucket.splice(0, count).join("，");
     };
 
-    const introClause = clauses[0] || "我认为要系统推进这项工作";
-    const intro = `各位考官，${introClause}${introClause.endsWith("。") ? "" : "。"}为确保本次活动顺利开展，我将围绕统筹协调、资源落地、宣传推广与安全保障四个方面推进工作。`;
+    const time = timePlan[idx] ?? 3;
+    const introClause = clauses[0] || "需要系统推进这项工作";
+    const intro = `【用时约${time}分钟】结论：${introClause}${
+      introClause.endsWith("。") ? "" : "。"
+    }我将围绕统筹协调、资源落地、宣传推广与安全保障四个方面推进。`;
 
     const coordDetail =
       take(buckets.coord, 2) ||
@@ -319,16 +323,17 @@ function it_buildFallbackRevisions(
 
     const revised = [
       intro,
-      `第一，**统筹协调**，打好工作基础。${coordDetail}。`,
-      `第二，**资源落地**，做优特色配套。${productDetail}。`,
-      `第三，**宣传推广**，扩大活动影响。${promoteDetail}。`,
-      `第四，**安全保障**，守住工作底线。${safetyDetail}。`,
+      `第一，**统筹协调**。${coordDetail}，明确责任单位与时间节点。`,
+      `第二，**资源落地**。${productDetail}，设置量化指标与验收点。`,
+      `第三，**宣传推广**。${promoteDetail}，明确渠道与触达目标。`,
+      `第四，**安全保障**。${safetyDetail}，补齐风险兜底与应急流程。`,
       closing,
     ].join("\n\n");
     return {
       question: item.question,
       original: base,
       revised,
+      estimatedTimeMin: time,
     };
   });
 }
@@ -486,7 +491,7 @@ function it_heuristicEvaluation(
 
   const questions = questionList.length ? questionList : question ? [question] : [];
   const questionAnswers = it_splitTranscriptByQuestions(questions, transcript);
-  const revisedAnswers = it_buildFallbackRevisions(questionAnswers, improvements);
+  const revisedAnswers = it_buildFallbackRevisions(questionAnswers, improvements, [4, 3, 3]);
 
   return {
     topicTitle: question || "未命名",
@@ -520,6 +525,7 @@ export async function it_evaluateAnswer(
     (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
   const dimensions = it_normalizeDimensions(config.dimensions);
   const questions = questionList.length ? questionList : question ? [question] : [];
+  const timePlan = [4, 3, 3];
   const resolvedAnswers =
     questionAnswers && questionAnswers.length
       ? questionAnswers
@@ -539,41 +545,35 @@ export async function it_evaluateAnswer(
       issues: ["未检测到有效语音或内容过短。", "请检查麦克风音量与输入设备。"],
       improvements: ["重新回答题目，保证清晰、连续的语音输入。"],
       nextFocus: ["确保录音设备选择正确", "避免静音，完整作答每个问题"],
-      revisedAnswers: it_buildFallbackRevisions(resolvedAnswers, []),
+      revisedAnswers: it_buildFallbackRevisions(resolvedAnswers, [], [4, 3, 3]),
       mode: "heuristic",
       raw: "no_speech_detected",
     };
   }
 
-const systemPrompt =
-  customSystemPrompt?.trim() ||
-  [
-    "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
-    "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
-    "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
-    "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
-    "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
-    "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
-    "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
-  ].join("\n");
-const demoPrompt =
-  customDemoPrompt?.trim() ||
-  [
-    "示范答案需控制 3 题总时长 ≤ 10 分钟，按 4:3:3 分配，正常语速可读完。",
-    "采用公务人员/政务思维，总-分-总或“提出问题-分析原因-对策执行-风险管控”结构。",
-    "每题至少细化 1-2 个要点（数据/案例/措施/落地步骤），避免空话、套话。",
-    "语言简洁，删去冗余赘述，突出可执行行动与成效。",
-  ].join("\n");
-  const userPrompt = [
-    `题干:\\n${question || "未提供"}`,
-    `回答文本:\\n${transcript}`,
-    `声学摘要:\\n${it_buildSummary(acoustic)}`,
+  const systemPrompt =
+    customSystemPrompt?.trim() ||
+    [
+      "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
+      "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
+      "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
+      "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
+      "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
+      "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
+      "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
+      "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
+    ].join("\n");
+  const demoPrompt = customDemoPrompt?.trim();
+  const userPromptParts = [
+    `题干:\n${question || "未提供"}`,
+    `回答文本:\n${transcript}`,
+    `声学摘要:\n${it_buildSummary(acoustic)}`,
     notes.length
-      ? `检索笔记:\\n${notes
+      ? `检索笔记:\n${notes
           .map((note) => `- ${note.source} :: ${note.snippet}`)
-          .join("\\n")}`
+          .join("\n")}`
       : "检索笔记: 无",
-    `评分维度(每项1-10分): ${dimensions.join("、")}`,
+    `评分维度(每项1-10分): ${dimensions.join("。")}`,
     questions.length
       ? `题目列表:\n${questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n")}`
       : "题目列表: 无",
@@ -582,22 +582,16 @@ const demoPrompt =
           .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
           .join("\n")}`
       : "考生回答(按题): 无",
-    "要求: strengths/issues/improvements 至少各3条，nextFocus 至少2条。",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
-    "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），若内容过长需压缩到对应时长。",
-    "revised 必须基于原回答重写（禁止照搬原句），结构为 总-分-总 或 问题-原因-对策-预期/风险，至少 2-3 条可执行动作（责任人/时间节点/指标/风险兜底），删除口头禅、问候语、重复表述。",
-    "示范答案写作指引:",
-    demoPrompt,
-    "请输出完整、流畅的段落式回答：开头一句给结论，随后用“第一/第二/第三/第四”展开要点，最后收束总结。",
-    "不要使用“结论/背景/对策/总结”等标题，也不要出现“示范答题/改进要点”等提示语。",
-    "可用 **加粗** 标记关键观点或结论。",
-    "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus, revisedAnswers",
-    "scores 中的键必须与评分维度名称完全一致。",
-  ].join("\\n\\n") +
-    "\\n\\nnoteUsage/noteSuggestions: 若有检索笔记，至少各2条，格式 source :: 用法/思路；若无笔记返回空数组。" +
-    "\\n\\n输出JSON字段需包含 noteUsage 与 noteSuggestions。" +
-    "\\n\\nrevisedAnswers 必须结合 noteUsage 中的素材（至少1-2处）做改写。";
-  const promptText = `System:\\n${systemPrompt}\\n\\nUser:\\n${userPrompt}`;
+  ];
+
+  if (demoPrompt) {
+    userPromptParts.push(demoPrompt);
+  }
+
+  const userPrompt = userPromptParts.join("\n\n");
+  const promptText = `System:\n${systemPrompt}\n\nUser:\n${userPrompt}`;
+
   if (!config.apiKey || config.provider === "heuristic") {
     const fallback = it_heuristicEvaluation(
       question,
@@ -611,7 +605,7 @@ const demoPrompt =
     return {
       ...fallback,
       prompt: promptText,
-      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, [4, 3, 3]),
+      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, timePlan),
     };
   }
 
@@ -645,7 +639,7 @@ const demoPrompt =
     );
     return {
       ...fallback,
-      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, [4, 3, 3]),
+      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, timePlan),
       raw: err instanceof Error ? err.message : String(err),
       prompt: promptText,
     };
@@ -679,12 +673,19 @@ const demoPrompt =
         : parsedNoteSuggestions;
     const revisedAnswers =
       Array.isArray(parsed.revisedAnswers) && parsed.revisedAnswers.length
-        ? parsed.revisedAnswers.map((item: any, idx: number) => ({
-            question: String(item?.question || questions[idx] || `第${idx + 1}题`),
-            original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
-            revised: String(item?.revised || ""),
-          }))
-        : it_buildFallbackRevisions(resolvedAnswers, parsedImprovements);
+        ? parsed.revisedAnswers.map((item: any, idx: number) => {
+            const estimated =
+              Number(item?.estimatedTimeMin ?? item?.estimated_time_min) ||
+              timePlan[idx] ||
+              3;
+            return {
+              question: String(item?.question || questions[idx] || `第${idx + 1}题`),
+              original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
+              revised: String(item?.revised || ""),
+              estimatedTimeMin: estimated,
+            };
+          })
+        : it_buildFallbackRevisions(resolvedAnswers, parsedImprovements, timePlan);
     return {
       topicTitle: parsed.topicTitle || question || "未命名",
       topicSummary: parsed.topicSummary || "",

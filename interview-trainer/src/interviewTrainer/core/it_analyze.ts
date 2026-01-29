@@ -4,7 +4,9 @@ import * as vscode from "vscode";
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
+  ItAcousticMetrics,
   ItEvaluation,
+  ItNoteHit,
   ItQuestionTiming,
   ItAudioSegment,
   ItStepStatus,
@@ -512,6 +514,247 @@ function it_collectAnswersFromSegments(
   });
 }
 
+function it_countWordsForRate(text: string): number {
+  if (!text) {
+    return 0;
+  }
+  const chinese = text.match(/[\u4e00-\u9fff]/g) ?? [];
+  const alnum = text.match(/[A-Za-z0-9]+/g) ?? [];
+  return chinese.length + alnum.length;
+}
+
+function it_buildAcousticForTiming(
+  timing: ItQuestionTiming | undefined,
+  segments: ItAudioSegment[] | undefined,
+  fallbackText: string,
+): ItAcousticMetrics {
+  const durationSec = timing ? Math.max(0, timing.endSec - timing.startSec) : 0;
+  if (!timing || !segments || !segments.length || durationSec <= 0) {
+    return {
+      durationSec,
+      speechDurationSec: 0,
+      speechRateWpm: undefined,
+      pauseCount: 0,
+      pauseAvgSec: 0,
+      pauseMaxSec: 0,
+      rmsDbMean: 0,
+      rmsDbStd: 0,
+      snrDb: undefined,
+    };
+  }
+
+  const start = timing.startSec;
+  const end = timing.endSec;
+  let speechDurationSec = 0;
+  const pauseDurations: number[] = [];
+  const speechTexts: string[] = [];
+  const volumeValues: number[] = [];
+
+  segments.forEach((seg) => {
+    if (seg.endSec <= start || seg.startSec >= end) {
+      return;
+    }
+    const overlap = Math.min(seg.endSec, end) - Math.max(seg.startSec, start);
+    if (overlap <= 0) {
+      return;
+    }
+    if (seg.type === "speech") {
+      speechDurationSec += overlap;
+      if (seg.text) {
+        speechTexts.push(seg.text);
+      }
+      if (Number.isFinite(seg.volumeDb)) {
+        volumeValues.push(seg.volumeDb as number);
+      }
+    } else {
+      pauseDurations.push(overlap);
+    }
+  });
+
+  const speechText = speechTexts.join("") || fallbackText;
+  const wordCount = it_countWordsForRate(speechText);
+  const speechRateWpm =
+    speechDurationSec > 0 && wordCount > 0
+      ? Number((wordCount / (speechDurationSec / 60)).toFixed(2))
+      : undefined;
+  const pauseAvg =
+    pauseDurations.length > 0
+      ? pauseDurations.reduce((sum, v) => sum + v, 0) / pauseDurations.length
+      : 0;
+  const pauseMax = pauseDurations.length ? Math.max(...pauseDurations) : 0;
+  const rmsMean =
+    volumeValues.length > 0
+      ? volumeValues.reduce((sum, v) => sum + v, 0) / volumeValues.length
+      : 0;
+  const rmsStd =
+    volumeValues.length > 0
+      ? Math.sqrt(
+          volumeValues.reduce((sum, v) => sum + (v - rmsMean) ** 2, 0) /
+            volumeValues.length,
+        )
+      : 0;
+
+  return {
+    durationSec,
+    speechDurationSec: Number(speechDurationSec.toFixed(2)),
+    speechRateWpm,
+    pauseCount: pauseDurations.length,
+    pauseAvgSec: Number(pauseAvg.toFixed(2)),
+    pauseMaxSec: Number(pauseMax.toFixed(2)),
+    rmsDbMean: Number(rmsMean.toFixed(2)),
+    rmsDbStd: Number(rmsStd.toFixed(2)),
+    snrDb: undefined,
+  };
+}
+
+function it_mergeNoteHits(lists: ItNoteHit[][], topK: number): ItNoteHit[] {
+  const merged = new Map<string, ItNoteHit>();
+  lists.forEach((hits) => {
+    hits.forEach((hit) => {
+      const key = `${hit.source}::${hit.snippet}`;
+      const existing = merged.get(key);
+      if (!existing || hit.score > existing.score) {
+        merged.set(key, hit);
+      }
+    });
+  });
+  return Array.from(merged.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(1, topK));
+}
+
+function it_mergeEvaluations(params: {
+  topicTitle: string;
+  questions: string[];
+  answers: Array<{ question: string; answer: string }>;
+  evaluations: ItEvaluation[];
+  timePlan: number[];
+}): ItEvaluation {
+  const { topicTitle, questions, answers, evaluations, timePlan } = params;
+  const scores: Record<string, number> = {};
+  const totals: Record<string, { sum: number; count: number }> = {};
+  evaluations.forEach((item) => {
+    Object.entries(item.scores || {}).forEach(([key, value]) => {
+      if (!Number.isFinite(value)) {
+        return;
+      }
+      if (!totals[key]) {
+        totals[key] = { sum: 0, count: 0 };
+      }
+      totals[key].sum += value;
+      totals[key].count += 1;
+    });
+  });
+  Object.entries(totals).forEach(([key, stats]) => {
+    scores[key] = stats.count ? Math.round(stats.sum / stats.count) : 0;
+  });
+
+  const overallScore = evaluations.length
+    ? Math.round(
+        evaluations.reduce((sum, item) => sum + (item.overallScore || 0), 0) /
+          evaluations.length,
+      )
+    : 0;
+
+  const mergeList = (lists: string[][], minCount: number, fallback: string[]) => {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    lists.flat().forEach((item) => {
+      const value = String(item || "").trim();
+      if (!value || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      unique.push(value);
+    });
+    fallback.forEach((item) => {
+      if (unique.length >= minCount) {
+        return;
+      }
+      if (!seen.has(item)) {
+        seen.add(item);
+        unique.push(item);
+      }
+    });
+    return unique;
+  };
+
+  const strengths = mergeList(
+    evaluations.map((item) => item.strengths || []),
+    3,
+    ["观点有一定条理", "表达态度较为稳定", "回答有一定信息量"],
+  );
+  const issues = mergeList(
+    evaluations.map((item) => item.issues || []),
+    3,
+    ["关键要点覆盖不足", "可执行举措细节不足", "结构不够紧凑"],
+  );
+  const improvements = mergeList(
+    evaluations.map((item) => item.improvements || []),
+    3,
+    ["补充责任人/节点/指标", "压缩冗余表述", "增加政策或案例支撑"],
+  );
+  const nextFocus = mergeList(
+    evaluations.map((item) => item.nextFocus || []),
+    2,
+    ["围绕题干提炼主线", "训练结构化作答节奏"],
+  );
+
+  const noteUsage = evaluations.flatMap((item, idx) =>
+    (item.noteUsage || []).map((note) => `第${idx + 1}题: ${note}`),
+  );
+  const noteSuggestions = evaluations.flatMap((item, idx) =>
+    (item.noteSuggestions || []).map((note) => `第${idx + 1}题: ${note}`),
+  );
+
+  const revisedAnswers = questions.map((question, idx) => {
+    const evalItem = evaluations[idx];
+    const revised = evalItem?.revisedAnswers?.[0];
+    const planned = timePlan[idx] ?? revised?.estimatedTimeMin ?? 3;
+    return {
+      question,
+      original: answers[idx]?.answer || "",
+      revised: revised?.revised || "",
+      estimatedTimeMin: planned,
+    };
+  });
+
+  const topicSummary = evaluations
+    .map((item, idx) => {
+      const summary = item.topicSummary || "无";
+      return `第${idx + 1}题：${summary}`;
+    })
+    .join("；");
+
+  const prompt = evaluations
+    .map((item, idx) =>
+      item.prompt ? `【第${idx + 1}题】\n${item.prompt}` : "",
+    )
+    .filter(Boolean)
+    .join("\n\n");
+  const raw = evaluations
+    .map((item, idx) => (item.raw ? `【第${idx + 1}题】${item.raw}` : ""))
+    .filter(Boolean)
+    .join("\n\n");
+
+  return {
+    topicTitle,
+    topicSummary,
+    scores,
+    overallScore,
+    strengths,
+    issues,
+    improvements,
+    nextFocus,
+    noteUsage,
+    noteSuggestions,
+    revisedAnswers,
+    mode: evaluations.every((item) => item.mode === "llm") ? "llm" : "heuristic",
+    raw: raw || undefined,
+    prompt: prompt || undefined,
+  };
+}
+
 function it_extractKeywords(text: string, limit: number): string[] {
   const cleaned = (text || "").replace(/[^0-9A-Za-z\u4e00-\u9fff]+/g, "");
   if (!cleaned) {
@@ -752,71 +995,81 @@ export async function it_runAnalysis(
     undefined;
   let llmTimingAttempted = false;
   let llmTimingFailed = false;
-  if (audioSegments && questionList.length > 1 && llmConfig) {
-    llmTimingAttempted = true;
-    const splitAnswers = await it_splitAnswersWithLlm(
-      llmConfig,
-      questionList,
-      transcript,
-    );
-    if (splitAnswers) {
-      const alignedTimings: ItQuestionTiming[] = [];
-      for (let idx = 0; idx < splitAnswers.length; idx += 1) {
-        const aligned = it_alignAnswerToSegments(
-          splitAnswers[idx].answer,
-          audioSegments,
-        );
-        if (!aligned) {
-          alignedTimings.length = 0;
-          break;
-        }
-        alignedTimings.push({
-          question: splitAnswers[idx].question,
-          startSec: aligned.startSec,
-          endSec: aligned.endSec,
-          durationSec: Math.max(0, aligned.endSec - aligned.startSec),
-          note: "LLM逐题对齐",
-        });
-      }
-      if (alignedTimings.length === questionList.length) {
-        questionTimings = alignedTimings;
-        questionAnswers = splitAnswers;
-      }
-    }
-    if (!questionTimings.length) {
-      const assigned = await it_assignSegmentsWithLlm(
+  if (questionList.length > 1) {
+    if (audioSegments && llmConfig) {
+      llmTimingAttempted = true;
+      const splitAnswers = await it_splitAnswersWithLlm(
         llmConfig,
         questionList,
-        audioSegments,
+        transcript,
       );
-      if (assigned) {
-        questionTimings = assigned.timings;
-        questionAnswers = assigned.answers;
-      } else {
+      if (splitAnswers) {
+        questionAnswers = splitAnswers;
+        const alignedTimings: ItQuestionTiming[] = [];
+        for (let idx = 0; idx < splitAnswers.length; idx += 1) {
+          const aligned = it_alignAnswerToSegments(
+            splitAnswers[idx].answer,
+            audioSegments,
+          );
+          if (!aligned) {
+            alignedTimings.length = 0;
+            break;
+          }
+          alignedTimings.push({
+            question: splitAnswers[idx].question,
+            startSec: aligned.startSec,
+            endSec: aligned.endSec,
+            durationSec: Math.max(0, aligned.endSec - aligned.startSec),
+            note: "LLM逐题对齐",
+          });
+        }
+        if (alignedTimings.length === questionList.length) {
+          questionTimings = alignedTimings;
+        }
+      }
+      if (!questionTimings.length) {
+        const assigned = await it_assignSegmentsWithLlm(
+          llmConfig,
+          questionList,
+          audioSegments,
+        );
+        if (assigned) {
+          questionTimings = assigned.timings;
+          if (!questionAnswers) {
+            questionAnswers = assigned.answers;
+          }
+        } else {
+          llmTimingFailed = true;
+        }
+      }
+      if (!questionTimings.length) {
         llmTimingFailed = true;
       }
-    }
-  }
-  if (!questionTimings.length) {
-    if (llmTimingAttempted && llmTimingFailed) {
-      questionTimings = questionList.map((q) => ({
-        question: q,
-        startSec: 0,
-        endSec: 0,
-        durationSec: 0,
-        note: "LLM时间计算失败",
-      }));
     } else {
-    questionTimings = it_buildQuestionTimings(
-      questionText,
-      questionList,
-      acoustic.durationSec || request.audio.durationSec || 0,
-      audioSegments,
-    );
+      llmTimingAttempted = true;
+      llmTimingFailed = true;
     }
+  } else if (questionList.length === 1 && !questionAnswers) {
+    questionAnswers = [{ question: questionList[0], answer: transcript }];
+  }
+  if (!questionTimings.length && questionList.length) {
+    questionTimings = questionList.map((q) => ({
+      question: q,
+      startSec: 0,
+      endSec: 0,
+      durationSec: 0,
+      note: "LLM时间计算失败",
+    }));
+  }
+  if (!questionAnswers && questionList.length) {
+    questionAnswers = questionList.map((q) => ({
+      question: q,
+      answer: "",
+    }));
   }
 
   let notes: ItAnalyzeResponse["notes"] = [];
+  let notesByQuestion: ItNoteHit[][] = [];
   const retrievalEnabled = deps.skillConfig.retrieval?.enabled !== false;
   if (!retrievalEnabled) {
     reportProgress("notes", 100, "笔记检索 已关闭 · 本地", "success");
@@ -889,31 +1142,69 @@ export async function it_runAnalysis(
     ) {
       retrievalAnswers = it_collectAnswersFromSegments(questionTimings, audioSegments);
     }
-    const retrievalQueries = it_buildRetrievalQueries({
-      questionText,
-      questionList,
-      transcript,
-      answers: retrievalAnswers,
-    });
-    const queryList = retrievalQueries.length ? retrievalQueries : [transcript];
     let notesError: string | undefined;
     try {
-      notes = await it_retrieveNotesMulti(queryList, corpus, {
-        mode: retrievalMode === "keyword" ? "keyword" : "vector",
-        topK: notesTopK,
-        minScore: notesMinScore,
-        cacheDir: notesCacheDir,
-        vector: {
-          provider: resolvedVector.provider || "",
-          apiKey: resolvedVector.api_key || "",
-          baseUrl: resolvedVector.base_url || "",
-          model: resolvedVector.model || "",
-          timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
-          maxRetries: Number(resolvedVector.max_retries ?? 1),
-          batchSize: Number(resolvedVector.batch_size ?? 16),
-          queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
-        },
-      });
+      const questionsForNotes = questionList.length
+        ? questionList
+        : questionText
+          ? [questionText]
+          : [];
+      const resolvedAnswers =
+        retrievalAnswers && retrievalAnswers.length === questionsForNotes.length
+          ? retrievalAnswers
+          : questionsForNotes.map((question) => ({ question, answer: "" }));
+      if (questionsForNotes.length) {
+        const noteTasks = questionsForNotes.map((question, idx) => {
+          const answer = resolvedAnswers[idx]?.answer || "";
+          const queries = it_buildRetrievalQueries({
+            questionText: question,
+            questionList: [question],
+            transcript: answer || transcript,
+            answers: answer ? [{ question, answer }] : undefined,
+          });
+          const queryList = queries.length ? queries : [question];
+          return it_retrieveNotesMulti(queryList, corpus, {
+            mode: retrievalMode === "keyword" ? "keyword" : "vector",
+            topK: notesTopK,
+            minScore: notesMinScore,
+            cacheDir: notesCacheDir,
+            vector: {
+              provider: resolvedVector.provider || "",
+              apiKey: resolvedVector.api_key || "",
+              baseUrl: resolvedVector.base_url || "",
+              model: resolvedVector.model || "",
+              timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
+              maxRetries: Number(resolvedVector.max_retries ?? 1),
+              batchSize: Number(resolvedVector.batch_size ?? 16),
+              queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
+            },
+          });
+        });
+        notesByQuestion = await Promise.all(noteTasks);
+        notes = it_mergeNoteHits(notesByQuestion, notesTopK);
+      } else {
+        const fallbackQuery = transcript.trim()
+          ? [transcript.trim().slice(0, 240)]
+          : [];
+        notes = fallbackQuery.length
+          ? await it_retrieveNotesMulti(fallbackQuery, corpus, {
+              mode: retrievalMode === "keyword" ? "keyword" : "vector",
+              topK: notesTopK,
+              minScore: notesMinScore,
+              cacheDir: notesCacheDir,
+              vector: {
+                provider: resolvedVector.provider || "",
+                apiKey: resolvedVector.api_key || "",
+                baseUrl: resolvedVector.base_url || "",
+                model: resolvedVector.model || "",
+                timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
+                maxRetries: Number(resolvedVector.max_retries ?? 1),
+                batchSize: Number(resolvedVector.batch_size ?? 16),
+                queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
+              },
+            })
+          : [];
+      }
     } catch (err) {
       notesError = err instanceof Error ? err.message : String(err);
     }
@@ -980,17 +1271,52 @@ export async function it_runAnalysis(
   );
   const evalLabel = evalUsesApi ? "API" : "启发式";
   reportProgress("evaluation", 10, `面试评价 10% · ${evalLabel}`, "running");
-  const evaluation: ItEvaluation = await it_evaluateAnswer(
-    questionText || topicTitle,
-    transcript,
-    acoustic,
-    notes,
-    evaluationConfig,
-    questionList,
-    questionAnswers,
-    request.systemPrompt,
-    request.demoPrompt,
+
+  const timePlan = [4, 3, 3];
+  const evalQuestions = questionList.length
+    ? questionList
+    : questionText
+      ? [questionText]
+      : [topicTitle];
+  const evalAnswers =
+    questionAnswers && questionAnswers.length === evalQuestions.length
+      ? questionAnswers
+      : evalQuestions.map((question) => ({ question, answer: "" }));
+  const evalNotes =
+    notesByQuestion.length === evalQuestions.length
+      ? notesByQuestion
+      : evalQuestions.map(() => notes);
+  const evalAcoustics = evalQuestions.map((_, idx) =>
+    it_buildAcousticForTiming(
+      questionTimings[idx],
+      audioSegments,
+      evalAnswers[idx]?.answer || "",
+    ),
   );
+
+  const evaluations = await Promise.all(
+    evalQuestions.map((question, idx) =>
+      it_evaluateAnswer(
+        question,
+        evalAnswers[idx]?.answer || "",
+        evalAcoustics[idx],
+        evalNotes[idx] || [],
+        evaluationConfig,
+        [question],
+        [{ question, answer: evalAnswers[idx]?.answer || "" }],
+        request.systemPrompt,
+        request.demoPrompt,
+      ),
+    ),
+  );
+
+  const evaluation: ItEvaluation = it_mergeEvaluations({
+    topicTitle: questionText || topicTitle,
+    questions: evalQuestions,
+    answers: evalAnswers,
+    evaluations,
+    timePlan,
+  });
   reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
 
   const response: ItAnalyzeResponse = {

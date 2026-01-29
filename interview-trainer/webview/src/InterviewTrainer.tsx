@@ -154,13 +154,13 @@ const STRICT_SYSTEM_PROMPT = [
   "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
   "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
   "若提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与参考思路（每项至少2条）。",
-  "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须分题重写，禁止复述原句，需重排逻辑并补充动作细节。",
+  "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
+  "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
 ].join("\n");
 const DEFAULT_DEMO_PROMPT = [
-  "输出分题示范数组，每题独立段落，3题总时长≤10分钟，推荐用时 4/3/3 分钟。",
-  "结构：结论-问题/原因-对策-预期/风险，公务员思维，总-分-总收束；禁止套话、禁止复述原文。",
-  "每题至少2-3条动作，含责任人/时间节点/量化指标或检查点，可补充数据、案例、落地步骤、风险兜底。",
-  "语言简洁，删去赘述，突出可执行性与预期成效；禁止出现问候语/开场白（如“各位考官”“考生开始答题”）；必要时用 **加粗** 标出关键动作。",
+  "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），内容过长需压缩到对应时长。",
+  "revised 必须基于原回答重写（禁止照搬原句），结构为 总-分-总 或 问题-原因-对策-预期/风险。",
+  "每题至少 2-3 条可执行动作（责任人/时间节点/指标/风险兜底），删除口头禅、问候语、重复表述。",
 ].join("\n");
 
 const InterviewTrainer: React.FC = () => {
@@ -397,9 +397,9 @@ const InterviewTrainer: React.FC = () => {
         applyProfileToForm(resp.content);
         applyRetrievalToForm(resp.content);
         setCustomPrompt(
-          resp.content.prompts?.evaluationPrompt || STRICT_SYSTEM_PROMPT,
+          resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
         );
-        setDemoPrompt(resp.content.prompts?.demoPrompt || DEFAULT_DEMO_PROMPT);
+        setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
       } else {
         // fallback to unlock UI even if后端出错
         const fallbackConfig: ItConfigSnapshot = {
@@ -485,8 +485,8 @@ const InterviewTrainer: React.FC = () => {
     applyProfileToForm(config);
     applyRetrievalToForm(config);
     if (config.prompts) {
-      setCustomPrompt(config.prompts.evaluationPrompt || STRICT_SYSTEM_PROMPT);
-      setDemoPrompt(config.prompts.demoPrompt || DEFAULT_DEMO_PROMPT);
+      setCustomPrompt(config.prompts.evaluationPrompt ?? STRICT_SYSTEM_PROMPT);
+      setDemoPrompt(config.prompts.demoPrompt ?? DEFAULT_DEMO_PROMPT);
     }
   }, [config, applyProfileToForm, applyRetrievalToForm]);
 
@@ -1680,10 +1680,13 @@ const InterviewTrainer: React.FC = () => {
                       <h4>示范性修改</h4>
                       <div className="it-revised-list">
                         {analysisResult.evaluation.revisedAnswers.map((item, idx) => (
-                          <div key={`${idx}-${item.question}`} className="it-revised-item">
-                            <div className="it-revised-item__title">
-                              {idx + 1}. {item.question}
-                            </div>
+                            <div key={`${idx}-${item.question}`} className="it-revised-item">
+                              <div className="it-revised-item__title">
+                                {idx + 1}. {item.question}
+                                {typeof item.estimatedTimeMin === "number"
+                                  ? `（建议${item.estimatedTimeMin}分钟）`
+                                  : ""}
+                              </div>
                             <div className="it-revised-item__block">
                               <span>原回答：</span>
                               <span>{item.original}</span>

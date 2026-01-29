@@ -116,6 +116,7 @@ export interface ItRevisedAnswer {
   question: string;
   original: string;
   revised: string;
+  estimatedTimeMin?: number;
 }
 
 export interface ItAnalyzeResponse {
