@@ -11,12 +11,69 @@ export interface ItEmbeddingConfig {
   maxRetries: number;
 }
 
-function it_buildEmbeddingUrl(cfg: ItEmbeddingConfig): string {
+function it_buildEmbeddingUrl(cfg: ItEmbeddingConfig, useMultimodal: boolean): string {
   const base = (cfg.baseUrl || "").replace(/\/$/, "");
   if (cfg.provider === "volc_doubao") {
-    return `${base}/api/v3/embeddings`;
+    return useMultimodal
+      ? `${base}/api/v3/embeddings/multimodal`
+      : `${base}/api/v3/embeddings`;
   }
   return `${base}/embeddings`;
+}
+
+function it_isDoubaoMultimodalModel(cfg: ItEmbeddingConfig): boolean {
+  if (cfg.provider !== "volc_doubao") {
+    return false;
+  }
+  const model = String(cfg.model || "").toLowerCase();
+  return model.includes("vision") || model.includes("multimodal");
+}
+
+async function it_callDoubaoMultimodal(
+  cfg: ItEmbeddingConfig,
+  inputs: string[],
+): Promise<number[][]> {
+  const url = it_buildEmbeddingUrl(cfg, true);
+  const headers = {
+    Authorization: `Bearer ${cfg.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  const results: number[][] = [];
+  for (const text of inputs) {
+    const payload = {
+      model: cfg.model,
+      input: [
+        {
+          type: "text",
+          text,
+        },
+      ],
+    };
+    let lastError: unknown = undefined;
+    for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+      try {
+        const response = await axios.post(url, payload, {
+          headers,
+          timeout: cfg.timeoutSec * 1000,
+        });
+        const embedding = response.data?.data?.[0]?.embedding;
+        if (!Array.isArray(embedding)) {
+          throw new Error("Embedding response missing data");
+        }
+        results.push(embedding as number[]);
+        lastError = undefined;
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (lastError) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error("Embedding request failed.");
+    }
+  }
+  return results;
 }
 
 export async function it_callEmbedding(
@@ -26,7 +83,10 @@ export async function it_callEmbedding(
   if (!inputs.length) {
     return [];
   }
-  const url = it_buildEmbeddingUrl(cfg);
+  if (it_isDoubaoMultimodalModel(cfg)) {
+    return it_callDoubaoMultimodal(cfg, inputs);
+  }
+  const url = it_buildEmbeddingUrl(cfg, false);
   const headers = {
     Authorization: `Bearer ${cfg.apiKey}`,
     "Content-Type": "application/json",
