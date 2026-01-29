@@ -67,7 +67,7 @@ function it_readText(filePath: string): string {
   }
 }
 
-function it_splitText(text: string, maxLen: number): string[] {
+function it_splitByParagraphs(text: string, maxLen: number): string[] {
   const parts = text
     .split(/\n\s*\n/)
     .map((p) => p.trim())
@@ -88,6 +88,57 @@ function it_splitText(text: string, maxLen: number): string[] {
   if (current.length) {
     chunks.push(current.join("\n\n"));
   }
+  return chunks;
+}
+
+function it_splitText(text: string, maxLen: number): string[] {
+  const normalized = (text || "").replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const headingPattern = /^#{2,3}\s+/;
+  let hasHeading = false;
+  const sections: string[] = [];
+  let current: string[] = [];
+  let preamble: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (headingPattern.test(line.trim())) {
+      hasHeading = true;
+      if (current.length) {
+        sections.push(current.join("\n").trim());
+        current = [];
+      }
+      if (preamble.length) {
+        current.push(...preamble);
+        preamble = [];
+      }
+      current.push(line.trim());
+      continue;
+    }
+    if (!hasHeading && !current.length) {
+      if (line.trim()) {
+        preamble.push(line.trim());
+      } else if (preamble.length) {
+        preamble.push("");
+      }
+      continue;
+    }
+    current.push(line);
+  }
+
+  if (current.length) {
+    sections.push(current.join("\n").trim());
+  }
+
+  const blocks = hasHeading ? sections : [normalized.trim()];
+  const chunks: string[] = [];
+  blocks.forEach((block) => {
+    const trimmed = block.trim();
+    if (!trimmed) {
+      return;
+    }
+    chunks.push(...it_splitByParagraphs(trimmed, maxLen));
+  });
   return chunks;
 }
 
