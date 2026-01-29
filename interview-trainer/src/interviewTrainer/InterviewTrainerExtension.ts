@@ -72,14 +72,36 @@ export class InterviewTrainerExtension {
   } | null = null;
   private detectedInput: string | null = null;
   private availableInputs: string[] | null = null;
+  private outputChannel: vscode.OutputChannel;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly webviewProtocol: WebviewProtocol,
   ) {
+    this.outputChannel = vscode.window.createOutputChannel("Interview Trainer");
     this.configBundle = it_loadConfigBundle(this.context);
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
     this.registerHandlers();
+  }
+
+  private logEmbeddingTestFailure(error: unknown): void {
+    const stamp = new Date().toISOString();
+    this.outputChannel.appendLine(`[${stamp}] Embedding test failed.`);
+    const debug = (error as { itDebug?: unknown })?.itDebug;
+    if (debug) {
+      this.outputChannel.appendLine("Request/Response:");
+      try {
+        this.outputChannel.appendLine(JSON.stringify(debug, null, 2));
+      } catch {
+        this.outputChannel.appendLine(String(debug));
+      }
+    }
+    if (error instanceof Error) {
+      this.outputChannel.appendLine(`Message: ${error.message}`);
+    } else if (error) {
+      this.outputChannel.appendLine(`Message: ${String(error)}`);
+    }
+    this.outputChannel.show(true);
   }
 
   private requireWorkspaceRoot(): string {
@@ -1076,9 +1098,14 @@ export class InterviewTrainerExtension {
       if (!cfg.baseUrl || !cfg.model) {
         throw new Error("请填写 Embedding Base URL 与模型");
       }
-      const vectors = await it_callEmbedding(cfg, ["embedding test"]);
-      const length = vectors?.[0]?.length || 0;
-      return { ok: true, length };
+      try {
+        const vectors = await it_callEmbedding(cfg, ["embedding test"]);
+        const length = vectors?.[0]?.length || 0;
+        return { ok: true, length };
+      } catch (error) {
+        this.logEmbeddingTestFailure(error);
+        throw error;
+      }
     });
     this.webviewProtocol.on("openFile", async (msg) => {
       const target = msg.data?.path;
