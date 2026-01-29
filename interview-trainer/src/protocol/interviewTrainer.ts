@@ -104,6 +104,8 @@ export interface ItEvaluation {
   issues: string[];
   improvements: string[];
   nextFocus: string[];
+  noteUsage?: string[];
+  noteSuggestions?: string[];
   revisedAnswers?: ItRevisedAnswer[];
   mode: "llm" | "heuristic";
   raw?: string;

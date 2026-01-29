@@ -78,6 +78,25 @@ export function it_renderReport(
   });
   lines.push("\n");
 
+  if (response.evaluation.noteUsage && response.evaluation.noteUsage.length) {
+    lines.push("### 绗旇寮曠敤\n\n");
+    response.evaluation.noteUsage.forEach((item) => {
+      lines.push(`- ${item}\n`);
+    });
+    lines.push("\n");
+  }
+
+  if (
+    response.evaluation.noteSuggestions &&
+    response.evaluation.noteSuggestions.length
+  ) {
+    lines.push("### 鍙敤绱犳潗/鍙弬鑰冩€濊矾\n\n");
+    response.evaluation.noteSuggestions.forEach((item) => {
+      lines.push(`- ${item}\n`);
+    });
+    lines.push("\n");
+  }
+
   if (response.evaluation.revisedAnswers?.length) {
     lines.push("### 示范性修改\n\n");
     response.evaluation.revisedAnswers.forEach((item, idx) => {

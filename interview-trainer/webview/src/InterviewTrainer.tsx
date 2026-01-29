@@ -153,6 +153,7 @@ const STRICT_SYSTEM_PROMPT = [
   "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
   "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
   "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
+  "若提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与参考思路（每项至少2条）。",
   "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须分题重写，禁止复述原句，需重排逻辑并补充动作细节。",
 ].join("\n");
 const DEFAULT_DEMO_PROMPT = [
@@ -1651,6 +1652,28 @@ const InterviewTrainer: React.FC = () => {
                       ))}
                     </ul>
                   </div>
+                  {analysisResult.evaluation.noteUsage &&
+                  analysisResult.evaluation.noteUsage.length > 0 && (
+                    <div className="it-evaluation__section">
+                      <h4>笔记引用</h4>
+                      <ul>
+                        {analysisResult.evaluation.noteUsage.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {analysisResult.evaluation.noteSuggestions &&
+                  analysisResult.evaluation.noteSuggestions.length > 0 && (
+                    <div className="it-evaluation__section">
+                      <h4>可用素材/参考思路</h4>
+                      <ul>
+                        {analysisResult.evaluation.noteSuggestions.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {analysisResult.evaluation.revisedAnswers &&
                   analysisResult.evaluation.revisedAnswers.length > 0 && (
                     <div className="it-evaluation__section">

@@ -456,6 +456,12 @@ function it_heuristicEvaluation(
     improvements.push("可结合笔记中的观点或案例增强内容深度。");
   }
 
+  const noteUsage = notes.length
+    ? notes.slice(0, 3).map((note) => `${note.source} :: ${note.snippet}`)
+    : [];
+  const noteSuggestions = notes.length
+    ? notes.slice(0, 3).map((note) => `鍙互鍙傝€? ${note.snippet}`)
+    : [];
   const overall =
     Math.round(
       (Object.values(scores).reduce((sum, v) => sum + v, 0) /
@@ -491,6 +497,8 @@ function it_heuristicEvaluation(
     issues,
     improvements,
     nextFocus,
+    noteUsage,
+    noteSuggestions,
     revisedAnswers,
     mode: "heuristic",
     raw: language,
@@ -546,6 +554,7 @@ const systemPrompt =
     "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
     "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
     "strengths/issues/improvements/nextFocus 每项至少2条；revisedAnswers 必须基于对应原答案，给出精炼、结构化改写。",
+    "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
   ].join("\n");
 const demoPrompt =
   customDemoPrompt?.trim() ||
@@ -584,7 +593,10 @@ const demoPrompt =
     "可用 **加粗** 标记关键观点或结论。",
     "输出JSON字段: topicTitle, topicSummary, scores, overallScore, strengths, issues, improvements, nextFocus, revisedAnswers",
     "scores 中的键必须与评分维度名称完全一致。",
-  ].join("\\n\\n");
+  ].join("\\n\\n") +
+    "\\n\\nnoteUsage/noteSuggestions: 若有检索笔记，至少各2条，格式 source :: 用法/思路；若无笔记返回空数组。" +
+    "\\n\\n输出JSON字段需包含 noteUsage 与 noteSuggestions。" +
+    "\\n\\nrevisedAnswers 必须结合 noteUsage 中的素材（至少1-2处）做改写。";
   const promptText = `System:\\n${systemPrompt}\\n\\nUser:\\n${userPrompt}`;
   if (!config.apiKey || config.provider === "heuristic") {
     const fallback = it_heuristicEvaluation(
@@ -648,6 +660,23 @@ const demoPrompt =
     const overallScore =
       parsed.overallScore || it_computeOverallScore(mappedScores, dimensions);
     const parsedImprovements = it_toStringArray(parsed.improvements);
+    const parsedNoteUsage = it_toStringArray(
+      parsed.noteUsage ?? parsed.note_usage ?? parsed.noteUse ?? parsed.note_use,
+    );
+    const parsedNoteSuggestions = it_toStringArray(
+      parsed.noteSuggestions ??
+        parsed.note_suggestions ??
+        parsed.noteSuggestion ??
+        parsed.note_suggestion,
+    );
+    const fallbackNoteUsage =
+      notes.length && !parsedNoteUsage.length
+        ? notes.slice(0, 3).map((note) => `${note.source} :: ${note.snippet}`)
+        : parsedNoteUsage;
+    const fallbackNoteSuggestions =
+      notes.length && !parsedNoteSuggestions.length
+        ? notes.slice(0, 3).map((note) => `鍙互鍙傝€? ${note.snippet}`)
+        : parsedNoteSuggestions;
     const revisedAnswers =
       Array.isArray(parsed.revisedAnswers) && parsed.revisedAnswers.length
         ? parsed.revisedAnswers.map((item: any, idx: number) => ({
@@ -665,6 +694,8 @@ const demoPrompt =
       issues: it_toStringArray(parsed.issues),
       improvements: parsedImprovements,
       nextFocus: it_toStringArray(parsed.nextFocus),
+      noteUsage: fallbackNoteUsage,
+      noteSuggestions: fallbackNoteSuggestions,
       revisedAnswers,
       mode: "llm",
       raw: content,
