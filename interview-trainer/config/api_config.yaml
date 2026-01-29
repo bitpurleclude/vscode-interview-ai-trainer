@@ -6,6 +6,8 @@ active:
   acoustic: api
 environments:
   prod:
+    llm_provider: baidu_qianfan
+    asr_provider: baidu_vop
     llm:
       provider: baidu_qianfan
       model: ernie-4.5-turbo-128k
@@ -41,6 +43,8 @@ environments:
       timeout_sec: 60
       max_retries: 1
   test:
+    llm_provider: baidu_qianfan
+    asr_provider: baidu_vop
     llm:
       provider: baidu_qianfan
       model: ernie-4.5-turbo-128k

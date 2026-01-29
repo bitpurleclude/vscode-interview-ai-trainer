@@ -1,0 +1,27 @@
+provider: baidu_vop
+display_name: Baidu ASR
+llm:
+  provider: ""
+  base_url: ""
+  model: ""
+  api_key: ""
+  temperature: 0.8
+  top_p: 0.8
+  timeout_sec: 60
+  max_retries: 1
+embedding:
+  provider: ""
+  base_url: ""
+  model: ""
+  api_key: ""
+  timeout_sec: 30
+  max_retries: 1
+asr:
+  provider: baidu_vop
+  base_url: https://vop.baidu.com/server_api
+  api_key: ""
+  secret_key: ""
+  language: zh
+  dev_pid: 1537
+  timeout_sec: 120
+  max_retries: 1

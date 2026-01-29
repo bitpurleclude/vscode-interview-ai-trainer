@@ -19,11 +19,14 @@ import {
   ItApiConfig,
   it_applySecretOverrides,
   it_ensureConfigFiles,
+  it_getUserProviderDir,
   it_saveApiConfig,
   it_saveSkillConfig,
+  it_saveProviderConfig,
 } from "./api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "./api/it_llm";
 import { it_callBaiduAsr } from "./api/it_baidu";
+import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
 import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
@@ -119,6 +122,7 @@ export class InterviewTrainerExtension {
       acousticProvider: apiConfig.active?.acoustic || "api",
       llmProfiles,
       asrProfiles,
+      providerProfiles: this.configBundle.providers || {},
       prompts: {
         evaluationPrompt:
           (this.configBundle.skill.prompts?.evaluation_prompt as string) || "",
@@ -156,6 +160,8 @@ export class InterviewTrainerExtension {
         mode: retrieval.mode || "vector",
         topK: Number(retrieval.top_k ?? 5),
         minScore: Number(retrieval.min_score ?? 0.2),
+        embeddingProvider:
+          retrieval.embedding_provider || vector.provider || vectorDefaults.provider,
         vector: {
           provider: vector.provider || vectorDefaults.provider,
           baseUrl: vector.base_url || vectorDefaults.base_url,
@@ -179,6 +185,7 @@ export class InterviewTrainerExtension {
 
   private async refreshConfigSnapshot(): Promise<ItConfigSnapshot> {
     this.configBundle = it_loadConfigBundle(this.context);
+    this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
     this.configBundle.api = await it_applySecretOverrides(
       this.context,
       this.configBundle.api,
@@ -190,7 +197,17 @@ export class InterviewTrainerExtension {
   private it_getLlmConfig(): ItLlmConfig | null {
     const env = this.configBundle.api.active?.environment || "prod";
     const envConfig = this.configBundle.api.environments?.[env] ?? {};
-    const llm = envConfig.llm ?? {};
+    const providerId =
+      envConfig.llm_provider || envConfig.llm?.provider || this.configBundle.api.active?.llm;
+    const providerProfile =
+      providerId && this.configBundle.providers?.[providerId]?.llm
+        ? this.configBundle.providers?.[providerId]?.llm
+        : undefined;
+    const llm = {
+      ...(providerProfile || {}),
+      ...(envConfig.llm || {}),
+      provider: providerId || envConfig.llm?.provider,
+    };
     if (!llm.provider || !llm.api_key) {
       return null;
     }
@@ -217,6 +234,43 @@ export class InterviewTrainerExtension {
   private updateState(nextState: Partial<ItState>): void {
     this.state = { ...this.state, ...nextState };
     this.webviewProtocol.send("it/stateUpdate", this.state);
+  }
+
+  private resolveApiConfigWithProviders(apiConfig: ItApiConfig): ItApiConfig {
+    const env = apiConfig.active?.environment || "prod";
+    const envConfig = apiConfig.environments?.[env] ?? {};
+    const providers = this.configBundle.providers || {};
+    const llmProvider =
+      envConfig.llm_provider || envConfig.llm?.provider || apiConfig.active?.llm;
+    const asrProvider =
+      envConfig.asr_provider || envConfig.asr?.provider || apiConfig.active?.asr;
+    const llmProfile = llmProvider ? providers[llmProvider]?.llm : undefined;
+    const asrProfile = asrProvider ? providers[asrProvider]?.asr : undefined;
+    const mergedLlm = llmProfile
+      ? {
+          ...llmProfile,
+          ...(envConfig.llm || {}),
+          provider: llmProvider,
+        }
+      : envConfig.llm;
+    const mergedAsr = asrProfile
+      ? {
+          ...asrProfile,
+          ...(envConfig.asr || {}),
+          provider: asrProvider,
+        }
+      : envConfig.asr;
+    return {
+      ...apiConfig,
+      environments: {
+        ...apiConfig.environments,
+        [env]: {
+          ...envConfig,
+          llm: mergedLlm,
+          asr: mergedAsr,
+        },
+      },
+    };
   }
 
   private buildRunSteps(): ItStepState[] {
@@ -511,6 +565,7 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/parseQuestions", async (msg) => {
       const text = String(msg.data?.text || "");
       this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
       this.configBundle.api = await it_applySecretOverrides(
         this.context,
         this.configBundle.api,
@@ -548,6 +603,11 @@ export class InterviewTrainerExtension {
           mode: incoming.mode || current.mode || "vector",
           top_k: Number(incoming.topK ?? current.top_k ?? 5),
           min_score: Number(incoming.minScore ?? current.min_score ?? 0.2),
+          embedding_provider:
+            incoming.embeddingProvider ||
+            current.embedding_provider ||
+            incomingVector.provider ||
+            currentVector.provider,
           vector: {
             ...currentVector,
             provider: incomingVector.provider ?? currentVector.provider ?? "volc_doubao",
@@ -566,10 +626,125 @@ export class InterviewTrainerExtension {
           },
         },
       };
+      const embeddingProvider =
+        incoming.embeddingProvider ||
+        current.embedding_provider ||
+        incomingVector.provider ||
+        currentVector.provider;
+      if (embeddingProvider) {
+        const existing = this.configBundle.providers?.[embeddingProvider] || {
+          provider: embeddingProvider,
+        };
+        it_saveProviderConfig(this.context, embeddingProvider, {
+          ...existing,
+          provider: embeddingProvider,
+          embedding: {
+            ...(existing.embedding || {}),
+            provider: incomingVector.provider ?? existing.embedding?.provider ?? embeddingProvider,
+            base_url: incomingVector.baseUrl ?? existing.embedding?.base_url ?? "",
+            api_key: incomingVector.apiKey ?? existing.embedding?.api_key ?? "",
+            model: incomingVector.model ?? existing.embedding?.model ?? "",
+            timeout_sec: Number(
+              incomingVector.timeoutSec ?? existing.embedding?.timeout_sec ?? 30,
+            ),
+            max_retries: Number(
+              incomingVector.maxRetries ?? existing.embedding?.max_retries ?? 1,
+            ),
+          },
+        });
+      }
       it_saveSkillConfig(this.context, this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/createProviderConfig", async (msg) => {
+      const providerId = String(msg.data?.providerId || "").trim();
+      if (!providerId || !/^[a-zA-Z0-9_-]+$/.test(providerId)) {
+        throw new Error("providerId 只能包含字母、数字、_、-");
+      }
+      this.configBundle = it_loadConfigBundle(this.context);
+      if (this.configBundle.providers?.[providerId]) {
+        throw new Error("Provider 已存在");
+      }
+      const displayName = String(msg.data?.displayName || "").trim();
+      const payload = {
+        provider: providerId,
+        display_name: displayName || providerId,
+        llm: {
+          provider: providerId,
+          base_url: "",
+          model: "",
+          api_key: "",
+          temperature: 0.8,
+          top_p: 0.8,
+          timeout_sec: 60,
+          max_retries: 1,
+        },
+        embedding: {
+          provider: providerId,
+          base_url: "",
+          model: "",
+          api_key: "",
+          timeout_sec: 30,
+          max_retries: 1,
+        },
+        asr: {
+          provider: "",
+          base_url: "",
+          api_key: "",
+          secret_key: "",
+          language: "zh",
+          dev_pid: 1537,
+          timeout_sec: 120,
+          max_retries: 1,
+        },
+      };
+      it_saveProviderConfig(this.context, providerId, payload);
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/saveProviderConfig", async (msg) => {
+      const providerId = String(msg.data?.providerId || "").trim();
+      if (!providerId) {
+        throw new Error("missing providerId");
+      }
+      const incoming = msg.data?.profile || {};
+      this.configBundle = it_loadConfigBundle(this.context);
+      const existing = this.configBundle.providers?.[providerId] || { provider: providerId };
+      const next = {
+        ...existing,
+        ...incoming,
+        provider: providerId,
+        llm: {
+          ...(existing.llm || {}),
+          ...(incoming.llm || {}),
+        },
+        embedding: {
+          ...(existing.embedding || {}),
+          ...(incoming.embedding || {}),
+        },
+        asr: {
+          ...(existing.asr || {}),
+          ...(incoming.asr || {}),
+        },
+      };
+      it_saveProviderConfig(this.context, providerId, next);
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/openProviderConfig", async (msg) => {
+      const providerId = String(msg.data?.providerId || "").trim();
+      if (!providerId) {
+        return;
+      }
+      const providerDir = it_getUserProviderDir(this.context);
+      const target = path.join(providerDir, `${providerId}.yaml`);
+      await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
     });
     this.webviewProtocol.on("it/clearEmbeddingCache", async () => {
       const workspaceRoot = this.requireWorkspaceRoot();
@@ -714,6 +889,7 @@ export class InterviewTrainerExtension {
         timeout_sec: Number(llmForm.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
         max_retries: Number(llmForm.maxRetries ?? envConfig.llm?.max_retries ?? 1),
       };
+      envConfig.llm_provider = envConfig.llm.provider;
       llmProfiles[envConfig.llm.provider] = {
         ...envConfig.llm,
       };
@@ -731,6 +907,7 @@ export class InterviewTrainerExtension {
         timeout_sec: Number(asrForm.timeoutSec ?? envConfig.asr?.timeout_sec ?? 120),
         max_retries: Number(asrForm.maxRetries ?? envConfig.asr?.max_retries ?? 1),
       };
+      envConfig.asr_provider = envConfig.asr.provider;
       asrProfiles[envConfig.asr.provider] = {
         ...envConfig.asr,
       };
@@ -763,7 +940,33 @@ export class InterviewTrainerExtension {
         envConfig.asr.secret_key || "",
       );
 
+      const llmProvider = envConfig.llm.provider;
+      if (llmProvider && llmProvider !== "heuristic") {
+        const existing = this.configBundle.providers?.[llmProvider] || { provider: llmProvider };
+        it_saveProviderConfig(this.context, llmProvider, {
+          ...existing,
+          provider: llmProvider,
+          llm: {
+            ...(existing.llm || {}),
+            ...envConfig.llm,
+          },
+        });
+      }
+      const asrProvider = envConfig.asr.provider;
+      if (asrProvider && asrProvider !== "mock") {
+        const existing = this.configBundle.providers?.[asrProvider] || { provider: asrProvider };
+        it_saveProviderConfig(this.context, asrProvider, {
+          ...existing,
+          provider: asrProvider,
+          asr: {
+            ...(existing.asr || {}),
+            ...envConfig.asr,
+          },
+        });
+      }
+
       it_saveApiConfig(this.context, apiConfig);
+      this.configBundle = it_loadConfigBundle(this.context);
       this.configBundle.api = apiConfig;
       this.configSnapshot = this.buildConfigSnapshot(apiConfig);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
@@ -855,6 +1058,27 @@ export class InterviewTrainerExtension {
         },
       );
       return { ok: true, content: text || "(无识别结果，接口可用)" };
+    });
+    this.webviewProtocol.on("it/testEmbedding", async (msg) => {
+      const embedForm = msg.data?.embedding || {};
+      const provider = embedForm.provider || "volc_doubao";
+      const cfg = {
+        provider,
+        apiKey: embedForm.apiKey || "",
+        baseUrl: embedForm.baseUrl || "",
+        model: embedForm.model || "",
+        timeoutSec: Number(embedForm.timeoutSec ?? 30),
+        maxRetries: Number(embedForm.maxRetries ?? 0),
+      };
+      if (!cfg.apiKey) {
+        throw new Error("缺少 Embedding API Key");
+      }
+      if (!cfg.baseUrl || !cfg.model) {
+        throw new Error("请填写 Embedding Base URL 与模型");
+      }
+      const vectors = await it_callEmbedding(cfg, ["embedding test"]);
+      const length = vectors?.[0]?.length || 0;
+      return { ok: true, length };
     });
     this.webviewProtocol.on("openFile", async (msg) => {
       const target = msg.data?.path;
@@ -1235,7 +1459,10 @@ export class InterviewTrainerExtension {
         {
           context: this.context,
           apiConfig: this.configBundle.api,
-          skillConfig: this.configBundle.skill,
+          skillConfig: {
+            ...this.configBundle.skill,
+            providers: this.configBundle.providers,
+          },
           workspaceRoot,
           onProgress: (update) => this.updateProgress(update),
         },

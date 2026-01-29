@@ -173,6 +173,10 @@ const InterviewTrainer: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [nativeInputs, setNativeInputs] = useState<string[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>("");
+  const [providerDraft, setProviderDraft] = useState({
+    id: "",
+    name: "",
+  });
   const [apiForm, setApiForm] = useState({
     environment: "prod",
     llmProfiles: {} as Record<string, any>,
@@ -227,19 +231,27 @@ const InterviewTrainer: React.FC = () => {
   const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
     null,
   );
+  const [creatingProvider, setCreatingProvider] = useState(false);
+  const [providerCreateMessage, setProviderCreateMessage] = useState<string | null>(null);
   const [testingLlm, setTestingLlm] = useState(false);
   const [testingAsr, setTestingAsr] = useState(false);
   const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
   const [asrTestMessage, setAsrTestMessage] = useState<string | null>(null);
+  const [testingEmbedding, setTestingEmbedding] = useState(false);
+  const [embeddingTestMessage, setEmbeddingTestMessage] = useState<string | null>(null);
   const applyProfileToForm = useCallback(
     (cfg: ItConfigSnapshot | null, targetProvider?: string, targetAsr?: string) => {
       if (!cfg) return;
       const provider = targetProvider || cfg.llmProvider || cfg.llm?.provider || "baidu_qianfan";
       const asrProvider = targetAsr || cfg.asrProvider || cfg.asr?.provider || "baidu_vop";
+      const providerProfile = cfg.providerProfiles?.[provider] || null;
+      const asrProviderProfile = cfg.providerProfiles?.[asrProvider] || null;
       const llmProfile =
+        (providerProfile?.llm as any) ||
         (cfg.llmProfiles && cfg.llmProfiles[provider]) ||
         (cfg.llm && cfg.llm.provider === provider ? cfg.llm : null);
       const asrProfile =
+        (asrProviderProfile?.asr as any) ||
         (cfg.asrProfiles && cfg.asrProfiles[asrProvider]) ||
         (cfg.asr && cfg.asr.provider === asrProvider ? cfg.asr : null);
       const llmDefaults =
@@ -297,17 +309,24 @@ const InterviewTrainer: React.FC = () => {
     if (!cfg) return;
     const retrieval = cfg.retrieval || ({} as ItConfigSnapshot["retrieval"]);
     const vector = retrieval.vector || ({} as ItConfigSnapshot["retrieval"]["vector"]);
+    const embeddingProvider =
+      retrieval.embeddingProvider || vector.provider || "volc_doubao";
+    const providerEmbedding =
+      (embeddingProvider && cfg.providerProfiles?.[embeddingProvider]?.embedding) || {};
     setRetrievalForm({
       mode: retrieval.mode || "vector",
       topK: Number(retrieval.topK ?? 5),
       minScore: Number(retrieval.minScore ?? 0.2),
       vector: {
-        provider: vector.provider || "volc_doubao",
-        baseUrl: vector.baseUrl || "https://ark.cn-beijing.volces.com",
-        model: vector.model || "doubao-embedding",
-        apiKey: vector.apiKey || "",
-        timeoutSec: Number(vector.timeoutSec ?? 30),
-        maxRetries: Number(vector.maxRetries ?? 1),
+        provider: embeddingProvider,
+        baseUrl:
+          vector.baseUrl ||
+          providerEmbedding.base_url ||
+          "https://ark.cn-beijing.volces.com",
+        model: vector.model || providerEmbedding.model || "doubao-embedding",
+        apiKey: vector.apiKey || providerEmbedding.api_key || "",
+        timeoutSec: Number(vector.timeoutSec ?? providerEmbedding.timeout_sec ?? 30),
+        maxRetries: Number(vector.maxRetries ?? providerEmbedding.max_retries ?? 1),
         batchSize: Number(vector.batchSize ?? 16),
         queryMaxChars: Number(vector.queryMaxChars ?? 1500),
       },
@@ -334,6 +353,27 @@ const InterviewTrainer: React.FC = () => {
   }>({ status: "idle" });
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiLocked = !config;
+  const providerProfiles = config?.providerProfiles || {};
+  const providerList = useMemo(
+    () => Object.keys(providerProfiles).sort((a, b) => a.localeCompare(b)),
+    [providerProfiles],
+  );
+  const llmProviders = useMemo(() => {
+    const base = providerList.length ? providerList : ["baidu_qianfan", "volc_doubao"];
+    return Array.from(new Set([...base, "heuristic"]));
+  }, [providerList]);
+  const asrProviders = useMemo(() => {
+    const base = providerList.length ? providerList : ["baidu_vop"];
+    return Array.from(new Set([...base, "mock"]));
+  }, [providerList]);
+  const embeddingProviders = useMemo(() => {
+    const base = providerList.length ? providerList : ["volc_doubao", "baidu_qianfan", "openai_compatible"];
+    return Array.from(new Set(base));
+  }, [providerList]);
+  const getProviderLabel = useCallback(
+    (id: string) => providerProfiles[id]?.display_name || id,
+    [providerProfiles],
+  );
 
   useEffect(() => {
     (window as any).__itReady = true;
@@ -361,6 +401,7 @@ const InterviewTrainer: React.FC = () => {
           acousticProvider: "api",
           llmProfiles: {},
           asrProfiles: {},
+          providerProfiles: {},
           prompts: {
             evaluationPrompt: STRICT_SYSTEM_PROMPT,
             demoPrompt: DEFAULT_DEMO_PROMPT,
@@ -393,6 +434,7 @@ const InterviewTrainer: React.FC = () => {
             mode: "vector",
             topK: 5,
             minScore: 0.2,
+            embeddingProvider: "volc_doubao",
             vector: {
               provider: "volc_doubao",
               baseUrl: "https://ark.cn-beijing.volces.com",
@@ -834,6 +876,7 @@ const InterviewTrainer: React.FC = () => {
     setApiForm((prev) => {
       if (scope === "llm" && key === "provider") {
         const provider = String(value);
+        const providerProfile = providerProfiles?.[provider]?.llm || {};
         const defaults =
           provider === "volc_doubao"
             ? {
@@ -845,6 +888,7 @@ const InterviewTrainer: React.FC = () => {
                 model: "ernie-4.5-turbo-128k",
               };
         const nextProfile =
+          providerProfile ||
           (prev.llmProfiles && prev.llmProfiles[provider]) ||
           (provider === prev.llm.provider ? prev.llm : undefined) ||
           {};
@@ -874,7 +918,9 @@ const InterviewTrainer: React.FC = () => {
       }
       if (scope === "asr" && key === "provider") {
         const provider = String(value);
+        const providerProfile = providerProfiles?.[provider]?.asr || {};
         const nextProfile =
+          providerProfile ||
           (prev.asrProfiles && prev.asrProfiles[provider]) ||
           (provider === prev.asr.provider ? prev.asr : undefined) ||
           {};
@@ -1040,6 +1086,7 @@ const InterviewTrainer: React.FC = () => {
           mode: retrievalForm.mode,
           topK: Number(retrievalForm.topK),
           minScore: Number(retrievalForm.minScore),
+          embeddingProvider: retrievalForm.vector.provider,
           vector: {
             provider: retrievalForm.vector.provider,
             baseUrl: retrievalForm.vector.baseUrl,
@@ -1068,6 +1115,65 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingRetrieval(false);
+  };
+  const handleTestEmbedding = async () => {
+    setTestingEmbedding(true);
+    setEmbeddingTestMessage(null);
+    try {
+      const resp = await request("it/testEmbedding", {
+        embedding: {
+          provider: retrievalForm.vector.provider,
+          baseUrl: retrievalForm.vector.baseUrl,
+          model: retrievalForm.vector.model,
+          apiKey: retrievalForm.vector.apiKey,
+          timeoutSec: retrievalForm.vector.timeoutSec,
+          maxRetries: retrievalForm.vector.maxRetries,
+        },
+      });
+      if (resp?.status === "success") {
+        const length = resp.content?.length ?? 0;
+        setEmbeddingTestMessage(`Embedding 接口正常：向量维度 ${length}`);
+      } else {
+        setEmbeddingTestMessage("Embedding 测试失败，请检查配置。");
+      }
+    } catch (err) {
+      setEmbeddingTestMessage(
+        `Embedding 测试失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setTestingEmbedding(false);
+  };
+  const handleCreateProviderConfig = async () => {
+    const providerId = providerDraft.id.trim();
+    if (!providerId) {
+      setProviderCreateMessage("请先填写 Provider Key。");
+      return;
+    }
+    setCreatingProvider(true);
+    setProviderCreateMessage(null);
+    try {
+      const resp = await request("it/createProviderConfig", {
+        providerId,
+        displayName: providerDraft.name.trim(),
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setProviderDraft({ id: "", name: "" });
+        setProviderCreateMessage("已创建提供者配置。");
+      } else {
+        setProviderCreateMessage("创建失败，请检查名称是否重复。");
+      }
+    } catch (err) {
+      setProviderCreateMessage(
+        `创建失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setCreatingProvider(false);
+  };
+  const handleOpenProviderConfig = async (providerId: string) => {
+    await request("it/openProviderConfig", { providerId });
   };
   const handleClearEmbeddingCache = async () => {
     setClearingEmbeddingCache(true);
@@ -1625,6 +1731,68 @@ const InterviewTrainer: React.FC = () => {
             <div className="it-settings__section">
               <div className="it-settings__header">
                 <div>
+                  <div className="it-settings__title">提供者配置</div>
+                  <div className="it-settings__desc">每个 Provider 独立文件，可包含 LLM/Embedding/ASR</div>
+                </div>
+              </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 110 }}>Provider Key</div>
+                <input
+                  className="it-input"
+                  value={providerDraft.id}
+                  onChange={(event) =>
+                    setProviderDraft((prev) => ({ ...prev, id: event.target.value }))
+                  }
+                  placeholder="例如 volc_doubao"
+                />
+                <div style={{ minWidth: 80 }}>显示名</div>
+                <input
+                  className="it-input"
+                  value={providerDraft.name}
+                  onChange={(event) =>
+                    setProviderDraft((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                  placeholder="可选"
+                />
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || creatingProvider}
+                  onClick={handleCreateProviderConfig}
+                >
+                  {creatingProvider ? "添加中..." : "添加提供者配置"}
+                </button>
+              </div>
+              {providerCreateMessage && (
+                <div className="it-settings__hint">{providerCreateMessage}</div>
+              )}
+              <div className="it-settings__hint" style={{ whiteSpace: "pre-wrap" }}>
+                {"教程：Provider 文件在 `interview_trainer/providers/` 下。模板示例：\n" +
+                  "provider: your_provider\n" +
+                  "llm: { provider: your_provider, base_url: https://..., model: ..., api_key: ... }\n" +
+                  "embedding: { provider: your_provider, base_url: https://..., model: ..., api_key: ... }\n" +
+                  "asr: { provider: ..., base_url: ..., api_key: ..., secret_key: ... }"}
+              </div>
+              {providerList.length > 0 && (
+                <div className="it-retrieval__list">
+                  {providerList.map((item) => (
+                    <div key={item} className="it-retrieval__item">
+                      <div className="it-retrieval__label">{getProviderLabel(item)}</div>
+                      <div className="it-retrieval__path">{item}</div>
+                      <button
+                        className="it-button it-button--secondary it-button--compact"
+                        disabled={uiLocked}
+                        onClick={() => handleOpenProviderConfig(item)}
+                      >
+                        打开文件
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
                   <div className="it-settings__title">通用配置</div>
                   <div className="it-settings__desc">ASR / LLM / 保存目录 · 直接在此修改</div>
                 </div>
@@ -1700,9 +1868,11 @@ const InterviewTrainer: React.FC = () => {
                             handleApiFieldChange("llm", "provider", event.target.value)
                           }
                         >
-                          <option value="baidu_qianfan">baidu_qianfan</option>
-                          <option value="volc_doubao">volc_doubao</option>
-                          <option value="heuristic">heuristic（本地规则）</option>
+                          {llmProviders.map((item) => (
+                            <option key={item} value={item}>
+                              {item === "heuristic" ? "heuristic（本地规则）" : getProviderLabel(item)}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div className="it-input-row">
@@ -1804,8 +1974,11 @@ const InterviewTrainer: React.FC = () => {
                             handleApiFieldChange("asr", "provider", event.target.value)
                           }
                         >
-                          <option value="baidu_vop">baidu_vop</option>
-                          <option value="mock">mock（使用示例文本）</option>
+                          {asrProviders.map((item) => (
+                            <option key={item} value={item}>
+                              {item === "mock" ? "mock（使用示例文本）" : getProviderLabel(item)}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div className="it-input-row">
@@ -2083,9 +2256,11 @@ const InterviewTrainer: React.FC = () => {
                     handleRetrievalVectorChange("provider", event.target.value)
                   }
                 >
-                  <option value="volc_doubao">volc_doubao</option>
-                  <option value="baidu_qianfan">baidu_qianfan</option>
-                  <option value="openai_compatible">openai_compatible</option>
+                  {embeddingProviders.map((item) => (
+                    <option key={item} value={item}>
+                      {getProviderLabel(item)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="it-input-row">
@@ -2176,6 +2351,13 @@ const InterviewTrainer: React.FC = () => {
                 </button>
                 <button
                   className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || testingEmbedding}
+                  onClick={handleTestEmbedding}
+                >
+                  {testingEmbedding ? "测试中..." : "测试 Embedding 接口"}
+                </button>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
                   disabled={uiLocked || clearingEmbeddingCache}
                   onClick={handleClearEmbeddingCache}
                 >
@@ -2184,6 +2366,9 @@ const InterviewTrainer: React.FC = () => {
               </div>
               {retrievalSaveMessage && (
                 <div className="it-settings__hint">{retrievalSaveMessage}</div>
+              )}
+              {embeddingTestMessage && (
+                <div className="it-settings__hint">{embeddingTestMessage}</div>
               )}
               {embeddingCacheMessage && (
                 <div className="it-settings__hint">{embeddingCacheMessage}</div>

@@ -135,6 +135,7 @@ export interface ItConfigSnapshot {
   acousticProvider: string;
   llmProfiles?: Record<string, any>;
   asrProfiles?: Record<string, any>;
+  providerProfiles?: Record<string, any>;
   prompts: {
     evaluationPrompt: string;
     demoPrompt: string;
@@ -167,6 +168,7 @@ export interface ItConfigSnapshot {
     mode: string;
     topK: number;
     minScore: number;
+    embeddingProvider?: string;
     vector: {
       provider: string;
       baseUrl: string;

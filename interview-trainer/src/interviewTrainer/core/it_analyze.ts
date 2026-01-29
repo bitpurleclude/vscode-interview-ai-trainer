@@ -761,6 +761,21 @@ export async function it_runAnalysis(
     );
     const retrievalCfg = deps.skillConfig.retrieval ?? {};
     const vectorCfg = retrievalCfg.vector ?? {};
+    const providerProfiles = deps.skillConfig.providers ?? {};
+    const embeddingProvider =
+      retrievalCfg.embedding_provider || vectorCfg.provider || "";
+    const providerEmbedding =
+      (embeddingProvider && providerProfiles[embeddingProvider]?.embedding) || {};
+    const resolvedVector = {
+      provider: providerEmbedding.provider || vectorCfg.provider || embeddingProvider,
+      base_url: providerEmbedding.base_url || vectorCfg.base_url,
+      api_key: providerEmbedding.api_key || vectorCfg.api_key,
+      model: providerEmbedding.model || vectorCfg.model,
+      timeout_sec: Number(providerEmbedding.timeout_sec ?? vectorCfg.timeout_sec ?? 30),
+      max_retries: Number(providerEmbedding.max_retries ?? vectorCfg.max_retries ?? 1),
+      batch_size: Number(vectorCfg.batch_size ?? 16),
+      query_max_chars: Number(vectorCfg.query_max_chars ?? 1500),
+    };
     const notesTopK = Number(retrievalCfg.top_k ?? 5);
     const notesMinScore = Number(retrievalCfg.min_score ?? 0.2);
     const cacheRoot = deps.context.globalStorageUri?.fsPath;
@@ -775,14 +790,14 @@ export async function it_runAnalysis(
         minScore: notesMinScore,
         cacheDir: notesCacheDir,
         vector: {
-          provider: vectorCfg.provider || "",
-          apiKey: vectorCfg.api_key || "",
-          baseUrl: vectorCfg.base_url || "",
-          model: vectorCfg.model || "",
-          timeoutSec: Number(vectorCfg.timeout_sec ?? 30),
-          maxRetries: Number(vectorCfg.max_retries ?? 1),
-          batchSize: Number(vectorCfg.batch_size ?? 16),
-          queryMaxChars: Number(vectorCfg.query_max_chars ?? 1500),
+          provider: resolvedVector.provider || "",
+          apiKey: resolvedVector.api_key || "",
+          baseUrl: resolvedVector.base_url || "",
+          model: resolvedVector.model || "",
+          timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
+          maxRetries: Number(resolvedVector.max_retries ?? 1),
+          batchSize: Number(resolvedVector.batch_size ?? 16),
+          queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
         },
       });
     } catch (err) {

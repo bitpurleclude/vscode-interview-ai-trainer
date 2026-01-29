@@ -1,0 +1,27 @@
+provider: volc_doubao
+display_name: Doubao
+llm:
+  provider: volc_doubao
+  base_url: https://ark.cn-beijing.volces.com
+  model: doubao-1-5-pro-32k-250115
+  api_key: ""
+  temperature: 0.8
+  top_p: 0.8
+  timeout_sec: 60
+  max_retries: 1
+embedding:
+  provider: volc_doubao
+  base_url: https://ark.cn-beijing.volces.com
+  model: doubao-embedding
+  api_key: ""
+  timeout_sec: 30
+  max_retries: 1
+asr:
+  provider: ""
+  base_url: ""
+  api_key: ""
+  secret_key: ""
+  language: zh
+  dev_pid: 1537
+  timeout_sec: 120
+  max_retries: 1
