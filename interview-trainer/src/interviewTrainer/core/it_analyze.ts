@@ -656,7 +656,7 @@ function it_mergeEvaluations(params: {
       )
     : 0;
 
-  const mergeList = (lists: string[][], minCount: number, fallback: string[]) => {
+  const mergeList = (lists: string[][]): string[] => {
     const unique: string[] = [];
     const seen = new Set<string>();
     lists.flat().forEach((item) => {
@@ -667,38 +667,13 @@ function it_mergeEvaluations(params: {
       seen.add(value);
       unique.push(value);
     });
-    fallback.forEach((item) => {
-      if (unique.length >= minCount) {
-        return;
-      }
-      if (!seen.has(item)) {
-        seen.add(item);
-        unique.push(item);
-      }
-    });
     return unique;
   };
 
-  const strengths = mergeList(
-    evaluations.map((item) => item.strengths || []),
-    3,
-    ["观点有一定条理", "表达态度较为稳定", "回答有一定信息量"],
-  );
-  const issues = mergeList(
-    evaluations.map((item) => item.issues || []),
-    3,
-    ["关键要点覆盖不足", "可执行举措细节不足", "结构不够紧凑"],
-  );
-  const improvements = mergeList(
-    evaluations.map((item) => item.improvements || []),
-    3,
-    ["补充责任人/节点/指标", "压缩冗余表述", "增加政策或案例支撑"],
-  );
-  const nextFocus = mergeList(
-    evaluations.map((item) => item.nextFocus || []),
-    2,
-    ["围绕题干提炼主线", "训练结构化作答节奏"],
-  );
+  const strengths = mergeList(evaluations.map((item) => item.strengths || []));
+  const issues = mergeList(evaluations.map((item) => item.issues || []));
+  const improvements = mergeList(evaluations.map((item) => item.improvements || []));
+  const nextFocus = mergeList(evaluations.map((item) => item.nextFocus || []));
 
   const noteUsage = evaluations.flatMap((item, idx) =>
     (item.noteUsage || []).map((note) => `第${idx + 1}题: ${note}`),
@@ -1269,7 +1244,7 @@ export async function it_runAnalysis(
   const evalUsesApi = Boolean(
     envConfig.llm?.provider && envConfig.llm?.provider !== "heuristic" && envConfig.llm?.api_key,
   );
-  const evalLabel = evalUsesApi ? "API" : "启发式";
+  const evalLabel = evalUsesApi ? "API" : "LLM不可用";
   reportProgress("evaluation", 10, `面试评价 10% · ${evalLabel}`, "running");
 
   const timePlan = [4, 3, 3];

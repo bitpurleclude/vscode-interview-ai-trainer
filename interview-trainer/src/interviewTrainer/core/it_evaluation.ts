@@ -38,65 +38,6 @@ function it_normalizeDimensions(dimensions: string[] | undefined): string[] {
   return uniq.length ? uniq : [...IT_DEFAULT_DIMENSIONS];
 }
 
-function it_clampScore(value: number): number {
-  return Math.max(1, Math.min(10, Math.round(value)));
-}
-
-function it_countMatches(text: string, pattern: RegExp): number {
-  const matches = text.match(pattern);
-  return matches ? matches.length : 0;
-}
-
-function it_stripGreetings(text: string): string {
-  return text.replace(
-    /(各位考官|各位领导|各位老师|考生开始答题|考生回答完毕|回答完毕|考生回答|大家好|尊敬的各位)/g,
-    "",
-  );
-}
-
-function it_splitSentences(text: string): string[] {
-  return text
-    .split(/[。！？!?.；;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function it_buildHeuristicRevisedAnswers(
-  answers: Array<{ question: string; answer: string }>,
-  timePlan: number[] = [4, 3, 3],
-): Array<{ question: string; revised: string; estimatedTimeMin: number; original: string }> {
-  return answers.map((item, idx) => {
-    const cleaned = it_stripGreetings(item.answer || "");
-    const sentences = Array.from(new Set(it_splitSentences(cleaned)));
-    const conclusion = sentences[0] || "结论：需补充关键观点";
-    const points = sentences.slice(1, 4);
-    while (points.length < 2) {
-      points.push("补充关键举措（责任人/时限/指标/风险兜底）");
-    }
-    const time = timePlan[idx] ?? 3;
-    const revised = [
-      `【用时约${time}分钟】结论：${conclusion}`,
-      `要点1：${points[0]}`,
-      `要点2：${points[1]}`,
-      points[2] ? `要点3：${points[2]}` : undefined,
-      "要求：每条要点需明确责任人/时间节点/量化指标或风险兜底。",
-    ]
-      .filter(Boolean)
-      .join("；");
-    return {
-      question: item.question,
-      revised,
-      estimatedTimeMin: time,
-      original: item.answer || "",
-    };
-  });
-}
-
-function it_sentenceCount(text: string): number {
-  const parts = text.split(/[。！？!?]/).map((item) => item.trim()).filter(Boolean);
-  return parts.length || 1;
-}
-
 function it_buildSummary(acoustic: ItAcousticMetrics): string {
   return [
     `duration_sec: ${acoustic.durationSec}`,
@@ -118,19 +59,6 @@ function it_mapScoreKeys(scores: Record<string, number>): Record<string, number>
     mapped[name] = value;
   });
   return mapped;
-}
-
-function it_fillMissingScores(
-  scores: Record<string, number>,
-  dimensions: string[],
-): Record<string, number> {
-  const filled = { ...scores };
-  dimensions.forEach((dim) => {
-    if (filled[dim] === undefined) {
-      filled[dim] = 4;
-    }
-  });
-  return filled;
 }
 
 function it_computeOverallScore(
@@ -241,272 +169,39 @@ function it_splitTranscriptByQuestions(
   return items;
 }
 
-function it_buildFallbackRevisions(
-  questionAnswers: Array<{ question: string; answer: string }>,
-  improvements: string[],
-  timePlan: number[] = [4, 3, 3],
-): Array<{ question: string; original: string; revised: string; estimatedTimeMin: number }> {
-  return questionAnswers.map((item, idx) => {
-    const base = item.answer || "（作答略）";
-    const cleaned = base
-      .replace(/考生回答完毕|回答完毕|考生回答/g, "")
-      .replace(/\s+/g, "");
-    const rawClauses = cleaned
-      .split(/[。！？!?；;]/)
-      .flatMap((part) => part.split(/[，,]/))
-      .map((part) => part.trim())
-      .filter(Boolean);
-    const seen = new Set<string>();
-    const clauses: string[] = [];
-    rawClauses.forEach((clause) => {
-      if (!seen.has(clause) && clause.length > 1) {
-        seen.add(clause);
-        clauses.push(clause);
-      }
-    });
-
-    const buckets = {
-      coord: [] as string[],
-      product: [] as string[],
-      promote: [] as string[],
-      safety: [] as string[],
-      other: [] as string[],
-    };
-    clauses.forEach((clause) => {
-      if (/安全|救援|应急|预案|备案|评估|评判|医疗/.test(clause)) {
-        buckets.safety.push(clause);
-      } else if (/部门|统筹|联动|协同|交通|农业|文旅|公安|卫健/.test(clause)) {
-        buckets.coord.push(clause);
-      } else if (/农产品|小吃|文化|展览|艺术|特色|旅游|奖品|展销/.test(clause)) {
-        buckets.product.push(clause);
-      } else if (/宣传|推广|政务|媒体|新闻|抖音|平台|传播/.test(clause)) {
-        buckets.promote.push(clause);
-      } else {
-        buckets.other.push(clause);
-      }
-    });
-
-    const take = (bucket: string[], count: number): string => {
-      if (!bucket.length) {
-        return "";
-      }
-      return bucket.splice(0, count).join("，");
-    };
-
-    const time = timePlan[idx] ?? 3;
-    const introClause = clauses[0] || "需要系统推进这项工作";
-    const intro = `【用时约${time}分钟】结论：${introClause}${
-      introClause.endsWith("。") ? "" : "。"
-    }我将围绕统筹协调、资源落地、宣传推广与安全保障四个方面推进。`;
-
-    const coordDetail =
-      take(buckets.coord, 2) ||
-      take(buckets.other, 1) ||
-      "成立专项工作组，明确交通、农业、文旅等部门职责，形成联动机制";
-    const productDetail =
-      take(buckets.product, 2) ||
-      take(buckets.other, 1) ||
-      "下乡调研筛选本地特色产品，设置展销与体验点位，丰富赛事配套";
-    const promoteDetail =
-      take(buckets.promote, 2) ||
-      take(buckets.other, 1) ||
-      "统筹线上线下渠道发布信息，提升赛事影响力与参与度";
-    const safetyDetail =
-      take(buckets.safety, 2) ||
-      take(buckets.other, 1) ||
-      "坚持一赛一案，配足救援力量，完善应急预案与处置流程";
-
-    const hint = improvements.slice(0, 2).join("；");
-    const closing = hint
-      ? `最后，我会持续复盘优化，重点落实${hint}，确保执行落地。`
-      : "最后，我会持续复盘优化，确保工作闭环。";
-
-    const revised = [
-      intro,
-      `第一，**统筹协调**。${coordDetail}，明确责任单位与时间节点。`,
-      `第二，**资源落地**。${productDetail}，设置量化指标与验收点。`,
-      `第三，**宣传推广**。${promoteDetail}，明确渠道与触达目标。`,
-      `第四，**安全保障**。${safetyDetail}，补齐风险兜底与应急流程。`,
-      closing,
-    ].join("\n\n");
-    return {
-      question: item.question,
-      original: base,
-      revised,
-      estimatedTimeMin: time,
-    };
-  });
-}
-
-function it_adjustScore(
-  scores: Record<string, number>,
-  dimension: string,
-  delta: number,
-): void {
-  if (scores[dimension] === undefined) {
-    return;
-  }
-  scores[dimension] = it_clampScore(scores[dimension] + delta);
-}
-
-function it_heuristicEvaluation(
-  question: string,
-  transcript: string,
-  acoustic: ItAcousticMetrics,
-  notes: ItNoteHit[],
-  dimensions: string[],
-  language: string,
-  questionList: string[],
-): ItEvaluation {
-  const normalizedDimensions = it_normalizeDimensions(dimensions);
+function it_buildUnavailableEvaluation(params: {
+  question: string;
+  reason: string;
+  dimensions: string[];
+  notes: ItNoteHit[];
+  promptText?: string;
+  raw?: string;
+}): ItEvaluation {
   const scores: Record<string, number> = {};
-  normalizedDimensions.forEach((dim) => {
-    scores[dim] = 6;
+  params.dimensions.forEach((dim) => {
+    scores[dim] = 1;
   });
-
-  const plainText = transcript.replace(/\s+/g, "");
-  const charCount = plainText.length;
-  const sentenceCount = it_sentenceCount(transcript);
-  const hasStructure = /首先|第一|其次|然后|最后|综上|因此|总之/.test(transcript);
-  const hasPolicy = /政策|法规|规定|制度|依法|纪律|原则/.test(transcript);
-  const hasSolutions = /措施|建议|做法|方案|对策|落实|推进/.test(transcript);
-  const hasExamples = /例如|比如|案例|实践|经验/.test(transcript);
-  const hasCommitment = /我认为|我将|必须|应该|愿意|坚持/.test(transcript);
-  const fillerCount = it_countMatches(transcript, /嗯|呃|就是|然后/g);
-
-  const strengths: string[] = [];
-  const issues: string[] = [];
-  const improvements: string[] = [];
-  const nextFocus: string[] = [];
-
-  if (charCount < 180) {
-    it_adjustScore(scores, "内容完整性", -2);
-    it_adjustScore(scores, "逻辑清晰度", -1);
-    issues.push("回答篇幅偏短，论点展开不足，细节支撑不够。");
-    improvements.push("补充背景、现状与对策，用“原因-影响-措施-预期”结构补全内容。");
-  } else if (charCount > 800) {
-    it_adjustScore(scores, "语言流畅度", -1);
-    issues.push("回答信息量较大但略显冗长，重点不够突出。");
-    improvements.push("保留关键观点，减少重复表述，结尾收束总结。");
-  } else {
-    strengths.push("内容覆盖较完整，回答信息量充足。");
-  }
-
-  if (hasStructure) {
-    it_adjustScore(scores, "逻辑清晰度", 1);
-    strengths.push("结构层次清晰，逻辑衔接相对顺畅。");
-  } else {
-    it_adjustScore(scores, "逻辑清晰度", -1);
-    issues.push("结构层次不够明确，缺少清晰的分点与过渡。");
-    improvements.push("使用“首先/其次/最后”分点表达，突出结构骨架。");
-  }
-
-  if (hasSolutions) {
-    it_adjustScore(scores, "内容完整性", 1);
-    strengths.push("提出了可执行的措施或对策。");
-  } else {
-    it_adjustScore(scores, "内容完整性", -1);
-    issues.push("对策层面阐述不足，缺乏具体可执行的做法。");
-    improvements.push("补充落地举措，如流程、责任主体与时间节点。");
-  }
-
-  if (hasPolicy) {
-    it_adjustScore(scores, "政策理解", 1);
-    it_adjustScore(scores, "专业素养", 1);
-    strengths.push("有政策意识或规范意识的表达。");
-  } else {
-    it_adjustScore(scores, "政策理解", -1);
-    issues.push("政策依据与规范引用不足。");
-    improvements.push("结合政策导向、法规或制度要求补充论据。");
-  }
-
-  if (hasExamples) {
-    strengths.push("引用案例或经验，提高了说服力。");
-  } else {
-    improvements.push("适当补充案例或过往经验以增强可信度。");
-  }
-
-  if (hasCommitment) {
-    it_adjustScore(scores, "表达感染力", 1);
-    strengths.push("表达态度明确，有一定感染力。");
-  }
-
-  if (acoustic.speechRateWpm && acoustic.speechRateWpm < 90) {
-    it_adjustScore(scores, "语言流畅度", -1);
-    issues.push("语速偏慢，节奏感不足。");
-    improvements.push("适度加快语速，并保持语句连贯。");
-  } else if (acoustic.speechRateWpm && acoustic.speechRateWpm > 180) {
-    it_adjustScore(scores, "语言流畅度", -1);
-    issues.push("语速偏快，影响听感清晰度。");
-    improvements.push("放慢语速，重点处适当停顿强调。");
-  } else if (acoustic.speechRateWpm) {
-    strengths.push("语速整体适中，表达节奏稳定。");
-  }
-
-  if (acoustic.pauseMaxSec > 3 || acoustic.pauseCount > 8) {
-    it_adjustScore(scores, "语言流畅度", -1);
-    issues.push("停顿偏多或偏长，影响表达流畅度。");
-    improvements.push("提前列提纲减少卡顿，句间停顿保持简洁。");
-  }
-
-  if (fillerCount > 3) {
-    it_adjustScore(scores, "表达感染力", -1);
-    issues.push("口头语偏多，影响表达凝练度。");
-    improvements.push("减少“嗯/然后”等口头语，提升表达质感。");
-  }
-
-  if (notes.length) {
-    strengths.push("能够结合过往笔记或素材进行补充。");
-  } else {
-    improvements.push("可结合笔记中的观点或案例增强内容深度。");
-  }
-
-  const noteUsage = notes.length
-    ? notes.slice(0, 3).map((note) => `${note.source} :: ${note.snippet}`)
+  const noteUsage = params.notes.length
+    ? params.notes.slice(0, 3).map((note) => `${note.source} :: ${note.snippet}`)
     : [];
-  const noteSuggestions = notes.length
-    ? notes.slice(0, 3).map((note) => `鍙互鍙傝€? ${note.snippet}`)
+  const noteSuggestions = params.notes.length
+    ? params.notes.slice(0, 3).map((note) => `可参考 ${note.snippet}`)
     : [];
-  const overall =
-    Math.round(
-      (Object.values(scores).reduce((sum, v) => sum + v, 0) /
-        normalizedDimensions.length) *
-        10,
-    ) || 60;
-
-  if (!strengths.length) strengths.push("整体表达尚可，但仍有提升空间。");
-  if (!issues.length) issues.push("未发现明显硬伤，建议持续打磨细节。");
-  if (!improvements.length) improvements.push("保持结构化表达，突出关键要点。");
-
-  nextFocus.push("针对题干明确观点主线，先给结论再展开。");
-  nextFocus.push("补强政策依据与可执行措施的匹配度。");
-
-  const summaryParts = [
-    `回答约${charCount}字，${sentenceCount}句`,
-    acoustic.speechRateWpm ? `语速约${acoustic.speechRateWpm}字/分` : "语速未知",
-    `停顿${acoustic.pauseCount}次`,
-    hasStructure ? "结构清晰" : "结构偏弱",
-    hasPolicy ? "有政策依据" : "政策依据不足",
-  ];
-
-  const questions = questionList.length ? questionList : question ? [question] : [];
-  const questionAnswers = it_splitTranscriptByQuestions(questions, transcript);
-  const revisedAnswers = it_buildFallbackRevisions(questionAnswers, improvements, [4, 3, 3]);
-
   return {
-    topicTitle: question || "未命名",
-    topicSummary: summaryParts.join("；"),
+    topicTitle: params.question || "未命名",
+    topicSummary: params.reason,
     scores,
-    overallScore: overall,
-    strengths,
-    issues,
-    improvements,
-    nextFocus,
+    overallScore: 1,
+    strengths: [],
+    issues: [params.reason],
+    improvements: [],
+    nextFocus: [],
     noteUsage,
     noteSuggestions,
-    revisedAnswers,
+    revisedAnswers: [],
     mode: "heuristic",
-    raw: language,
+    raw: params.raw,
+    prompt: params.promptText,
   };
 }
 
@@ -532,23 +227,13 @@ export async function it_evaluateAnswer(
       : it_splitTranscriptByQuestions(questions, transcript);
 
   if (lowSpeech) {
-    const baseScores: Record<string, number> = {};
-    dimensions.forEach((dim) => {
-      baseScores[dim] = 2;
-    });
-    return {
-      topicTitle: question || "无有效回答",
-      topicSummary: "未检测到有效语音内容，请确保麦克风输入正常并重新作答。",
-      scores: baseScores,
-      overallScore: 2,
-      strengths: [],
-      issues: ["未检测到有效语音或内容过短。", "请检查麦克风音量与输入设备。"],
-      improvements: ["重新回答题目，保证清晰、连续的语音输入。"],
-      nextFocus: ["确保录音设备选择正确", "避免静音，完整作答每个问题"],
-      revisedAnswers: it_buildFallbackRevisions(resolvedAnswers, [], [4, 3, 3]),
-      mode: "heuristic",
+    return it_buildUnavailableEvaluation({
+      question: question || "无有效回答",
+      reason: "未检测到有效语音内容，请确保麦克风输入正常并重新作答。",
+      dimensions,
+      notes,
       raw: "no_speech_detected",
-    };
+    });
   }
 
   const systemPrompt =
@@ -593,20 +278,13 @@ export async function it_evaluateAnswer(
   const promptText = `System:\n${systemPrompt}\n\nUser:\n${userPrompt}`;
 
   if (!config.apiKey || config.provider === "heuristic") {
-    const fallback = it_heuristicEvaluation(
+    return it_buildUnavailableEvaluation({
       question,
-      transcript,
-      acoustic,
-      notes,
+      reason: "LLM 未配置或不可用，无法生成评分与示范。",
       dimensions,
-      config.language,
-      questions,
-    );
-    return {
-      ...fallback,
-      prompt: promptText,
-      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, timePlan),
-    };
+      notes,
+      promptText,
+    });
   }
 
   let content: string;
@@ -628,29 +306,19 @@ export async function it_evaluateAnswer(
       ],
     );
   } catch (err) {
-    const fallback = it_heuristicEvaluation(
+    return it_buildUnavailableEvaluation({
       question,
-      transcript,
-      acoustic,
-      notes,
+      reason: "LLM 调用失败，无法生成评分与示范。",
       dimensions,
-      config.language,
-      questions,
-    );
-    return {
-      ...fallback,
-      revisedAnswers: it_buildHeuristicRevisedAnswers(resolvedAnswers, timePlan),
+      notes,
       raw: err instanceof Error ? err.message : String(err),
-      prompt: promptText,
-    };
+      promptText,
+    });
   }
 
   try {
     const parsed = JSON.parse(content);
-    const mappedScores = it_fillMissingScores(
-      it_mapScoreKeys(parsed.scores || {}),
-      dimensions,
-    );
+    const mappedScores = it_mapScoreKeys(parsed.scores || {});
     const overallScore =
       parsed.overallScore || it_computeOverallScore(mappedScores, dimensions);
     const parsedImprovements = it_toStringArray(parsed.improvements);
@@ -671,21 +339,31 @@ export async function it_evaluateAnswer(
       notes.length && !parsedNoteSuggestions.length
         ? notes.slice(0, 3).map((note) => `鍙互鍙傝€? ${note.snippet}`)
         : parsedNoteSuggestions;
-    const revisedAnswers =
-      Array.isArray(parsed.revisedAnswers) && parsed.revisedAnswers.length
-        ? parsed.revisedAnswers.map((item: any, idx: number) => {
-            const estimated =
-              Number(item?.estimatedTimeMin ?? item?.estimated_time_min) ||
-              timePlan[idx] ||
-              3;
-            return {
-              question: String(item?.question || questions[idx] || `第${idx + 1}题`),
-              original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
-              revised: String(item?.revised || ""),
-              estimatedTimeMin: estimated,
-            };
-          })
-        : it_buildFallbackRevisions(resolvedAnswers, parsedImprovements, timePlan);
+    const parsedRevised = Array.isArray(parsed.revisedAnswers)
+      ? parsed.revisedAnswers
+      : [];
+    if (!parsedRevised.length) {
+      return it_buildUnavailableEvaluation({
+        question,
+        reason: "LLM 输出缺少 revisedAnswers，无法生成评分与示范。",
+        dimensions,
+        notes,
+        raw: content,
+        promptText,
+      });
+    }
+    const revisedAnswers = parsedRevised.map((item: any, idx: number) => {
+      const estimated =
+        Number(item?.estimatedTimeMin ?? item?.estimated_time_min) ||
+        timePlan[idx] ||
+        3;
+      return {
+        question: String(item?.question || questions[idx] || `第${idx + 1}题`),
+        original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
+        revised: String(item?.revised || ""),
+        estimatedTimeMin: estimated,
+      };
+    });
     return {
       topicTitle: parsed.topicTitle || question || "未命名",
       topicSummary: parsed.topicSummary || "",
@@ -703,15 +381,13 @@ export async function it_evaluateAnswer(
       prompt: promptText,
     };
   } catch {
-    const fallback = it_heuristicEvaluation(
+    return it_buildUnavailableEvaluation({
       question,
-      transcript,
-      acoustic,
-      notes,
+      reason: "LLM 输出解析失败，无法生成评分与示范。",
       dimensions,
-      config.language,
-      questions,
-    );
-    return { ...fallback, raw: content, prompt: promptText };
+      notes,
+      raw: content,
+      promptText,
+    });
   }
 }
