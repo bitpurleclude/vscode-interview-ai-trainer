@@ -125,7 +125,22 @@ async function it_callDoubaoMultimodal(
         });
         const embedding = response.data?.data?.[0]?.embedding;
         if (!Array.isArray(embedding)) {
-          throw new Error("Embedding response missing data");
+          const error = new Error("Embedding response missing data");
+          (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = {
+            request: {
+              provider: cfg.provider,
+              url,
+              method: "POST",
+              headers: debugHeaders,
+              payload,
+            },
+            error: {
+              message: error.message,
+              status: response.status,
+              response: response.data,
+            },
+          };
+          throw error;
         }
         results.push(embedding as number[]);
         lastError = undefined;
@@ -133,16 +148,19 @@ async function it_callDoubaoMultimodal(
         break;
       } catch (err) {
         lastError = err;
-        lastDebug = {
-          request: {
-            provider: cfg.provider,
-            url,
-            method: "POST",
-            headers: debugHeaders,
-            payload,
-          },
-          error: it_extractDebugError(err),
-        };
+        const debug = (err as { itDebug?: ItEmbeddingDebugInfo })?.itDebug;
+        lastDebug =
+          debug ??
+          {
+            request: {
+              provider: cfg.provider,
+              url,
+              method: "POST",
+              headers: debugHeaders,
+              payload,
+            },
+            error: it_extractDebugError(err),
+          };
       }
     }
     if (lastError) {
@@ -190,22 +208,40 @@ export async function it_callEmbedding(
       });
       const data = response.data?.data;
       if (!Array.isArray(data)) {
-        throw new Error("Embedding response missing data");
+        const error = new Error("Embedding response missing data");
+        (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = {
+          request: {
+            provider: cfg.provider,
+            url,
+            method: "POST",
+            headers: debugHeaders,
+            payload,
+          },
+          error: {
+            message: error.message,
+            status: response.status,
+            response: response.data,
+          },
+        };
+        throw error;
       }
       const vectors = data.map((item: any) => item?.embedding).filter(Boolean);
       return vectors as number[][];
     } catch (err) {
       lastError = err;
-      lastDebug = {
-        request: {
-          provider: cfg.provider,
-          url,
-          method: "POST",
-          headers: debugHeaders,
-          payload,
-        },
-        error: it_extractDebugError(err),
-      };
+      const debug = (err as { itDebug?: ItEmbeddingDebugInfo })?.itDebug;
+      lastDebug =
+        debug ??
+        {
+          request: {
+            provider: cfg.provider,
+            url,
+            method: "POST",
+            headers: debugHeaders,
+            payload,
+          },
+          error: it_extractDebugError(err),
+        };
     }
   }
   const error =
