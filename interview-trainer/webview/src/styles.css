@@ -143,7 +143,7 @@
 
 .it-steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
 }
 
@@ -157,6 +157,8 @@
   border: 1px solid transparent;
   background: var(--vscode-sideBarSectionHeader-background);
   font-size: 11px;
+  flex-wrap: wrap;
+  min-height: 32px;
 }
 
 .it-step__content {
@@ -198,6 +200,9 @@
   font-size: 10px;
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .it-flow__right {
