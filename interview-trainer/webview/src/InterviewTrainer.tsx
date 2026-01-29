@@ -219,6 +219,10 @@ const InterviewTrainer: React.FC = () => {
   const [apiSaveMessage, setApiSaveMessage] = useState<string | null>(null);
   const [savingRetrieval, setSavingRetrieval] = useState(false);
   const [retrievalSaveMessage, setRetrievalSaveMessage] = useState<string | null>(null);
+  const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
+  const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
+    null,
+  );
   const [testingLlm, setTestingLlm] = useState(false);
   const [testingAsr, setTestingAsr] = useState(false);
   const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
@@ -991,6 +995,21 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingApiConfig(false);
+  };
+  const handleSavePrompts = async (scope: "evaluation" | "demo") => {
+    setPromptSaveMessage(null);
+    setPromptSaveScope(scope);
+    try {
+      await request("it/savePrompts", {
+        evaluationPrompt: customPrompt,
+        demoPrompt,
+      });
+      setPromptSaveMessage("提示词已保存");
+    } catch (err) {
+      setPromptSaveMessage(
+        `提示词保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   };
   const handleRetrievalFieldChange = (key: "mode" | "topK" | "minScore", value: any) => {
     setRetrievalForm((prev) => ({
@@ -1903,13 +1922,7 @@ const InterviewTrainer: React.FC = () => {
                   <button
                     className="it-button it-button--secondary it-button--compact"
                     disabled={uiLocked}
-                    onClick={async () => {
-                      await request("it/savePrompts", {
-                        evaluationPrompt: customPrompt,
-                        demoPrompt,
-                      });
-                      setApiSaveMessage("提示词已保存");
-                    }}
+                    onClick={() => handleSavePrompts("evaluation")}
                   >
                     保存提示词
                   </button>
@@ -1920,6 +1933,9 @@ const InterviewTrainer: React.FC = () => {
                 value={customPrompt}
                 onChange={(event) => setCustomPrompt(event.target.value)}
               />
+              {promptSaveScope === "evaluation" && promptSaveMessage && (
+                <div className="it-settings__hint">{promptSaveMessage}</div>
+              )}
             </div>
 
             <div className="it-settings__section">
@@ -1928,12 +1944,24 @@ const InterviewTrainer: React.FC = () => {
                   <div className="it-settings__title">示范答案提示词</div>
                   <div className="it-settings__desc">控制总时长≤10分钟，公务员思维、结构清晰</div>
                 </div>
+                <div className="it-settings__actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked}
+                    onClick={() => handleSavePrompts("demo")}
+                  >
+                    保存提示词
+                  </button>
+                </div>
               </div>
               <textarea
                 className="it-textarea it-textarea--prompt"
                 value={demoPrompt}
                 onChange={(event) => setDemoPrompt(event.target.value)}
               />
+              {promptSaveScope === "demo" && promptSaveMessage && (
+                <div className="it-settings__hint">{promptSaveMessage}</div>
+              )}
             </div>
 
             <div className="it-settings__section">
