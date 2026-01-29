@@ -238,6 +238,7 @@ const InterviewTrainer: React.FC = () => {
   const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
     null,
   );
+  const [showRawOutput, setShowRawOutput] = useState(false);
   const [creatingProvider, setCreatingProvider] = useState(false);
   const [providerCreateMessage, setProviderCreateMessage] = useState<string | null>(null);
   const [testingLlm, setTestingLlm] = useState(false);
@@ -502,6 +503,10 @@ const InterviewTrainer: React.FC = () => {
       disposeConfig();
     };
   }, []);
+
+  useEffect(() => {
+    setShowRawOutput(false);
+  }, [analysisResult]);
 
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
@@ -1706,6 +1711,34 @@ const InterviewTrainer: React.FC = () => {
                         value={analysisResult.evaluation.prompt}
                         readOnly
                       />
+                    </div>
+                  )}
+                  {(analysisResult.evaluation.raw || showRawOutput) && (
+                    <div className="it-evaluation__section">
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                        }}
+                      >
+                        <h4 style={{ margin: 0 }}>原始输出</h4>
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={!analysisResult.evaluation.raw}
+                          onClick={() => setShowRawOutput((prev) => !prev)}
+                        >
+                          {showRawOutput ? "收起" : "查看原始输出"}
+                        </button>
+                      </div>
+                      {showRawOutput && (
+                        <textarea
+                          className="it-textarea it-textarea--prompt"
+                          value={analysisResult.evaluation.raw || ""}
+                          readOnly
+                        />
+                      )}
                     </div>
                   )}
                   {analysisResult.evaluation.noteUsage &&
