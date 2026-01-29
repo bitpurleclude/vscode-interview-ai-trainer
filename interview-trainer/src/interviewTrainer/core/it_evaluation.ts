@@ -232,25 +232,53 @@ function it_extractJsonPayload(text: string): any | null {
   return fallback;
 }
 
+function it_isPlainObject(value: any): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function it_extractScoreData(parsed: any): {
   scores: Record<string, number>;
   overall?: number;
 } {
-  const scoreBlock =
-    parsed?.scores ||
-    parsed?.评分?.维度 ||
-    parsed?.评分?.维度评分 ||
-    parsed?.评分?.维度分 ||
-    {};
+  const scoreCandidates = [
+    parsed?.scores,
+    parsed?.dimensions,
+    parsed?.各维度评分,
+    parsed?.维度评分,
+    parsed?.维度Scores,
+    parsed?.维度,
+    parsed?.评分?.维度,
+    parsed?.评分?.维度评分,
+    parsed?.评分?.维度分,
+  ];
+  let scoreBlock: Record<string, number> = {};
+  for (const candidate of scoreCandidates) {
+    if (it_isPlainObject(candidate)) {
+      scoreBlock = candidate as Record<string, number>;
+      break;
+    }
+  }
+  const mappedScores = it_mapScoreKeys(scoreBlock);
+  const values = Object.values(mappedScores).filter((v) => Number.isFinite(v));
+  const averaged =
+    values.length > 0
+      ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
+      : undefined;
   const overallRaw =
     parsed?.overallScore ??
+    parsed?.overall ??
+    parsed?.整体评分 ??
+    parsed?.总分 ??
     parsed?.评分?.整体 ??
     parsed?.评分?.总分 ??
-    parsed?.评分?.overall;
-  const overall = Number.isFinite(Number(overallRaw)) ? Number(overallRaw) : undefined;
+    parsed?.评分?.overall ??
+    (typeof parsed?.评分 === "number" ? parsed.评分 : undefined);
+  const overallFallback = Number.isFinite(Number(overallRaw))
+    ? Number(overallRaw)
+    : undefined;
   return {
-    scores: it_mapScoreKeys(scoreBlock),
-    overall,
+    scores: mappedScores,
+    overall: values.length ? averaged : overallFallback,
   };
 }
 
@@ -439,6 +467,7 @@ export async function it_evaluateAnswer(
           .join("\n")}`
       : "检索笔记: 无",
     `评分维度(每项1-10分): ${dimensions.join("。")}`,
+    "评分输出字段必须使用 overallScore 与 scores（维度->分数），禁止使用“评分/维度评分/维度Scores”等变体。",
     questions.length
       ? `本次评审题目列表:\n${questions
           .map((q, idx) => `${idx + 1}. ${q}`)
