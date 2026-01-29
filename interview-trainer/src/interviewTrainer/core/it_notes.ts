@@ -54,6 +54,7 @@ const IT_ALLOWED_EXTS = [".md", ".mdx", ".markdown", ".txt"];
 const IT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 const IT_MAX_CHUNK_LEN = 1200;
 const IT_DEFAULT_QUERY_MAX_CHARS = 1500;
+const IT_SNIPPET_MAX_LEN = IT_MAX_CHUNK_LEN;
 const IT_DEFAULT_BATCH_SIZE = 16;
 const IT_EMBEDDING_CACHE_VERSION = 1;
 
@@ -161,6 +162,14 @@ function it_tokenize(text: string): string[] {
     tokens.push(normalized.slice(i, i + 2));
   }
   return tokens;
+}
+
+function it_buildSnippet(text: string): string {
+  const normalized = (text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= IT_SNIPPET_MAX_LEN) {
+    return normalized;
+  }
+  return `${normalized.slice(0, IT_SNIPPET_MAX_LEN)}…`;
 }
 
 function it_scoreTokens(queryTokens: string[], textTokens: string[]): number {
@@ -480,7 +489,7 @@ export async function it_retrieveNotes(
     return scored.map(({ score, item }) => ({
       score: Number(score.toFixed(3)),
       source: item.source,
-      snippet: item.text.replace(/\s+/g, " ").slice(0, 160),
+      snippet: it_buildSnippet(item.text),
     }));
   }
   if (mode !== "vector") {
@@ -556,7 +565,7 @@ export async function it_retrieveNotes(
   return scored.map(({ score, item }) => ({
     score: Number(score.toFixed(3)),
     source: item.source,
-    snippet: item.text.replace(/\s+/g, " ").slice(0, 160),
+    snippet: it_buildSnippet(item.text),
   }));
 }
 
