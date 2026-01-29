@@ -1,4 +1,4 @@
-import fs from "fs";
+﻿import fs from "fs";
 import path from "path";
 import * as vscode from "vscode";
 import {
@@ -18,14 +18,14 @@ import { it_callBaiduAsr } from "../api/it_baidu";
 import { ItApiConfig } from "../api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
-import { it_buildCorpus, it_retrieveNotesMulti } from "./it_notes";
+import { it_buildCorpusAsync, it_retrieveNotesMulti } from "./it_notes";
 import {
-  it_appendAttemptData,
-  it_nextAttemptIndex,
-  it_readTopicMeta,
-  it_reportPathForTopic,
-  it_resolveTopicDir,
-  it_writeTopicMeta,
+  it_appendAttemptDataAsync,
+  it_nextAttemptIndexAsync,
+  it_readTopicMetaAsync,
+  it_reportPathForTopicAsync,
+  it_resolveTopicDirAsync,
+  it_writeTopicMetaAsync,
 } from "../storage/it_sessions";
 import {
   it_summarizeAudioMetrics,
@@ -34,7 +34,7 @@ import {
 } from "../utils/it_audio";
 import { it_formatSeconds, it_hashText, it_normalizeText } from "../utils/it_text";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
-import { it_appendReport } from "./it_report";
+import { it_appendReportAsync } from "./it_report";
 
 interface ItAnalyzeDeps {
   context: vscode.ExtensionContext;
@@ -69,11 +69,11 @@ function it_deriveTopicTitle(
   return base.slice(0, maxLen);
 }
 
-function it_storeRecording(
+async function it_storeRecordingAsync(
   topicDir: string,
   attemptIndex: number,
   audio: ItAnalyzeRequest["audio"],
-): string {
+): Promise<string> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const ext = audio.format === "pcm" ? "wav" : audio.format;
   const tempPath = path.join(
@@ -83,10 +83,10 @@ function it_storeRecording(
   if (audio.format === "pcm") {
     const pcm = it_decodePcm16(audio.base64);
     const wavBuffer = it_pcm16ToWavBuffer(pcm, audio.sampleRate, 1);
-    fs.writeFileSync(tempPath, wavBuffer);
+    await fs.promises.writeFile(tempPath, wavBuffer);
   } else {
     const buffer = Buffer.from(audio.base64, "base64");
-    fs.writeFileSync(tempPath, buffer);
+    await fs.promises.writeFile(tempPath, buffer);
   }
   return tempPath;
 }
@@ -853,6 +853,146 @@ async function it_transcribePcmWithChunks(
   throw lastError instanceof Error ? lastError : new Error("Baidu ASR failed.");
 }
 
+async function it_transcribeAudio(
+  request: ItAnalyzeRequest,
+  asrCfg: any,
+  reportProgress: (
+    step: ItWorkflowStep,
+    progress: number,
+    message?: string,
+    status?: ItStepStatus,
+  ) => void,
+): Promise<string> {
+  const asrProvider = asrCfg.provider || "baidu_vop";
+  const asrLabel = asrProvider === "mock" ? "模拟" : "API";
+  reportProgress("asr", 0, `语音转写 0% · ${asrLabel}`, "running");
+
+  if (asrProvider === "mock") {
+    const mockText = String(asrCfg.mock_text || "");
+    reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
+    return mockText;
+  }
+  if (asrProvider !== "baidu_vop") {
+    throw new Error("当前仅支持百度语音转文字（baidu_vop）。");
+  }
+  if (!asrCfg.api_key || !asrCfg.secret_key) {
+    throw new Error("缺少百度语音转文字的API Key或Secret Key。");
+  }
+
+  const asrConfig = {
+    apiKey: asrCfg.api_key || "",
+    secretKey: asrCfg.secret_key || "",
+    baseUrl: asrCfg.base_url || "https://vop.baidu.com/server_api",
+    devPid: Number(asrCfg.dev_pid || 1537),
+    language: asrCfg.language || "zh",
+    timeoutSec: Number(asrCfg.timeout_sec || 120),
+    maxRetries: Number(asrCfg.max_retries || 1),
+  };
+  const maxChunkSec = Number(asrCfg.max_chunk_sec || 50);
+  let transcript = "";
+  if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
+    transcript = await it_transcribePcmWithChunks(
+      asrConfig,
+      request.audio.base64,
+      request.audio.sampleRate,
+      maxChunkSec,
+      (done, total) => {
+        const percent = total ? Math.round((done / total) * 100) : 0;
+        reportProgress(
+          "asr",
+          percent,
+          `语音转写 ${percent}% · ${asrLabel}`,
+          "running",
+        );
+      },
+    );
+  } else {
+    reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
+    transcript = await it_callBaiduAsr(asrConfig, {
+      format: request.audio.format,
+      rate: request.audio.sampleRate,
+      channel: 1,
+      cuid: uuidv4(),
+      speech: request.audio.base64,
+      len: request.audio.byteLength,
+    });
+  }
+  reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
+  return transcript;
+}
+
+async function it_persistAnalysis(params: {
+  questionText: string;
+  questionList: string[];
+  topicTitle: string;
+  topicDir: string;
+  reportPath: string;
+  attemptIndex: number;
+  response: ItAnalyzeResponse;
+  reportProgress: (
+    step: ItWorkflowStep,
+    progress: number,
+    message?: string,
+    status?: ItStepStatus,
+  ) => void;
+}): Promise<void> {
+  const {
+    questionText,
+    questionList,
+    topicTitle,
+    topicDir,
+    reportPath,
+    attemptIndex,
+    response,
+    reportProgress,
+  } = params;
+
+  reportProgress("report", 30, "结果生成 30% · 本地", "running");
+  await it_appendReportAsync(
+    reportPath,
+    topicTitle,
+    questionText || undefined,
+    questionList.length ? questionList : undefined,
+    attemptIndex,
+    response,
+    {
+      attemptHeading: "第{n}次作答",
+      segmentHeading: "小题{n}",
+      attemptNote: "评分仅供参考，请结合标准文件自评。",
+    },
+  );
+  reportProgress("report", 100, "结果生成 100% · 本地", "success");
+
+  reportProgress("write", 40, "写入文件 40% · 本地", "running");
+  const attemptData = {
+    attemptIndex,
+    timestamp: new Date().toISOString(),
+    audioPath: response.audioPath,
+    durationSec: response.acoustic.durationSec,
+    transcript: response.transcript,
+    detailedTranscript: response.detailedTranscript,
+    evaluation: response.evaluation,
+    notes: response.notes,
+    audioSegments: response.audioSegments,
+    questionTimings: response.questionTimings,
+  };
+  await it_appendAttemptDataAsync(topicDir, attemptData);
+
+  const meta = await it_readTopicMetaAsync(topicDir);
+  const normalized = it_normalizeText(questionText || topicTitle);
+  const now = new Date().toISOString();
+  await it_writeTopicMetaAsync(topicDir, {
+    topicTitle: meta.topicTitle || topicTitle,
+    questionText: questionText || meta.questionText || "",
+    questionList: questionList.length ? questionList : meta.questionList || [],
+    questionHash: meta.questionHash || it_hashText(normalized),
+    createdAt: meta.createdAt || now,
+    updatedAt: now,
+    overallScore: response.evaluation.overallScore,
+  });
+  reportProgress("write", 100, "写入文件 100% · 本地", "success");
+}
+
 export async function it_runAnalysis(
   deps: ItAnalyzeDeps,
   request: ItAnalyzeRequest,
@@ -880,59 +1020,7 @@ export async function it_runAnalysis(
   }
 
   const asrCfg = envConfig.asr ?? {};
-  const asrProvider = asrCfg.provider || "baidu_vop";
-  const asrLabel = asrProvider === "mock" ? "模拟" : "API";
-  reportProgress("asr", 0, `语音转写 0% · ${asrLabel}`, "running");
-  let transcript = "";
-  if (asrProvider === "mock") {
-    transcript = String(asrCfg.mock_text || "");
-    reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
-  } else {
-    if (asrProvider !== "baidu_vop") {
-      throw new Error("当前仅支持百度语音转文字（baidu_vop）。");
-    }
-    if (!asrCfg.api_key || !asrCfg.secret_key) {
-      throw new Error("缺少百度语音转文字的API Key或Secret Key。");
-    }
-    const asrConfig = {
-      apiKey: asrCfg.api_key || "",
-      secretKey: asrCfg.secret_key || "",
-      baseUrl: asrCfg.base_url || "https://vop.baidu.com/server_api",
-      devPid: Number(asrCfg.dev_pid || 1537),
-      language: asrCfg.language || "zh",
-      timeoutSec: Number(asrCfg.timeout_sec || 120),
-      maxRetries: Number(asrCfg.max_retries || 1),
-    };
-    const maxChunkSec = Number(asrCfg.max_chunk_sec || 50);
-    if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
-      transcript = await it_transcribePcmWithChunks(
-        asrConfig,
-        request.audio.base64,
-        request.audio.sampleRate,
-        maxChunkSec,
-        (done, total) => {
-          const percent = total ? Math.round((done / total) * 100) : 0;
-          reportProgress(
-            "asr",
-            percent,
-            `语音转写 ${percent}% · ${asrLabel}`,
-            "running",
-          );
-        },
-      );
-    } else {
-      reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-      transcript = await it_callBaiduAsr(asrConfig, {
-        format: request.audio.format,
-        rate: request.audio.sampleRate,
-        channel: 1,
-        cuid: uuidv4(),
-        speech: request.audio.base64,
-        len: request.audio.byteLength,
-      });
-    }
-    reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
-  }
+  const transcript = await it_transcribeAudio(request, asrCfg, reportProgress);
 
   reportProgress("acoustic", 20, "声学分析 20% · 本地", "running");
   const acoustic =
@@ -1061,7 +1149,7 @@ export async function it_runAnalysis(
       `${retrievalLabel}检索/文件扫描中 · 本地`,
       "running",
     );
-    const corpus = it_buildCorpus({
+    const corpus = await it_buildCorpusAsync({
       notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
       prompts: path.join(
         deps.workspaceRoot,
@@ -1202,7 +1290,20 @@ export async function it_runAnalysis(
     Number(deps.skillConfig.topics?.max_title_len ?? 32),
   );
 
-  const topicDir = it_resolveTopicDir(deps.workspaceRoot, topicTitle, questionText, {
+  const topicDir = await it_resolveTopicDirAsync(
+    deps.workspaceRoot,
+    topicTitle,
+    questionText,
+    {
+    sessionsDir: deps.skillConfig.sessions_dir || "sessions",
+    allowUnicode: deps.skillConfig.filenames?.allow_unicode ?? true,
+    maxSlugLen: deps.skillConfig.filenames?.max_slug_len ?? 16,
+    similarityThreshold: Number(deps.skillConfig.topics?.similarity_threshold ?? 0.72),
+    centerSubdir: deps.skillConfig.topics?.center_subdir || "",
+    },
+  );
+
+  const reportPath = await it_reportPathForTopicAsync(topicDir, topicTitle, {
     sessionsDir: deps.skillConfig.sessions_dir || "sessions",
     allowUnicode: deps.skillConfig.filenames?.allow_unicode ?? true,
     maxSlugLen: deps.skillConfig.filenames?.max_slug_len ?? 16,
@@ -1210,16 +1311,12 @@ export async function it_runAnalysis(
     centerSubdir: deps.skillConfig.topics?.center_subdir || "",
   });
 
-  const reportPath = it_reportPathForTopic(topicDir, topicTitle, {
-    sessionsDir: deps.skillConfig.sessions_dir || "sessions",
-    allowUnicode: deps.skillConfig.filenames?.allow_unicode ?? true,
-    maxSlugLen: deps.skillConfig.filenames?.max_slug_len ?? 16,
-    similarityThreshold: Number(deps.skillConfig.topics?.similarity_threshold ?? 0.72),
-    centerSubdir: deps.skillConfig.topics?.center_subdir || "",
-  });
-
-  const attemptIndex = it_nextAttemptIndex(reportPath);
-  const storedAudioPath = it_storeRecording(topicDir, attemptIndex, request.audio);
+  const attemptIndex = await it_nextAttemptIndexAsync(reportPath);
+  const storedAudioPath = await it_storeRecordingAsync(
+    topicDir,
+    attemptIndex,
+    request.audio,
+  );
 
   const evalProvider = envConfig.llm?.provider || "heuristic";
   const evalDefaultBase =
@@ -1309,50 +1406,16 @@ export async function it_runAnalysis(
     audioPath: storedAudioPath,
   };
 
-  reportProgress("report", 30, "结果生成 30% · 本地", "running");
-  it_appendReport(
-    reportPath,
+  await it_persistAnalysis({
+    questionText,
+    questionList,
     topicTitle,
-    questionText || undefined,
-    questionList.length ? questionList : undefined,
+    topicDir,
+    reportPath,
     attemptIndex,
     response,
-    {
-      attemptHeading: "第{n}次作答",
-      segmentHeading: "小题{n}",
-      attemptNote: "评分为相对参考，请结合标准文件自评。",
-    },
-  );
-  reportProgress("report", 100, "结果生成 100% · 本地", "success");
-
-  reportProgress("write", 40, "写入文件 40% · 本地", "running");
-  const attemptData = {
-    attemptIndex,
-    timestamp: new Date().toISOString(),
-    audioPath: storedAudioPath,
-    durationSec: acoustic.durationSec,
-    transcript,
-    detailedTranscript,
-    evaluation,
-    notes,
-    audioSegments,
-    questionTimings,
-  };
-  it_appendAttemptData(topicDir, attemptData);
-
-  const meta = it_readTopicMeta(topicDir);
-  const normalized = it_normalizeText(questionText || topicTitle);
-  const now = new Date().toISOString();
-  it_writeTopicMeta(topicDir, {
-    topicTitle: meta.topicTitle || topicTitle,
-    questionText: questionText || meta.questionText || "",
-    questionList: questionList.length ? questionList : meta.questionList || [],
-    questionHash: meta.questionHash || it_hashText(normalized),
-    createdAt: meta.createdAt || now,
-    updatedAt: now,
-    overallScore: evaluation.overallScore,
+    reportProgress,
   });
-  reportProgress("write", 100, "写入文件 100% · 本地", "success");
 
   return response;
 }

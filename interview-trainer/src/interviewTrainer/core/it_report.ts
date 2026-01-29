@@ -169,3 +169,44 @@ export function it_appendReport(
   );
   fs.appendFileSync(reportPath, content, "utf-8");
 }
+
+export async function it_appendReportAsync(
+  reportPath: string,
+  topicTitle: string,
+  questionText: string | undefined,
+  questionList: string[] | undefined,
+  attemptIndex: number,
+  response: ItAnalyzeResponse,
+  config: ItReportConfig,
+): Promise<void> {
+  const exists = await fs.promises
+    .access(reportPath)
+    .then(() => true)
+    .catch(() => false);
+  if (!exists) {
+    const header: string[] = [];
+    header.push(`# ${topicTitle}\n\n`);
+    if (questionText) {
+      header.push("棰樺共姝ｆ枃:\n");
+      header.push(`${questionText}\n\n`);
+    }
+    if (questionList && questionList.length) {
+      header.push("灏忛鍒楄〃:\n");
+      questionList.forEach((item, idx) => {
+        header.push(`${idx + 1}. ${item}\n`);
+      });
+      header.push("\n");
+    }
+    await fs.promises.writeFile(reportPath, header.join(""), "utf-8");
+  }
+
+  const content = it_renderReport(
+    topicTitle,
+    questionText,
+    questionList,
+    attemptIndex,
+    response,
+    config,
+  );
+  await fs.promises.appendFile(reportPath, content, "utf-8");
+}

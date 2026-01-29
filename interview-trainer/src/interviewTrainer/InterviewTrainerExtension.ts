@@ -30,7 +30,7 @@ import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
 import {
-  it_buildCorpus,
+  it_buildCorpusAsync,
   it_prepareEmbeddingCache,
   it_clearEmbeddingMemoryCache,
 } from "./core/it_notes";
@@ -347,7 +347,7 @@ export class InterviewTrainerExtension {
       return;
     }
     const workspaceCfg = this.configBundle.skill.workspace ?? {};
-    const corpus = it_buildCorpus({
+    const corpus = await it_buildCorpusAsync({
       notes: path.join(workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
       prompts: path.join(
         workspaceRoot,

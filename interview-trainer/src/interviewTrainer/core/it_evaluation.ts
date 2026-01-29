@@ -82,6 +82,33 @@ function it_toStringArray(value: unknown): string[] {
   return [];
 }
 
+function it_extractJsonPayload(text: string): any | null {
+  if (!text) {
+    return null;
+  }
+  const candidates: string[] = [];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) {
+    candidates.push(fenced[1]);
+  }
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    candidates.push(text.slice(start, end + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 function it_parseQuestionIndex(marker: string): number | null {
   const match = marker.match(/第\s*([一二三四五六七八九十0-9]+)\s*[题问]/);
   if (!match) {
@@ -315,7 +342,22 @@ export async function it_evaluateAnswer(
   }
 
   try {
-    const parsed = JSON.parse(content);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      parsed = it_extractJsonPayload(content);
+    }
+    if (!parsed) {
+      return it_buildUnavailableEvaluation({
+        question,
+        reason: "LLM 输出解析失败，无法生成评分与示范。",
+        dimensions,
+        notes,
+        raw: content,
+        promptText,
+      });
+    }
     const mappedScores = it_mapScoreKeys(parsed.scores || {});
     const overallScore =
       parsed.overallScore || it_computeOverallScore(mappedScores, dimensions);

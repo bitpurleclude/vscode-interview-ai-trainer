@@ -76,6 +76,14 @@ function it_readText(filePath: string): string {
   }
 }
 
+async function it_readTextAsync(filePath: string): Promise<string> {
+  try {
+    return await fs.promises.readFile(filePath, "utf-8");
+  } catch {
+    return fs.promises.readFile(filePath, "utf-8");
+  }
+}
+
 function it_splitByParagraphs(text: string, maxLen: number): string[] {
   const parts = text
     .split(/\n\s*\n/)
@@ -327,6 +335,57 @@ function it_getDirMtime(dirPath: string): number {
   }
 }
 
+async function it_getDirMtimeAsync(dirPath: string): Promise<number> {
+  if (!dirPath) {
+    return 0;
+  }
+  try {
+    const stat = await fs.promises.stat(dirPath);
+    return stat.mtimeMs || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function it_collectCorpusAsync(
+  kind: string,
+  dirPath: string,
+  corpus: ItCorpusItem[],
+): Promise<void> {
+  let entries: fs.Dirent[] = [];
+  try {
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      await it_collectCorpusAsync(kind, fullPath, corpus);
+      continue;
+    }
+    const ext = path.extname(entry.name).toLowerCase();
+    if (!IT_ALLOWED_EXTS.includes(ext)) {
+      continue;
+    }
+    try {
+      const stat = await fs.promises.stat(fullPath);
+      if (stat.size > IT_MAX_FILE_SIZE) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+    const text = await it_readTextAsync(fullPath);
+    for (const chunk of it_splitText(text, IT_MAX_CHUNK_LEN)) {
+      corpus.push({ kind, source: fullPath, text: chunk });
+    }
+  }
+}
+
 export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
   const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
   const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
@@ -376,6 +435,32 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
         corpus.push({ kind, source: fullPath, text: chunk });
       }
     }
+  }
+  cachedCorpus = { key, dirMtimes, corpus };
+  return corpus;
+}
+
+export async function it_buildCorpusAsync(
+  inputs: Record<string, string>,
+): Promise<ItCorpusItem[]> {
+  const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
+  const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
+  const dirMtimes: Record<string, number> = {};
+  for (const [kind, dirPath] of entries) {
+    dirMtimes[kind] = await it_getDirMtimeAsync(dirPath);
+  }
+  if (cachedCorpus && cachedCorpus.key === key) {
+    const unchanged = entries.every(
+      ([kind]) => cachedCorpus?.dirMtimes[kind] === dirMtimes[kind],
+    );
+    if (unchanged) {
+      return cachedCorpus.corpus;
+    }
+  }
+
+  const corpus: ItCorpusItem[] = [];
+  for (const [kind, dirPath] of entries) {
+    await it_collectCorpusAsync(kind, dirPath, corpus);
   }
   cachedCorpus = { key, dirMtimes, corpus };
   return corpus;

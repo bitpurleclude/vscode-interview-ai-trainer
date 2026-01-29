@@ -1583,6 +1583,26 @@ const InterviewTrainer: React.FC = () => {
               )}
               {analysisResult && activeTab === "evaluation" && (
                 <div className="it-evaluation">
+                  {questionText.trim() && (
+                    <div className="it-evaluation__section">
+                      <h4>题干材料</h4>
+                      <textarea
+                        className="it-textarea it-textarea--prompt"
+                        value={questionText}
+                        readOnly
+                      />
+                    </div>
+                  )}
+                  {parsedQuestionList.length > 0 && (
+                    <div className="it-evaluation__section">
+                      <h4>题目列表</h4>
+                      <ul>
+                        {parsedQuestionList.map((item, idx) => (
+                          <li key={`${idx}-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {analysisResult.questionTimings &&
                   analysisResult.questionTimings.length > 0 && (
                     <div className="it-question-timings">
@@ -1652,41 +1672,19 @@ const InterviewTrainer: React.FC = () => {
                       ))}
                     </ul>
                   </div>
-                  {analysisResult.evaluation.noteUsage &&
-                  analysisResult.evaluation.noteUsage.length > 0 && (
-                    <div className="it-evaluation__section">
-                      <h4>笔记引用</h4>
-                      <ul>
-                        {analysisResult.evaluation.noteUsage.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {analysisResult.evaluation.noteSuggestions &&
-                  analysisResult.evaluation.noteSuggestions.length > 0 && (
-                    <div className="it-evaluation__section">
-                      <h4>可用素材/参考思路</h4>
-                      <ul>
-                        {analysisResult.evaluation.noteSuggestions.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                   {analysisResult.evaluation.revisedAnswers &&
                   analysisResult.evaluation.revisedAnswers.length > 0 && (
                     <div className="it-evaluation__section">
                       <h4>示范性修改</h4>
                       <div className="it-revised-list">
                         {analysisResult.evaluation.revisedAnswers.map((item, idx) => (
-                            <div key={`${idx}-${item.question}`} className="it-revised-item">
-                              <div className="it-revised-item__title">
-                                {idx + 1}. {item.question}
-                                {typeof item.estimatedTimeMin === "number"
-                                  ? `（建议${item.estimatedTimeMin}分钟）`
-                                  : ""}
-                              </div>
+                          <div key={`${idx}-${item.question}`} className="it-revised-item">
+                            <div className="it-revised-item__title">
+                              {idx + 1}. {item.question}
+                              {typeof item.estimatedTimeMin === "number"
+                                ? `（建议${item.estimatedTimeMin}分钟）`
+                                : ""}
+                            </div>
                             <div className="it-revised-item__block">
                               <span>原回答：</span>
                               <span>{item.original}</span>
@@ -1708,6 +1706,28 @@ const InterviewTrainer: React.FC = () => {
                         value={analysisResult.evaluation.prompt}
                         readOnly
                       />
+                    </div>
+                  )}
+                  {analysisResult.evaluation.noteUsage &&
+                  analysisResult.evaluation.noteUsage.length > 0 && (
+                    <div className="it-evaluation__section">
+                      <h4>笔记引用</h4>
+                      <ul>
+                        {analysisResult.evaluation.noteUsage.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {analysisResult.evaluation.noteSuggestions &&
+                  analysisResult.evaluation.noteSuggestions.length > 0 && (
+                    <div className="it-evaluation__section">
+                      <h4>可用素材/参考思路</h4>
+                      <ul>
+                        {analysisResult.evaluation.noteSuggestions.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
