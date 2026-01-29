@@ -63,6 +63,33 @@ function it_extractDebugError(error: unknown): ItEmbeddingDebugError {
   return { message: String(error) };
 }
 
+function it_parseEmbeddingResponse(
+  responseData: any,
+  expectedCount: number,
+): number[][] {
+  const data = responseData?.data;
+  if (Array.isArray(data)) {
+    const vectors = data
+      .map((item: any) => item?.embedding)
+      .filter((item: unknown) => Array.isArray(item)) as number[][];
+    if (vectors.length) {
+      return vectors;
+    }
+  }
+  const single =
+    (data && Array.isArray(data.embedding) ? data.embedding : null) ??
+    (Array.isArray(responseData?.embedding) ? responseData.embedding : null);
+  if (Array.isArray(single)) {
+    if (expectedCount > 1) {
+      throw new Error(
+        "Embedding response contains a single vector for multiple inputs.",
+      );
+    }
+    return [single as number[]];
+  }
+  return [];
+}
+
 function it_buildEmbeddingUrl(cfg: ItEmbeddingConfig, useMultimodal: boolean): string {
   const base = (cfg.baseUrl || "").trim().replace(/\/$/, "");
   const lower = base.toLowerCase();
@@ -123,8 +150,8 @@ async function it_callDoubaoMultimodal(
           headers,
           timeout: cfg.timeoutSec * 1000,
         });
-        const embedding = response.data?.data?.[0]?.embedding;
-        if (!Array.isArray(embedding)) {
+        const vectors = it_parseEmbeddingResponse(response.data, 1);
+        if (!vectors.length) {
           const error = new Error("Embedding response missing data");
           (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = {
             request: {
@@ -142,7 +169,7 @@ async function it_callDoubaoMultimodal(
           };
           throw error;
         }
-        results.push(embedding as number[]);
+        results.push(vectors[0]);
         lastError = undefined;
         lastDebug = undefined;
         break;
@@ -206,8 +233,8 @@ export async function it_callEmbedding(
         headers,
         timeout: cfg.timeoutSec * 1000,
       });
-      const data = response.data?.data;
-      if (!Array.isArray(data)) {
+      const vectors = it_parseEmbeddingResponse(response.data, inputs.length);
+      if (!vectors.length) {
         const error = new Error("Embedding response missing data");
         (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = {
           request: {
@@ -225,8 +252,7 @@ export async function it_callEmbedding(
         };
         throw error;
       }
-      const vectors = data.map((item: any) => item?.embedding).filter(Boolean);
-      return vectors as number[][];
+      return vectors;
     } catch (err) {
       lastError = err;
       const debug = (err as { itDebug?: ItEmbeddingDebugInfo })?.itDebug;
