@@ -284,6 +284,7 @@ export async function it_evaluateAnswer(
     });
   }
 
+  const resolvedRetries = Math.max(5, Number(config.maxRetries ?? 0));
   let content: string;
   try {
     content = await it_callLlmChat(
@@ -295,7 +296,7 @@ export async function it_evaluateAnswer(
         temperature: config.temperature,
         topP: config.topP,
         timeoutSec: config.timeoutSec,
-        maxRetries: config.maxRetries,
+        maxRetries: resolvedRetries,
       },
       [
         { role: "system", content: systemPrompt },

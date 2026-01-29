@@ -254,6 +254,7 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
     llm.provider === "volc_doubao"
       ? "https://ark.cn-beijing.volces.com"
       : "https://qianfan.baidubce.com/v2";
+  const resolvedRetries = Math.max(5, Number(llm.max_retries ?? 1));
   return {
     provider: llm.provider,
     apiKey: llm.api_key || "",
@@ -266,7 +267,7 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
     temperature: Number(llm.temperature ?? 0.2),
     topP: Number(llm.top_p ?? 0.8),
     timeoutSec: Number(llm.timeout_sec ?? 60),
-    maxRetries: Number(llm.max_retries ?? 1),
+    maxRetries: resolvedRetries,
   };
 }
 
@@ -649,10 +650,11 @@ function it_mergeEvaluations(params: {
     scores[key] = stats.count ? Math.round(stats.sum / stats.count) : 0;
   });
 
-  const overallScore = evaluations.length
+  const successful = evaluations.filter((item) => item.mode === "llm");
+  const overallScore = successful.length
     ? Math.round(
-        evaluations.reduce((sum, item) => sum + (item.overallScore || 0), 0) /
-          evaluations.length,
+        successful.reduce((sum, item) => sum + (item.overallScore || 0), 0) /
+          successful.length,
       )
     : 0;
 
@@ -1236,7 +1238,7 @@ export async function it_runAnalysis(
     temperature: Number(envConfig.llm?.temperature ?? 0.8),
     topP: Number(envConfig.llm?.top_p ?? 0.8),
     timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
-    maxRetries: Number(envConfig.llm?.max_retries ?? 1),
+    maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
   };
