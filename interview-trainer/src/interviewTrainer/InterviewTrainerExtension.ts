@@ -99,6 +99,17 @@ export class InterviewTrainerExtension {
         ? "https://ark.cn-beijing.volces.com"
         : "https://qianfan.baidubce.com/v2";
     const workspace = this.configBundle.skill.workspace ?? {};
+    const retrieval = this.configBundle.skill.retrieval ?? {};
+    const vector = retrieval.vector ?? {};
+    const vectorDefaults = {
+      provider: "volc_doubao",
+      base_url: "https://ark.cn-beijing.volces.com",
+      model: "doubao-embedding",
+      timeout_sec: 30,
+      max_retries: 1,
+      batch_size: 16,
+      query_max_chars: 1500,
+    };
     return {
       activeEnvironment: env,
       envList: Object.keys(apiConfig.environments || {}),
@@ -139,7 +150,22 @@ export class InterviewTrainerExtension {
         maxRetries: Number(asrConfig.max_retries ?? 1),
       },
       sessionsDir: this.configBundle.skill.sessions_dir || "sessions",
-      retrievalEnabled: this.configBundle.skill.retrieval?.enabled !== false,
+      retrievalEnabled: retrieval.enabled !== false,
+      retrieval: {
+        mode: retrieval.mode || "vector",
+        topK: Number(retrieval.top_k ?? 5),
+        minScore: Number(retrieval.min_score ?? 0.2),
+        vector: {
+          provider: vector.provider || vectorDefaults.provider,
+          baseUrl: vector.base_url || vectorDefaults.base_url,
+          apiKey: vector.api_key || "",
+          model: vector.model || vectorDefaults.model,
+          timeoutSec: Number(vector.timeout_sec ?? vectorDefaults.timeout_sec),
+          maxRetries: Number(vector.max_retries ?? vectorDefaults.max_retries),
+          batchSize: Number(vector.batch_size ?? vectorDefaults.batch_size),
+          queryMaxChars: Number(vector.query_max_chars ?? vectorDefaults.query_max_chars),
+        },
+      },
       workspaceDirs: {
         notesDir: workspace.notes_dir || "inputs/notes",
         promptsDir: workspace.prompts_dir || "inputs/prompts/guangdong",
@@ -148,6 +174,16 @@ export class InterviewTrainerExtension {
         examplesDir: workspace.examples_dir || "inputs/examples",
       },
     };
+  }
+
+  private async refreshConfigSnapshot(): Promise<ItConfigSnapshot> {
+    this.configBundle = it_loadConfigBundle(this.context);
+    this.configBundle.api = await it_applySecretOverrides(
+      this.context,
+      this.configBundle.api,
+    );
+    this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+    return this.configSnapshot;
   }
 
   private it_getLlmConfig(): ItLlmConfig | null {
@@ -411,7 +447,9 @@ export class InterviewTrainerExtension {
 
   private registerHandlers(): void {
     this.webviewProtocol.on("it/getState", () => this.state);
-    this.webviewProtocol.on("it/getConfig", () => this.configSnapshot);
+    this.webviewProtocol.on("it/getConfig", async () => {
+      return await this.refreshConfigSnapshot();
+    });
     this.webviewProtocol.on("it/listHistory", (msg) => {
       const workspaceRoot = this.requireWorkspaceRoot();
       const sessionsRoot = path.join(
@@ -490,9 +528,47 @@ export class InterviewTrainerExtension {
         },
       };
       it_saveSkillConfig(this.context, this.configBundle.skill);
-      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { enabled };
+    });
+    this.webviewProtocol.on("it/updateRetrievalSettings", async (msg) => {
+      const payload = msg.data || {};
+      const incoming = payload.retrieval || {};
+      this.configBundle = it_loadConfigBundle(this.context);
+      const current = this.configBundle.skill.retrieval || {};
+      const currentVector = current.vector || {};
+      const incomingVector = incoming.vector || {};
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        retrieval: {
+          ...current,
+          enabled: incoming.enabled ?? current.enabled,
+          mode: incoming.mode || current.mode || "vector",
+          top_k: Number(incoming.topK ?? current.top_k ?? 5),
+          min_score: Number(incoming.minScore ?? current.min_score ?? 0.2),
+          vector: {
+            ...currentVector,
+            provider: incomingVector.provider ?? currentVector.provider ?? "volc_doubao",
+            base_url:
+              incomingVector.baseUrl ??
+              currentVector.base_url ??
+              "https://ark.cn-beijing.volces.com",
+            api_key: incomingVector.apiKey ?? currentVector.api_key ?? "",
+            model: incomingVector.model ?? currentVector.model ?? "doubao-embedding",
+            timeout_sec: Number(incomingVector.timeoutSec ?? currentVector.timeout_sec ?? 30),
+            max_retries: Number(incomingVector.maxRetries ?? currentVector.max_retries ?? 1),
+            batch_size: Number(incomingVector.batchSize ?? currentVector.batch_size ?? 16),
+            query_max_chars: Number(
+              incomingVector.queryMaxChars ?? currentVector.query_max_chars ?? 1500,
+            ),
+          },
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = await this.refreshConfigSnapshot();
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
     });
     this.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
       const kind = String(msg.data?.kind || "");
@@ -539,7 +615,7 @@ export class InterviewTrainerExtension {
         },
       };
       it_saveSkillConfig(this.context, this.configBundle.skill);
-      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { kind, dir: normalized };
     });
@@ -568,7 +644,7 @@ export class InterviewTrainerExtension {
         sessions_dir: normalized || "sessions",
       };
       it_saveSkillConfig(this.context, this.configBundle.skill);
-      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { sessionsDir: normalized || "sessions" };
     });
@@ -678,7 +754,7 @@ export class InterviewTrainerExtension {
         },
       };
       it_saveSkillConfig(this.context, this.configBundle.skill);
-      this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+      this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { evaluationPrompt, demoPrompt };
     });

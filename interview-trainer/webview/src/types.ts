@@ -163,6 +163,21 @@ export interface ItConfigSnapshot {
   };
   sessionsDir: string;
   retrievalEnabled: boolean;
+  retrieval: {
+    mode: string;
+    topK: number;
+    minScore: number;
+    vector: {
+      provider: string;
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      timeoutSec: number;
+      maxRetries: number;
+      batchSize: number;
+      queryMaxChars: number;
+    };
+  };
   workspaceDirs: {
     notesDir: string;
     promptsDir: string;

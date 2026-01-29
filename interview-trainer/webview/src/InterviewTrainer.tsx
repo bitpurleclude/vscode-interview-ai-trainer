@@ -200,8 +200,25 @@ const InterviewTrainer: React.FC = () => {
       maxRetries: 1,
     },
   });
+  const [retrievalForm, setRetrievalForm] = useState({
+    mode: "vector",
+    topK: 5,
+    minScore: 0.2,
+    vector: {
+      provider: "volc_doubao",
+      baseUrl: "https://ark.cn-beijing.volces.com",
+      model: "doubao-embedding",
+      apiKey: "",
+      timeoutSec: 30,
+      maxRetries: 1,
+      batchSize: 16,
+      queryMaxChars: 1500,
+    },
+  });
   const [savingApiConfig, setSavingApiConfig] = useState(false);
   const [apiSaveMessage, setApiSaveMessage] = useState<string | null>(null);
+  const [savingRetrieval, setSavingRetrieval] = useState(false);
+  const [retrievalSaveMessage, setRetrievalSaveMessage] = useState<string | null>(null);
   const [testingLlm, setTestingLlm] = useState(false);
   const [testingAsr, setTestingAsr] = useState(false);
   const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
@@ -268,6 +285,26 @@ const InterviewTrainer: React.FC = () => {
     },
     [],
   );
+  const applyRetrievalToForm = useCallback((cfg: ItConfigSnapshot | null) => {
+    if (!cfg) return;
+    const retrieval = cfg.retrieval || ({} as ItConfigSnapshot["retrieval"]);
+    const vector = retrieval.vector || ({} as ItConfigSnapshot["retrieval"]["vector"]);
+    setRetrievalForm({
+      mode: retrieval.mode || "vector",
+      topK: Number(retrieval.topK ?? 5),
+      minScore: Number(retrieval.minScore ?? 0.2),
+      vector: {
+        provider: vector.provider || "volc_doubao",
+        baseUrl: vector.baseUrl || "https://ark.cn-beijing.volces.com",
+        model: vector.model || "doubao-embedding",
+        apiKey: vector.apiKey || "",
+        timeoutSec: Number(vector.timeoutSec ?? 30),
+        maxRetries: Number(vector.maxRetries ?? 1),
+        batchSize: Number(vector.batchSize ?? 16),
+        queryMaxChars: Number(vector.queryMaxChars ?? 1500),
+      },
+    });
+  }, []);
   const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -301,6 +338,7 @@ const InterviewTrainer: React.FC = () => {
       if (resp?.status === "success" && resp.content) {
         setConfig(resp.content);
         applyProfileToForm(resp.content);
+        applyRetrievalToForm(resp.content);
         setCustomPrompt(
           resp.content.prompts?.evaluationPrompt || STRICT_SYSTEM_PROMPT,
         );
@@ -343,6 +381,21 @@ const InterviewTrainer: React.FC = () => {
           },
           sessionsDir: "sessions",
           retrievalEnabled: true,
+          retrieval: {
+            mode: "vector",
+            topK: 5,
+            minScore: 0.2,
+            vector: {
+              provider: "volc_doubao",
+              baseUrl: "https://ark.cn-beijing.volces.com",
+              apiKey: "",
+              model: "doubao-embedding",
+              timeoutSec: 30,
+              maxRetries: 1,
+              batchSize: 16,
+              queryMaxChars: 1500,
+            },
+          },
           workspaceDirs: {
             notesDir: "inputs/notes",
             promptsDir: "inputs/prompts/guangdong",
@@ -371,11 +424,12 @@ const InterviewTrainer: React.FC = () => {
   useEffect(() => {
     if (!config) return;
     applyProfileToForm(config);
+    applyRetrievalToForm(config);
     if (config.prompts) {
       setCustomPrompt(config.prompts.evaluationPrompt || STRICT_SYSTEM_PROMPT);
       setDemoPrompt(config.prompts.demoPrompt || DEFAULT_DEMO_PROMPT);
     }
-  }, [config, applyProfileToForm]);
+  }, [config, applyProfileToForm, applyRetrievalToForm]);
 
   useEffect(() => {
     const disposeState = on("it/stateUpdate", (data) => {
@@ -938,6 +992,60 @@ const InterviewTrainer: React.FC = () => {
     }
     setSavingApiConfig(false);
   };
+  const handleRetrievalFieldChange = (key: "mode" | "topK" | "minScore", value: any) => {
+    setRetrievalForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+  const handleRetrievalVectorChange = (key: keyof typeof retrievalForm.vector, value: any) => {
+    setRetrievalForm((prev) => ({
+      ...prev,
+      vector: {
+        ...prev.vector,
+        [key]: value,
+      },
+    }));
+  };
+  const handleSaveRetrievalSettings = async () => {
+    setSavingRetrieval(true);
+    setRetrievalSaveMessage(null);
+    try {
+      const payload = {
+        retrieval: {
+          enabled: config?.retrievalEnabled ?? true,
+          mode: retrievalForm.mode,
+          topK: Number(retrievalForm.topK),
+          minScore: Number(retrievalForm.minScore),
+          vector: {
+            provider: retrievalForm.vector.provider,
+            baseUrl: retrievalForm.vector.baseUrl,
+            apiKey: retrievalForm.vector.apiKey,
+            model: retrievalForm.vector.model,
+            timeoutSec: Number(retrievalForm.vector.timeoutSec),
+            maxRetries: Number(retrievalForm.vector.maxRetries),
+            batchSize: Number(retrievalForm.vector.batchSize),
+            queryMaxChars: Number(retrievalForm.vector.queryMaxChars),
+          },
+        },
+      };
+      const resp = await request("it/updateRetrievalSettings", payload);
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+          applyRetrievalToForm(resp.content);
+        }
+        setRetrievalSaveMessage("检索配置已保存。");
+      } else {
+        setRetrievalSaveMessage("检索配置保存失败，请检查输入。");
+      }
+    } catch (err) {
+      setRetrievalSaveMessage(
+        `检索配置保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingRetrieval(false);
+  };
   const handleTestLlm = async () => {
     setTestingLlm(true);
     setLlmTestMessage(null);
@@ -985,6 +1093,7 @@ const InterviewTrainer: React.FC = () => {
       setConfig(resp.content);
       setApiSaveMessage("已重新加载配置。");
       applyProfileToForm(resp.content);
+      applyRetrievalToForm(resp.content);
     }
   };
   const handleToggleRetrieval = async (enabled: boolean) => {
@@ -1530,7 +1639,7 @@ const InterviewTrainer: React.FC = () => {
                     <span>保存目录: {config.sessionsDir}</span>
                   </div>
                   <div className="it-settings__hint">
-                    API Key 会写入 VS Code Secret 存储，表单留空则保持原值。
+                    API Key 会保存到本地配置并同步到 VS Code Secret，请注意保管。
                   </div>
                   <div
                     style={{
@@ -1580,7 +1689,7 @@ const InterviewTrainer: React.FC = () => {
                         <div style={{ minWidth: 80 }}>API Key</div>
                         <input
                           className="it-input"
-                          type="password"
+                          type="text"
                           value={apiForm.llm.apiKey}
                           onChange={(event) =>
                             handleApiFieldChange("llm", "apiKey", event.target.value)
@@ -1673,7 +1782,7 @@ const InterviewTrainer: React.FC = () => {
                         <div style={{ minWidth: 80 }}>API Key</div>
                         <input
                           className="it-input"
-                          type="password"
+                          type="text"
                           value={apiForm.asr.apiKey}
                           onChange={(event) =>
                             handleApiFieldChange("asr", "apiKey", event.target.value)
@@ -1684,7 +1793,7 @@ const InterviewTrainer: React.FC = () => {
                         <div style={{ minWidth: 80 }}>Secret</div>
                         <input
                           className="it-input"
-                          type="password"
+                          type="text"
                           value={apiForm.asr.secretKey}
                           onChange={(event) =>
                             handleApiFieldChange("asr", "secretKey", event.target.value)
@@ -1878,6 +1987,149 @@ const InterviewTrainer: React.FC = () => {
                   />
                   <span>启用检索</span>
                 </label>
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>模式</div>
+                <select
+                  className="it-select"
+                  value={retrievalForm.mode}
+                  disabled={uiLocked}
+                  onChange={(event) => handleRetrievalFieldChange("mode", event.target.value)}
+                >
+                  <option value="vector">向量语义</option>
+                  <option value="keyword">词面匹配</option>
+                </select>
+              </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 80 }}>Top K</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.topK}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange("topK", Number(event.target.value))
+                  }
+                />
+                <div style={{ minWidth: 90 }}>Min Score</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  step="0.05"
+                  value={retrievalForm.minScore}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange("minScore", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>Provider</div>
+                <select
+                  className="it-select"
+                  value={retrievalForm.vector.provider}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("provider", event.target.value)
+                  }
+                >
+                  <option value="volc_doubao">volc_doubao</option>
+                  <option value="baidu_qianfan">baidu_qianfan</option>
+                  <option value="openai_compatible">openai_compatible</option>
+                </select>
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>Model</div>
+                <input
+                  className="it-input"
+                  value={retrievalForm.vector.model}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("model", event.target.value)
+                  }
+                  placeholder="按平台填写 embedding 模型"
+                />
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>Base URL</div>
+                <input
+                  className="it-input"
+                  value={retrievalForm.vector.baseUrl}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("baseUrl", event.target.value)
+                  }
+                />
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>API Key</div>
+                <input
+                  className="it-input"
+                  value={retrievalForm.vector.apiKey}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("apiKey", event.target.value)
+                  }
+                />
+              </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 80 }}>超时(s)</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.vector.timeoutSec}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("timeoutSec", Number(event.target.value))
+                  }
+                />
+                <div style={{ minWidth: 70 }}>重试</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.vector.maxRetries}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("maxRetries", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 80 }}>批大小</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.vector.batchSize}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("batchSize", Number(event.target.value))
+                  }
+                />
+                <div style={{ minWidth: 80 }}>Query 上限</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.vector.queryMaxChars}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalVectorChange("queryMaxChars", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-settings__actions">
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || savingRetrieval}
+                  onClick={handleSaveRetrievalSettings}
+                >
+                  {savingRetrieval ? "保存中..." : "保存检索配置"}
+                </button>
+              </div>
+              {retrievalSaveMessage && (
+                <div className="it-settings__hint">{retrievalSaveMessage}</div>
+              )}
+              <div className="it-settings__hint">
+                向量检索会调用 embedding 接口，模型名称请按平台实际填入。
               </div>
               <div className="it-retrieval__list">
                 {retrievalDirs.map((item) => (

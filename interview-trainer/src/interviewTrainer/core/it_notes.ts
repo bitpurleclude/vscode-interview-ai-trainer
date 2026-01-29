@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import { it_callEmbedding, ItEmbeddingConfig } from "../api/it_embedding";
+import { it_hashText } from "../utils/it_text";
 
 export interface ItCorpusItem {
   kind: string;
@@ -13,6 +15,18 @@ export interface ItNoteHit {
   snippet: string;
 }
 
+export interface ItVectorSearchConfig extends ItEmbeddingConfig {
+  batchSize: number;
+  queryMaxChars: number;
+}
+
+export interface ItRetrievalOptions {
+  mode?: "vector" | "keyword";
+  topK: number;
+  minScore: number;
+  vector?: ItVectorSearchConfig;
+}
+
 let cachedCorpus:
   | {
       key: string;
@@ -24,6 +38,10 @@ let cachedCorpus:
 const IT_ALLOWED_EXTS = [".md", ".mdx", ".markdown", ".txt"];
 const IT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 const IT_MAX_CHUNK_LEN = 1200;
+const IT_DEFAULT_QUERY_MAX_CHARS = 1500;
+const IT_DEFAULT_BATCH_SIZE = 16;
+
+const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
 
 function it_readText(filePath: string): string {
   try {
@@ -82,6 +100,85 @@ function it_scoreTokens(queryTokens: string[], textTokens: string[]): number {
     }
   }
   return hits / Math.max(1, queryTokens.length);
+}
+
+function it_buildEmbeddingCacheKey(cfg: ItVectorSearchConfig): string {
+  return `${cfg.provider}|${cfg.baseUrl}|${cfg.model}`;
+}
+
+function it_getItemKey(item: ItCorpusItem): string {
+  return `${item.source}|${it_hashText(item.text)}`;
+}
+
+function it_cosineSimilarity(a: number[], b: number[]): number {
+  if (!a.length || !b.length) {
+    return 0;
+  }
+  const length = Math.min(a.length, b.length);
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < length; i += 1) {
+    const av = Number(a[i]);
+    const bv = Number(b[i]);
+    if (!Number.isFinite(av) || !Number.isFinite(bv)) {
+      continue;
+    }
+    dot += av * bv;
+    normA += av * av;
+    normB += bv * bv;
+  }
+  if (!normA || !normB) {
+    return 0;
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+async function it_embedTexts(
+  cfg: ItVectorSearchConfig,
+  texts: string[],
+): Promise<number[][]> {
+  if (!texts.length) {
+    return [];
+  }
+  return it_callEmbedding(cfg, texts);
+}
+
+async function it_ensureEmbeddings(
+  cfg: ItVectorSearchConfig,
+  corpus: ItCorpusItem[],
+  cache: Map<string, number[]>,
+): Promise<void> {
+  const batchSize = Math.max(1, cfg.batchSize || IT_DEFAULT_BATCH_SIZE);
+  const missing: Array<{ key: string; text: string }> = [];
+  for (const item of corpus) {
+    const key = it_getItemKey(item);
+    if (cache.has(key)) {
+      continue;
+    }
+    const text = item.text.trim();
+    if (!text) {
+      continue;
+    }
+    missing.push({ key, text });
+  }
+  for (let i = 0; i < missing.length; i += batchSize) {
+    const batch = missing.slice(i, i + batchSize);
+    const embeddings = await it_embedTexts(
+      cfg,
+      batch.map((entry) => entry.text),
+    );
+    if (!embeddings.length) {
+      continue;
+    }
+    embeddings.forEach((vector, idx) => {
+      const entry = batch[idx];
+      if (!entry || !Array.isArray(vector) || !vector.length) {
+        return;
+      }
+      cache.set(entry.key, vector);
+    });
+  }
 }
 
 function it_getDirMtime(dirPath: string): number {
@@ -149,20 +246,78 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
   return corpus;
 }
 
-export function it_retrieveNotes(
+export async function it_retrieveNotes(
   query: string,
   corpus: ItCorpusItem[],
-  topK: number,
-  minScore: number,
-): ItNoteHit[] {
+  options: ItRetrievalOptions,
+): Promise<ItNoteHit[]> {
   if (!query || !corpus.length) {
     return [];
   }
-  const queryTokens = it_tokenize(query);
+  const topK = Number.isFinite(options.topK) ? Math.max(1, options.topK) : 5;
+  const minScore = Number.isFinite(options.minScore) ? options.minScore : 0;
+  const mode = options.mode || "vector";
+  if (mode === "keyword") {
+    const queryTokens = it_tokenize(query);
+    const scored = corpus
+      .map((item) => {
+        const score = it_scoreTokens(queryTokens, it_tokenize(item.text));
+        return { score, item };
+      })
+      .filter((entry) => entry.score >= minScore)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK);
+
+    return scored.map(({ score, item }) => ({
+      score: Number(score.toFixed(3)),
+      source: item.source,
+      snippet: item.text.replace(/\s+/g, " ").slice(0, 160),
+    }));
+  }
+  if (mode !== "vector") {
+    return [];
+  }
+
+  const vectorCfg = options.vector;
+  if (
+    !vectorCfg ||
+    !vectorCfg.provider ||
+    !vectorCfg.apiKey ||
+    !vectorCfg.baseUrl ||
+    !vectorCfg.model
+  ) {
+    throw new Error("vector retrieval config incomplete");
+  }
+  const queryMaxChars =
+    vectorCfg.queryMaxChars || IT_DEFAULT_QUERY_MAX_CHARS;
+  const trimmedQuery =
+    queryMaxChars > 0 ? query.trim().slice(0, queryMaxChars) : query.trim();
+  if (!trimmedQuery) {
+    return [];
+  }
+
+  const queryEmbedding = (await it_embedTexts(vectorCfg, [trimmedQuery]))[0];
+  if (!queryEmbedding || !queryEmbedding.length) {
+    return [];
+  }
+
+  const cacheKey = it_buildEmbeddingCacheKey(vectorCfg);
+  const cache = cachedEmbeddings.get(cacheKey) ?? new Map<string, number[]>();
+  cachedEmbeddings.set(cacheKey, cache);
+
+  await it_ensureEmbeddings(vectorCfg, corpus, cache);
+
   const scored = corpus
     .map((item) => {
-      const score = it_scoreTokens(queryTokens, it_tokenize(item.text));
+      const embedding = cache.get(it_getItemKey(item));
+      if (!embedding) {
+        return null;
+      }
+      const score = it_cosineSimilarity(queryEmbedding, embedding);
       return { score, item };
+    })
+    .filter((entry): entry is { score: number; item: ItCorpusItem } => {
+      return Boolean(entry && Number.isFinite(entry.score));
     })
     .filter((entry) => entry.score >= minScore)
     .sort((a, b) => b.score - a.score)

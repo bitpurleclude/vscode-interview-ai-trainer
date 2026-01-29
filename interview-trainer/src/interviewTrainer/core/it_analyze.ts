@@ -717,14 +717,21 @@ export async function it_runAnalysis(
     }
   }
 
-  let notes: ReturnType<typeof it_retrieveNotes> = [];
+  let notes: ItAnalyzeResponse["notes"] = [];
   const retrievalEnabled = deps.skillConfig.retrieval?.enabled !== false;
   if (!retrievalEnabled) {
     reportProgress("notes", 100, "笔记检索 已关闭 · 本地", "success");
   } else {
     const workspaceCfg = deps.skillConfig.workspace ?? {};
     const notesStart = Date.now();
-    reportProgress("notes", 10, "笔记检索/文件扫描中 · 本地", "running");
+    const retrievalMode = String(deps.skillConfig.retrieval?.mode || "vector");
+    const retrievalLabel = retrievalMode === "keyword" ? "词面" : "向量";
+    reportProgress(
+      "notes",
+      10,
+      `${retrievalLabel}检索/文件扫描中 · 本地`,
+      "running",
+    );
     const corpus = it_buildCorpus({
       notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
       prompts: path.join(
@@ -749,24 +756,43 @@ export async function it_runAnalysis(
     reportProgress(
       "notes",
       60,
-      `笔记加载：${sourceCount}份/${corpus.length}段 · ${scanElapsedSec}s · 本地`,
+      `笔记加载：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s · 本地`,
       "running",
     );
-    notes = it_retrieveNotes(
-      transcript,
-      corpus,
-      Number(deps.skillConfig.retrieval?.top_k ?? 5),
-      Number(deps.skillConfig.retrieval?.min_score ?? 0.1),
-    );
+    const retrievalCfg = deps.skillConfig.retrieval ?? {};
+    const vectorCfg = retrievalCfg.vector ?? {};
+    const notesTopK = Number(retrievalCfg.top_k ?? 5);
+    const notesMinScore = Number(retrievalCfg.min_score ?? 0.2);
+    let notesError: string | undefined;
+    try {
+      notes = await it_retrieveNotes(transcript, corpus, {
+        mode: retrievalMode === "keyword" ? "keyword" : "vector",
+        topK: notesTopK,
+        minScore: notesMinScore,
+        vector: {
+          provider: vectorCfg.provider || "",
+          apiKey: vectorCfg.api_key || "",
+          baseUrl: vectorCfg.base_url || "",
+          model: vectorCfg.model || "",
+          timeoutSec: Number(vectorCfg.timeout_sec ?? 30),
+          maxRetries: Number(vectorCfg.max_retries ?? 1),
+          batchSize: Number(vectorCfg.batch_size ?? 16),
+          queryMaxChars: Number(vectorCfg.query_max_chars ?? 1500),
+        },
+      });
+    } catch (err) {
+      notesError = err instanceof Error ? err.message : String(err);
+    }
     const notesElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
     const slowHint =
       sourceCount > 200 ? "文件较多，建议精简 inputs 目录" : undefined;
-    const notesMessage = `笔记检索/扫描 ${sourceCount} 份，过滤 ${corpus.length} 段，命中 ${notes.length} 条 · ${notesElapsedSec}s · 本地${
-      slowHint ? `（${slowHint}）` : ""
-    }`;
-    reportProgress("notes", 100, notesMessage, "success");
+    const notesMessage = notesError
+      ? `向量检索失败：${notesError}`
+      : `${retrievalLabel}检索/扫描 ${sourceCount} 份，过滤 ${corpus.length} 段，命中 ${notes.length} 条 · ${notesElapsedSec}s · 本地${
+          slowHint ? `，${slowHint}` : ""
+        }`;
+    reportProgress("notes", 100, notesMessage, notesError ? "error" : "success");
   }
-
   const topicTitle = it_deriveTopicTitle(
     questionText,
     questionList,

@@ -19,5 +19,16 @@ evaluation:
     - 专业素养
     - 政策理解
 retrieval:
+  enabled: true
+  mode: vector
   top_k: 5
-  min_score: 0.15
+  min_score: 0.2
+  vector:
+    provider: volc_doubao
+    base_url: https://ark.cn-beijing.volces.com
+    api_key: ""
+    model: doubao-embedding
+    timeout_sec: 30
+    max_retries: 1
+    batch_size: 16
+    query_max_chars: 1500
