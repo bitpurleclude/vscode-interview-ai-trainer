@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Specify: Run",
+      "type": "shell",
+      "command": "specify ${input:specifyArgs}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "specifyArgs",
+      "type": "promptString",
+      "description": "specify arguments (optional)",
+      "default": ""
+    }
+  ]
+}

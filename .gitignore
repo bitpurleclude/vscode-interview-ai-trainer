@@ -16,3 +16,5 @@ testdata/*.m4a
 .DS_Store
 Thumbs.db
 .vscode/
+!.vscode/
+!.vscode/tasks.json
