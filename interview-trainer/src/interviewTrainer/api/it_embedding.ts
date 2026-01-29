@@ -12,11 +12,24 @@ export interface ItEmbeddingConfig {
 }
 
 function it_buildEmbeddingUrl(cfg: ItEmbeddingConfig, useMultimodal: boolean): string {
-  const base = (cfg.baseUrl || "").replace(/\/$/, "");
+  const base = (cfg.baseUrl || "").trim().replace(/\/$/, "");
+  const lower = base.toLowerCase();
   if (cfg.provider === "volc_doubao") {
+    if (
+      lower.includes("/api/v3/embeddings/multimodal") ||
+      lower.endsWith("/embeddings/multimodal")
+    ) {
+      return base;
+    }
+    if (lower.endsWith("/api/v3/embeddings") || lower.endsWith("/embeddings")) {
+      return useMultimodal ? `${base}/multimodal` : base;
+    }
     return useMultimodal
       ? `${base}/api/v3/embeddings/multimodal`
       : `${base}/api/v3/embeddings`;
+  }
+  if (lower.endsWith("/embeddings")) {
+    return base;
   }
   return `${base}/embeddings`;
 }
