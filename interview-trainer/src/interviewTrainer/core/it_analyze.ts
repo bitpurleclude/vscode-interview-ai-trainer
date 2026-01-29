@@ -16,7 +16,7 @@ import { it_callBaiduAsr } from "../api/it_baidu";
 import { ItApiConfig } from "../api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
-import { it_buildCorpus, it_retrieveNotes } from "./it_notes";
+import { it_buildCorpus, it_retrieveNotesMulti } from "./it_notes";
 import {
   it_appendAttemptData,
   it_nextAttemptIndex,
@@ -487,6 +487,105 @@ function it_alignAnswerToSegments(
   return locateRange(startPos, matchLen);
 }
 
+function it_collectAnswersFromSegments(
+  timings: ItQuestionTiming[],
+  segments: ItAudioSegment[],
+): Array<{ question: string; answer: string }> {
+  if (!timings.length || !segments.length) {
+    return [];
+  }
+  return timings.map((timing) => {
+    const texts = segments
+      .filter(
+        (seg) =>
+          seg.type === "speech" &&
+          seg.text &&
+          seg.startSec < timing.endSec &&
+          seg.endSec > timing.startSec,
+      )
+      .map((seg) => seg.text?.trim())
+      .filter(Boolean) as string[];
+    return {
+      question: timing.question,
+      answer: texts.join(""),
+    };
+  });
+}
+
+function it_extractKeywords(text: string, limit: number): string[] {
+  const cleaned = (text || "").replace(/[^0-9A-Za-z\u4e00-\u9fff]+/g, "");
+  if (!cleaned) {
+    return [];
+  }
+  const hasChinese = /[\u4e00-\u9fff]/.test(cleaned);
+  const tokens: string[] = [];
+  if (hasChinese) {
+    for (let i = 0; i < cleaned.length - 1; i += 1) {
+      tokens.push(cleaned.slice(i, i + 2));
+    }
+  } else {
+    tokens.push(
+      ...cleaned
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean),
+    );
+  }
+  const freq = new Map<string, number>();
+  tokens.forEach((token) => {
+    freq.set(token, (freq.get(token) || 0) + 1);
+  });
+  return Array.from(freq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([token]) => token);
+}
+
+function it_buildRetrievalQueries(params: {
+  questionText: string;
+  questionList: string[];
+  transcript: string;
+  answers?: Array<{ question: string; answer: string }>;
+}): string[] {
+  const queries: string[] = [];
+  const list = params.questionList.length
+    ? params.questionList
+    : params.questionText
+      ? [params.questionText]
+      : [];
+  if (!list.length) {
+    if (params.transcript.trim()) {
+      queries.push(params.transcript.trim().slice(0, 240));
+    }
+    return queries;
+  }
+
+  const answerMap = new Map<string, string>();
+  (params.answers || []).forEach((item) => {
+    if (item?.question) {
+      answerMap.set(item.question, item.answer || "");
+    }
+  });
+  list.forEach((question, idx) => {
+    const answer = answerMap.get(question) || (list.length === 1 ? params.transcript : "");
+    const trimmedAnswer = (answer || "").trim();
+    const summary = trimmedAnswer.slice(0, 240);
+    if (summary) {
+      queries.push(`${question} ${summary}`.trim());
+    } else {
+      queries.push(question.trim());
+    }
+    const keywords = it_extractKeywords(trimmedAnswer || question, 10).join(" ");
+    if (keywords) {
+      queries.push(`${question} ${keywords}`.trim());
+    }
+    if (idx === 0 && params.questionText && params.questionText !== question) {
+      queries.push(params.questionText.trim());
+    }
+  });
+  return queries;
+}
+
 async function it_transcribePcmWithChunks(
   asrConfig: {
     apiKey: string;
@@ -782,9 +881,24 @@ export async function it_runAnalysis(
     const notesCacheDir = cacheRoot
       ? path.join(cacheRoot, "embedding_cache", it_hashText(deps.workspaceRoot))
       : undefined;
+    let retrievalAnswers = questionAnswers;
+    if (
+      (!retrievalAnswers || retrievalAnswers.length !== questionList.length) &&
+      audioSegments &&
+      questionTimings.length
+    ) {
+      retrievalAnswers = it_collectAnswersFromSegments(questionTimings, audioSegments);
+    }
+    const retrievalQueries = it_buildRetrievalQueries({
+      questionText,
+      questionList,
+      transcript,
+      answers: retrievalAnswers,
+    });
+    const queryList = retrievalQueries.length ? retrievalQueries : [transcript];
     let notesError: string | undefined;
     try {
-      notes = await it_retrieveNotes(transcript, corpus, {
+      notes = await it_retrieveNotesMulti(queryList, corpus, {
         mode: retrievalMode === "keyword" ? "keyword" : "vector",
         topK: notesTopK,
         minScore: notesMinScore,

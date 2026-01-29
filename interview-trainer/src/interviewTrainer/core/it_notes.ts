@@ -500,3 +500,93 @@ export async function it_retrieveNotes(
     snippet: item.text.replace(/\s+/g, " ").slice(0, 160),
   }));
 }
+
+function it_mergeQueryHits(
+  lists: ItNoteHit[][],
+  topK: number,
+): ItNoteHit[] {
+  if (!lists.length) {
+    return [];
+  }
+  const rrfK = 60;
+  const merged = new Map<
+    string,
+    { source: string; snippet: string; score: number; rankScore: number }
+  >();
+  lists.forEach((hits) => {
+    hits.forEach((hit, idx) => {
+      const key = `${hit.source}::${hit.snippet}`;
+      const entry = merged.get(key);
+      const rrf = 1 / (rrfK + idx + 1);
+      if (!entry) {
+        merged.set(key, {
+          source: hit.source,
+          snippet: hit.snippet,
+          score: hit.score,
+          rankScore: rrf,
+        });
+        return;
+      }
+      entry.rankScore += rrf;
+      entry.score = Math.max(entry.score, hit.score);
+    });
+  });
+  const mergedList = Array.from(merged.values())
+    .sort((a, b) => {
+      if (b.rankScore !== a.rankScore) {
+        return b.rankScore - a.rankScore;
+      }
+      return b.score - a.score;
+    })
+    .slice(0, topK)
+    .map((item) => ({
+      score: Number(item.score.toFixed(3)),
+      source: item.source,
+      snippet: item.snippet,
+    }));
+  return mergedList;
+}
+
+export async function it_retrieveNotesMulti(
+  queries: string[],
+  corpus: ItCorpusItem[],
+  options: ItRetrievalOptions,
+): Promise<ItNoteHit[]> {
+  const normalized = Array.from(
+    new Set(
+      queries.map((q) => q.trim()).filter((q) => q.length > 0),
+    ),
+  );
+  const maxQueries = 8;
+  const limited = normalized.slice(0, maxQueries);
+  if (!limited.length || !corpus.length) {
+    return [];
+  }
+  const topK = Number.isFinite(options.topK) ? Math.max(1, options.topK) : 5;
+  const baseMinScore = Number.isFinite(options.minScore) ? options.minScore : 0;
+  const perQueryTopK = Math.max(topK, Math.min(topK * 2, 20));
+
+  const runOnce = async (minScore: number): Promise<ItNoteHit[]> => {
+    const lists: ItNoteHit[][] = [];
+    for (const query of limited) {
+      const hits = await it_retrieveNotes(query, corpus, {
+        ...options,
+        topK: perQueryTopK,
+        minScore,
+      });
+      lists.push(hits);
+    }
+    return it_mergeQueryHits(lists, topK);
+  };
+
+  const minHits = Math.min(topK, 3);
+  let hits = await runOnce(baseMinScore);
+  if (hits.length < minHits && baseMinScore > 0) {
+    const relaxed = baseMinScore >= 0.2 ? 0.12 : Math.max(0.05, baseMinScore * 0.6);
+    hits = await runOnce(relaxed);
+  }
+  if (hits.length < minHits) {
+    hits = await runOnce(-1);
+  }
+  return hits;
+}
