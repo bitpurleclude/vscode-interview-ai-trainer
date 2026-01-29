@@ -56,7 +56,11 @@ function it_mapScoreKeys(scores: Record<string, number>): Record<string, number>
   const mapped: Record<string, number> = {};
   Object.entries(scores || {}).forEach(([key, value]) => {
     const name = IT_DIMENSION_MAP[key] || key;
-    mapped[name] = value;
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) {
+      return;
+    }
+    mapped[name] = num;
   });
   return mapped;
 }
@@ -143,6 +147,55 @@ function it_extractJsonCandidates(text: string): string[] {
   return candidates;
 }
 
+function it_sanitizeJsonCandidate(candidate: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < candidate.length; i += 1) {
+    const ch = candidate[i];
+    if (!inString) {
+      if (ch === "\"") {
+        inString = true;
+        result += ch;
+        continue;
+      }
+      if (ch === "\r") {
+        continue;
+      }
+      result += ch;
+      continue;
+    }
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === "\"") {
+      inString = false;
+      result += ch;
+      continue;
+    }
+    if (ch === "\n") {
+      result += "\\n";
+      continue;
+    }
+    if (ch === "\r") {
+      continue;
+    }
+    if (ch === "\t") {
+      result += "\\t";
+      continue;
+    }
+    result += ch;
+  }
+  return result;
+}
+
 function it_extractJsonPayload(text: string): any | null {
   if (!text) {
     return null;
@@ -161,10 +214,44 @@ function it_extractJsonPayload(text: string): any | null {
         }
       }
     } catch {
-      continue;
+      try {
+        const parsed = JSON.parse(it_sanitizeJsonCandidate(candidate));
+        if (parsed && typeof parsed === "object") {
+          if (it_pickRevisedAnswers(parsed).length) {
+            return parsed;
+          }
+          if (!fallback) {
+            fallback = parsed;
+          }
+        }
+      } catch {
+        continue;
+      }
     }
   }
   return fallback;
+}
+
+function it_extractScoreData(parsed: any): {
+  scores: Record<string, number>;
+  overall?: number;
+} {
+  const scoreBlock =
+    parsed?.scores ||
+    parsed?.评分?.维度 ||
+    parsed?.评分?.维度评分 ||
+    parsed?.评分?.维度分 ||
+    {};
+  const overallRaw =
+    parsed?.overallScore ??
+    parsed?.评分?.整体 ??
+    parsed?.评分?.总分 ??
+    parsed?.评分?.overall;
+  const overall = Number.isFinite(Number(overallRaw)) ? Number(overallRaw) : undefined;
+  return {
+    scores: it_mapScoreKeys(scoreBlock),
+    overall,
+  };
 }
 
 function it_parseQuestionIndex(marker: string): number | null {
@@ -450,9 +537,12 @@ export async function it_evaluateAnswer(
   }
 
   try {
-    const mappedScores = it_mapScoreKeys(parsed.scores || {});
+    const scoreData = it_extractScoreData(parsed);
+    const mappedScores = scoreData.scores;
     const overallScore =
-      parsed.overallScore || it_computeOverallScore(mappedScores, dimensions);
+      Number.isFinite(scoreData.overall)
+        ? (scoreData.overall as number)
+        : it_computeOverallScore(mappedScores, dimensions);
     const parsedImprovements = it_toStringArray(parsed.improvements);
     const parsedNoteUsage = it_toStringArray(
       parsed.noteUsage ?? parsed.note_usage ?? parsed.noteUse ?? parsed.note_use,
