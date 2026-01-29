@@ -25,6 +25,7 @@ export interface ItRetrievalOptions {
   topK: number;
   minScore: number;
   vector?: ItVectorSearchConfig;
+  cacheDir?: string;
 }
 
 let cachedCorpus:
@@ -40,6 +41,7 @@ const IT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 const IT_MAX_CHUNK_LEN = 1200;
 const IT_DEFAULT_QUERY_MAX_CHARS = 1500;
 const IT_DEFAULT_BATCH_SIZE = 16;
+const IT_EMBEDDING_CACHE_VERSION = 1;
 
 const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
 
@@ -106,6 +108,54 @@ function it_buildEmbeddingCacheKey(cfg: ItVectorSearchConfig): string {
   return `${cfg.provider}|${cfg.baseUrl}|${cfg.model}`;
 }
 
+function it_getEmbeddingCachePath(cacheDir: string, cacheKey: string): string {
+  return path.join(cacheDir, `embeddings-${it_hashText(cacheKey)}.json`);
+}
+
+function it_loadEmbeddingCache(
+  cachePath: string,
+  cacheKey: string,
+): Map<string, number[]> {
+  try {
+    const raw = fs.readFileSync(cachePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (
+      parsed?.version !== IT_EMBEDDING_CACHE_VERSION ||
+      parsed?.modelKey !== cacheKey ||
+      typeof parsed?.items !== "object"
+    ) {
+      return new Map();
+    }
+    const map = new Map<string, number[]>();
+    Object.entries(parsed.items).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        map.set(key, value as number[]);
+      }
+    });
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function it_saveEmbeddingCache(
+  cachePath: string,
+  cacheKey: string,
+  cache: Map<string, number[]>,
+): void {
+  const items: Record<string, number[]> = {};
+  cache.forEach((value, key) => {
+    items[key] = value;
+  });
+  const payload = {
+    version: IT_EMBEDDING_CACHE_VERSION,
+    modelKey: cacheKey,
+    items,
+  };
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(payload), "utf8");
+}
+
 function it_getItemKey(item: ItCorpusItem): string {
   return `${item.source}|${it_hashText(item.text)}`;
 }
@@ -148,7 +198,7 @@ async function it_ensureEmbeddings(
   cfg: ItVectorSearchConfig,
   corpus: ItCorpusItem[],
   cache: Map<string, number[]>,
-): Promise<void> {
+): Promise<number> {
   const batchSize = Math.max(1, cfg.batchSize || IT_DEFAULT_BATCH_SIZE);
   const missing: Array<{ key: string; text: string }> = [];
   for (const item of corpus) {
@@ -162,6 +212,7 @@ async function it_ensureEmbeddings(
     }
     missing.push({ key, text });
   }
+  let created = 0;
   for (let i = 0; i < missing.length; i += batchSize) {
     const batch = missing.slice(i, i + batchSize);
     const embeddings = await it_embedTexts(
@@ -177,8 +228,10 @@ async function it_ensureEmbeddings(
         return;
       }
       cache.set(entry.key, vector);
+      created += 1;
     });
   }
+  return created;
 }
 
 function it_getDirMtime(dirPath: string): number {
@@ -302,10 +355,31 @@ export async function it_retrieveNotes(
   }
 
   const cacheKey = it_buildEmbeddingCacheKey(vectorCfg);
-  const cache = cachedEmbeddings.get(cacheKey) ?? new Map<string, number[]>();
-  cachedEmbeddings.set(cacheKey, cache);
+  const cachePath = options.cacheDir
+    ? it_getEmbeddingCachePath(options.cacheDir, cacheKey)
+    : undefined;
+  let cache = cachedEmbeddings.get(cacheKey);
+  if (!cache) {
+    cache = cachePath ? it_loadEmbeddingCache(cachePath, cacheKey) : new Map();
+    cachedEmbeddings.set(cacheKey, cache);
+  }
 
-  await it_ensureEmbeddings(vectorCfg, corpus, cache);
+  const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
+  const created = await it_ensureEmbeddings(vectorCfg, corpus, cache);
+  let hasStale = false;
+  for (const key of cache.keys()) {
+    if (!validKeys.has(key)) {
+      cache.delete(key);
+      hasStale = true;
+    }
+  }
+  if (cachePath && (created > 0 || hasStale)) {
+    try {
+      it_saveEmbeddingCache(cachePath, cacheKey, cache);
+    } catch {
+      // ignore cache write failure
+    }
+  }
 
   const scored = corpus
     .map((item) => {

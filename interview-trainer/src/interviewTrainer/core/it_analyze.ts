@@ -763,12 +763,17 @@ export async function it_runAnalysis(
     const vectorCfg = retrievalCfg.vector ?? {};
     const notesTopK = Number(retrievalCfg.top_k ?? 5);
     const notesMinScore = Number(retrievalCfg.min_score ?? 0.2);
+    const cacheRoot = deps.context.globalStorageUri?.fsPath;
+    const notesCacheDir = cacheRoot
+      ? path.join(cacheRoot, "embedding_cache", it_hashText(deps.workspaceRoot))
+      : undefined;
     let notesError: string | undefined;
     try {
       notes = await it_retrieveNotes(transcript, corpus, {
         mode: retrievalMode === "keyword" ? "keyword" : "vector",
         topK: notesTopK,
         minScore: notesMinScore,
+        cacheDir: notesCacheDir,
         vector: {
           provider: vectorCfg.provider || "",
           apiKey: vectorCfg.api_key || "",
