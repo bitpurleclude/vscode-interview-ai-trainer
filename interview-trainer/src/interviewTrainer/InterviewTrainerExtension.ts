@@ -28,6 +28,7 @@ import { it_runAnalysis } from "./core/it_analyze";
 import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_parseQuestions } from "./core/it_questionParser";
+import { it_hashText } from "./utils/it_text";
 
 const IT_STATUS_INIT: ItState = {
   statusMessage: "等待开始面试训练",
@@ -569,6 +570,34 @@ export class InterviewTrainerExtension {
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/clearEmbeddingCache", async () => {
+      const workspaceRoot = this.requireWorkspaceRoot();
+      const cacheRoot = this.context.globalStorageUri?.fsPath;
+      if (!cacheRoot) {
+        throw new Error("无法定位缓存目录");
+      }
+      const cacheDir = path.join(
+        cacheRoot,
+        "embedding_cache",
+        it_hashText(workspaceRoot),
+      );
+      if (!fs.existsSync(cacheDir)) {
+        return { cleared: false, path: cacheDir };
+      }
+      try {
+        fs.rmSync(cacheDir, {
+          recursive: true,
+          force: true,
+          maxRetries: 2,
+          retryDelay: 50,
+        });
+      } catch (error) {
+        throw new Error(
+          `清理缓存失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      return { cleared: true, path: cacheDir };
     });
     this.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
       const kind = String(msg.data?.kind || "");

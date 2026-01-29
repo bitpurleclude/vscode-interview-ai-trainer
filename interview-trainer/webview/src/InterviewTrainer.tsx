@@ -219,6 +219,10 @@ const InterviewTrainer: React.FC = () => {
   const [apiSaveMessage, setApiSaveMessage] = useState<string | null>(null);
   const [savingRetrieval, setSavingRetrieval] = useState(false);
   const [retrievalSaveMessage, setRetrievalSaveMessage] = useState<string | null>(null);
+  const [clearingEmbeddingCache, setClearingEmbeddingCache] = useState(false);
+  const [embeddingCacheMessage, setEmbeddingCacheMessage] = useState<string | null>(
+    null,
+  );
   const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
   const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
     null,
@@ -1064,6 +1068,24 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingRetrieval(false);
+  };
+  const handleClearEmbeddingCache = async () => {
+    setClearingEmbeddingCache(true);
+    setEmbeddingCacheMessage(null);
+    try {
+      const resp = await request("it/clearEmbeddingCache", undefined);
+      if (resp?.status === "success") {
+        const cleared = Boolean(resp.content?.cleared);
+        setEmbeddingCacheMessage(cleared ? "已清理缓存" : "缓存为空，无需清理");
+      } else {
+        setEmbeddingCacheMessage("清理缓存失败，请重试。");
+      }
+    } catch (err) {
+      setEmbeddingCacheMessage(
+        `清理缓存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setClearingEmbeddingCache(false);
   };
   const handleTestLlm = async () => {
     setTestingLlm(true);
@@ -2152,9 +2174,19 @@ const InterviewTrainer: React.FC = () => {
                 >
                   {savingRetrieval ? "保存中..." : "保存检索配置"}
                 </button>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || clearingEmbeddingCache}
+                  onClick={handleClearEmbeddingCache}
+                >
+                  {clearingEmbeddingCache ? "清理中..." : "清理向量缓存"}
+                </button>
               </div>
               {retrievalSaveMessage && (
                 <div className="it-settings__hint">{retrievalSaveMessage}</div>
+              )}
+              {embeddingCacheMessage && (
+                <div className="it-settings__hint">{embeddingCacheMessage}</div>
               )}
               <div className="it-settings__hint">
                 向量检索会调用 embedding 接口，模型名称请按平台实际填入。

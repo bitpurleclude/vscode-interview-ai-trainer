@@ -8,6 +8,7 @@ interview-trainer/build/
 interview-trainer/.vsix/
 
 # Packaged installers and large local test assets
+testdata/
 testdata/*.vsix
 testdata/*.m4a
 
