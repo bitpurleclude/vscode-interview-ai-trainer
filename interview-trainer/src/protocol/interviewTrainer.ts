@@ -20,11 +20,21 @@ export interface ItStepState {
   elapsedSec?: number;
 }
 
+export interface ItEmbeddingWarmupState {
+  status: "idle" | "running" | "success" | "error";
+  progress: number;
+  total: number;
+  done: number;
+  message?: string;
+  updatedAt?: string;
+}
+
 export interface ItState {
   statusMessage: string;
   overallProgress: number;
   recordingState: ItRecordingState;
   steps: ItStepState[];
+  embeddingWarmup?: ItEmbeddingWarmupState;
   lastError?: ItUserError;
 }
 

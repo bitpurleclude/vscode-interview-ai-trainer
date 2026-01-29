@@ -28,6 +28,20 @@ export interface ItRetrievalOptions {
   cacheDir?: string;
 }
 
+export interface ItEmbeddingWarmupResult {
+  total: number;
+  created: number;
+  cached: number;
+  aborted?: boolean;
+  cachePath?: string;
+}
+
+export interface ItEmbeddingWarmupOptions {
+  cacheDir?: string;
+  onProgress?: (done: number, total: number) => void;
+  signal?: { aborted: boolean };
+}
+
 let cachedCorpus:
   | {
       key: string;
@@ -297,6 +311,89 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
   }
   cachedCorpus = { key, dirMtimes, corpus };
   return corpus;
+}
+
+export async function it_prepareEmbeddingCache(
+  corpus: ItCorpusItem[],
+  vectorCfg: ItVectorSearchConfig,
+  options: ItEmbeddingWarmupOptions = {},
+): Promise<ItEmbeddingWarmupResult> {
+  if (
+    !vectorCfg ||
+    !vectorCfg.provider ||
+    !vectorCfg.apiKey ||
+    !vectorCfg.baseUrl ||
+    !vectorCfg.model
+  ) {
+    throw new Error("vector retrieval config incomplete");
+  }
+  const cacheKey = it_buildEmbeddingCacheKey(vectorCfg);
+  const cachePath = options.cacheDir
+    ? it_getEmbeddingCachePath(options.cacheDir, cacheKey)
+    : undefined;
+  let cache = cachedEmbeddings.get(cacheKey);
+  if (!cache) {
+    cache = cachePath ? it_loadEmbeddingCache(cachePath, cacheKey) : new Map();
+    cachedEmbeddings.set(cacheKey, cache);
+  }
+  const missing: Array<{ key: string; text: string }> = [];
+  for (const item of corpus) {
+    const key = it_getItemKey(item);
+    if (cache.has(key)) {
+      continue;
+    }
+    const text = item.text.trim();
+    if (!text) {
+      continue;
+    }
+    missing.push({ key, text });
+  }
+  const total = missing.length;
+  const cached = Math.max(0, corpus.length - total);
+  options.onProgress?.(0, total);
+
+  const batchSize = Math.max(1, vectorCfg.batchSize || IT_DEFAULT_BATCH_SIZE);
+  let created = 0;
+  let done = 0;
+  let aborted = false;
+  for (let i = 0; i < missing.length; i += batchSize) {
+    if (options.signal?.aborted) {
+      aborted = true;
+      break;
+    }
+    const batch = missing.slice(i, i + batchSize);
+    const embeddings = await it_embedTexts(
+      vectorCfg,
+      batch.map((entry) => entry.text),
+    );
+    embeddings.forEach((vector, idx) => {
+      const entry = batch[idx];
+      if (!entry || !Array.isArray(vector) || !vector.length) {
+        return;
+      }
+      cache.set(entry.key, vector);
+      created += 1;
+    });
+    done += batch.length;
+    options.onProgress?.(done, total);
+  }
+
+  const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
+  let hasStale = false;
+  for (const key of cache.keys()) {
+    if (!validKeys.has(key)) {
+      cache.delete(key);
+      hasStale = true;
+    }
+  }
+  if (cachePath && (created > 0 || hasStale)) {
+    try {
+      it_saveEmbeddingCache(cachePath, cacheKey, cache);
+    } catch {
+      // ignore cache write failure
+    }
+  }
+  return { total, created, cached, aborted, cachePath };
 }
 
 export async function it_retrieveNotes(

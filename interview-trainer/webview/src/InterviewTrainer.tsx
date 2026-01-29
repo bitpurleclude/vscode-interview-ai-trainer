@@ -129,6 +129,12 @@ const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
   recordingState: "idle",
+  embeddingWarmup: {
+    status: "idle",
+    progress: 0,
+    total: 0,
+    done: 0,
+  },
   steps: [
     { id: "init", status: "success", progress: 100 },
     { id: "recording", status: "pending", progress: 0 },
@@ -374,6 +380,8 @@ const InterviewTrainer: React.FC = () => {
     (id: string) => providerProfiles[id]?.display_name || id,
     [providerProfiles],
   );
+  const embeddingWarmup = itState.embeddingWarmup;
+  const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
 
   useEffect(() => {
     (window as any).__itReady = true;
@@ -2372,6 +2380,23 @@ const InterviewTrainer: React.FC = () => {
               )}
               {embeddingCacheMessage && (
                 <div className="it-settings__hint">{embeddingCacheMessage}</div>
+              )}
+              {showEmbeddingWarmup && embeddingWarmup && (
+                <div className="it-progress it-progress--compact">
+                  <div className="it-progress__label">
+                    <span>向量预计算</span>
+                    <span>
+                      {embeddingWarmup.message ||
+                        `${embeddingWarmup.done}/${embeddingWarmup.total}`}
+                    </span>
+                  </div>
+                  <div className="it-progress__bar">
+                    <div
+                      className="it-progress__fill"
+                      style={{ width: `${embeddingWarmup.progress || 0}%` }}
+                    />
+                  </div>
+                </div>
               )}
               <div className="it-settings__hint">
                 向量检索会调用 embedding 接口，模型名称请按平台实际填入。

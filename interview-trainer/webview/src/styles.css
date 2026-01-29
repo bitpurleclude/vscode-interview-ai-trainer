@@ -204,6 +204,28 @@
   border: 1px solid var(--vscode-editorWidget-border);
 }
 
+.it-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.it-progress__label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-progress--compact {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--vscode-sideBarSectionHeader-background);
+  border: 1px solid var(--vscode-sideBar-border);
+}
+
 .it-progress__bar {
   height: 6px;
   background: color-mix(in srgb, var(--vscode-sideBar-border) 60%, transparent);

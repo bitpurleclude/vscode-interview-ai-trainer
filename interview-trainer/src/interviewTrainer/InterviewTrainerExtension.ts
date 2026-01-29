@@ -8,6 +8,7 @@ import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
   ItConfigSnapshot,
+  ItEmbeddingWarmupState,
   ItState,
   ItStepState,
   ItStepStatus,
@@ -28,6 +29,7 @@ import { it_callLlmChat, ItLlmConfig } from "./api/it_llm";
 import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
+import { it_buildCorpus, it_prepareEmbeddingCache } from "./core/it_notes";
 import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_parseQuestions } from "./core/it_questionParser";
@@ -37,6 +39,12 @@ const IT_STATUS_INIT: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
   recordingState: "idle",
+  embeddingWarmup: {
+    status: "idle",
+    progress: 0,
+    total: 0,
+    done: 0,
+  },
   steps: [
     { id: "init", status: "success", progress: 100 },
     { id: "recording", status: "pending", progress: 0 },
@@ -73,6 +81,9 @@ export class InterviewTrainerExtension {
   private detectedInput: string | null = null;
   private availableInputs: string[] | null = null;
   private outputChannel: vscode.OutputChannel;
+  private embeddingWarmupTimer: ReturnType<typeof setTimeout> | null = null;
+  private embeddingWarmupAbort: { aborted: boolean } | null = null;
+  private embeddingWarmupRunning = false;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -82,6 +93,7 @@ export class InterviewTrainerExtension {
     this.configBundle = it_loadConfigBundle(this.context);
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
     this.registerHandlers();
+    this.scheduleEmbeddingWarmup("startup");
   }
 
   private logEmbeddingTestFailure(error: unknown): void {
@@ -256,6 +268,221 @@ export class InterviewTrainerExtension {
   private updateState(nextState: Partial<ItState>): void {
     this.state = { ...this.state, ...nextState };
     this.webviewProtocol.send("it/stateUpdate", this.state);
+  }
+
+  private updateEmbeddingWarmup(next: Partial<ItEmbeddingWarmupState>): void {
+    const current = this.state.embeddingWarmup || {
+      status: "idle",
+      progress: 0,
+      total: 0,
+      done: 0,
+    };
+    this.state = {
+      ...this.state,
+      embeddingWarmup: {
+        ...current,
+        ...next,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    this.webviewProtocol.send("it/stateUpdate", this.state);
+  }
+
+  private isIdleForWarmup(): boolean {
+    if (this.state.recordingState !== "idle") {
+      return false;
+    }
+    return !this.state.steps.some((step) => step.status === "running");
+  }
+
+  private scheduleEmbeddingWarmup(reason: string, delayMs: number = 2500): void {
+    if (this.embeddingWarmupTimer) {
+      clearTimeout(this.embeddingWarmupTimer);
+      this.embeddingWarmupTimer = null;
+    }
+    this.embeddingWarmupTimer = setTimeout(() => {
+      this.embeddingWarmupTimer = null;
+      void this.runEmbeddingWarmup(reason);
+    }, delayMs);
+  }
+
+  private async runEmbeddingWarmup(reason: string): Promise<void> {
+    if (this.embeddingWarmupRunning) {
+      return;
+    }
+    if (!this.isIdleForWarmup()) {
+      return;
+    }
+    let workspaceRoot = "";
+    try {
+      workspaceRoot = this.requireWorkspaceRoot();
+    } catch {
+      return;
+    }
+    this.configBundle = it_loadConfigBundle(this.context);
+    const retrievalEnabled = this.configBundle.skill.retrieval?.enabled !== false;
+    if (!retrievalEnabled) {
+      this.updateEmbeddingWarmup({
+        status: "idle",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: "向量预计算跳过：检索已关闭",
+      });
+      return;
+    }
+    const retrievalMode = String(this.configBundle.skill.retrieval?.mode || "vector");
+    if (retrievalMode !== "vector") {
+      this.updateEmbeddingWarmup({
+        status: "idle",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: "向量预计算跳过：当前为词面模式",
+      });
+      return;
+    }
+    const workspaceCfg = this.configBundle.skill.workspace ?? {};
+    const corpus = it_buildCorpus({
+      notes: path.join(workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
+      prompts: path.join(
+        workspaceRoot,
+        workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
+      ),
+      rubrics: path.join(
+        workspaceRoot,
+        workspaceCfg.rubrics_dir || "inputs/rubrics",
+      ),
+      knowledge: path.join(
+        workspaceRoot,
+        workspaceCfg.knowledge_dir || "inputs/knowledge",
+      ),
+      examples: path.join(
+        workspaceRoot,
+        workspaceCfg.examples_dir || "inputs/examples",
+      ),
+    });
+    if (!corpus.length) {
+      this.updateEmbeddingWarmup({
+        status: "success",
+        progress: 100,
+        total: 0,
+        done: 0,
+        message: "向量预计算完成：暂无可用笔记",
+      });
+      return;
+    }
+
+    const retrievalCfg = this.configBundle.skill.retrieval ?? {};
+    const vectorCfg = retrievalCfg.vector ?? {};
+    const providerProfiles = this.configBundle.providers ?? {};
+    const embeddingProvider =
+      retrievalCfg.embedding_provider || vectorCfg.provider || "";
+    const providerEmbedding =
+      (embeddingProvider && providerProfiles[embeddingProvider]?.embedding) || {};
+    const resolvedVector = {
+      provider: providerEmbedding.provider || vectorCfg.provider || embeddingProvider,
+      baseUrl: providerEmbedding.base_url || vectorCfg.base_url || "",
+      apiKey: providerEmbedding.api_key || vectorCfg.api_key || "",
+      model: providerEmbedding.model || vectorCfg.model || "",
+      timeoutSec: Number(providerEmbedding.timeout_sec ?? vectorCfg.timeout_sec ?? 30),
+      maxRetries: Number(providerEmbedding.max_retries ?? vectorCfg.max_retries ?? 1),
+      batchSize: Number(vectorCfg.batch_size ?? 16),
+      queryMaxChars: Number(vectorCfg.query_max_chars ?? 1500),
+    };
+    if (
+      !resolvedVector.provider ||
+      !resolvedVector.apiKey ||
+      !resolvedVector.baseUrl ||
+      !resolvedVector.model
+    ) {
+      this.updateEmbeddingWarmup({
+        status: "idle",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: "向量预计算跳过：Embedding 配置不完整",
+      });
+      return;
+    }
+
+    const cacheRoot = this.context.globalStorageUri?.fsPath;
+    if (!cacheRoot) {
+      this.updateEmbeddingWarmup({
+        status: "error",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: "向量预计算失败：无法定位缓存目录",
+      });
+      return;
+    }
+    const cacheDir = path.join(
+      cacheRoot,
+      "embedding_cache",
+      it_hashText(workspaceRoot),
+    );
+
+    this.embeddingWarmupRunning = true;
+    this.embeddingWarmupAbort = { aborted: false };
+    this.updateEmbeddingWarmup({
+      status: "running",
+      progress: 0,
+      total: 0,
+      done: 0,
+      message: `向量预计算准备中 · ${reason}`,
+    });
+    try {
+      const result = await it_prepareEmbeddingCache(corpus, resolvedVector, {
+        cacheDir,
+        signal: this.embeddingWarmupAbort,
+        onProgress: (done, total) => {
+          const progress = total ? Math.round((done / total) * 100) : 100;
+          const message = total
+            ? `向量预计算 ${done}/${total}`
+            : "向量缓存已是最新";
+          this.updateEmbeddingWarmup({
+            status: "running",
+            progress,
+            total,
+            done,
+            message,
+          });
+        },
+      });
+      if (result.aborted) {
+        this.updateEmbeddingWarmup({
+          status: "idle",
+          progress: 0,
+          total: result.total,
+          done: result.created,
+          message: "向量预计算已暂停：分析中",
+        });
+      } else {
+        const message =
+          result.total > 0
+            ? `向量预计算完成：新增 ${result.created}/${result.total}`
+            : "向量缓存已是最新";
+        this.updateEmbeddingWarmup({
+          status: "success",
+          progress: 100,
+          total: result.total,
+          done: result.total,
+          message,
+        });
+      }
+    } catch (error) {
+      this.updateEmbeddingWarmup({
+        status: "error",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: `向量预计算失败：${error instanceof Error ? error.message : String(error)}`,
+      });
+    } finally {
+      this.embeddingWarmupRunning = false;
+      this.embeddingWarmupAbort = null;
+    }
   }
 
   private resolveApiConfigWithProviders(apiConfig: ItApiConfig): ItApiConfig {
@@ -525,7 +752,9 @@ export class InterviewTrainerExtension {
   private registerHandlers(): void {
     this.webviewProtocol.on("it/getState", () => this.state);
     this.webviewProtocol.on("it/getConfig", async () => {
-      return await this.refreshConfigSnapshot();
+      const snapshot = await this.refreshConfigSnapshot();
+      this.scheduleEmbeddingWarmup("config");
+      return snapshot;
     });
     this.webviewProtocol.on("it/listHistory", (msg) => {
       const workspaceRoot = this.requireWorkspaceRoot();
@@ -608,6 +837,9 @@ export class InterviewTrainerExtension {
       it_saveSkillConfig(this.context, this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      if (enabled) {
+        this.scheduleEmbeddingWarmup("retrieval-toggle");
+      }
       return { enabled };
     });
     this.webviewProtocol.on("it/updateRetrievalSettings", async (msg) => {
@@ -678,6 +910,7 @@ export class InterviewTrainerExtension {
       it_saveSkillConfig(this.context, this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      this.scheduleEmbeddingWarmup("retrieval-update");
       return this.configSnapshot;
     });
     this.webviewProtocol.on("it/createProviderConfig", async (msg) => {
@@ -794,6 +1027,7 @@ export class InterviewTrainerExtension {
           `清理缓存失败：${error instanceof Error ? error.message : String(error)}`,
         );
       }
+      this.scheduleEmbeddingWarmup("clear-cache", 1000);
       return { cleared: true, path: cacheDir };
     });
     this.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
@@ -1460,6 +1694,9 @@ export class InterviewTrainerExtension {
     request: ItAnalyzeRequest,
   ): Promise<ItAnalyzeResponse> {
     try {
+      if (this.embeddingWarmupAbort) {
+        this.embeddingWarmupAbort.aborted = true;
+      }
       const steps = this.buildRunSteps().map((step) => {
         if (step.id === "recording") {
           return { ...step, status: "success" as ItStepStatus, progress: 100 };
@@ -1514,6 +1751,7 @@ export class InterviewTrainerExtension {
         lastError: undefined,
       });
 
+      this.scheduleEmbeddingWarmup("after-analysis", 3000);
       return response;
     } catch (error) {
       this.updateState({
@@ -1530,6 +1768,7 @@ export class InterviewTrainerExtension {
             : step,
         ),
       });
+      this.scheduleEmbeddingWarmup("after-analysis", 3000);
       throw error;
     }
   }
