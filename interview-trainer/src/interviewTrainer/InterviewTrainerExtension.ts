@@ -29,7 +29,11 @@ import { it_callLlmChat, ItLlmConfig } from "./api/it_llm";
 import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
-import { it_buildCorpus, it_prepareEmbeddingCache } from "./core/it_notes";
+import {
+  it_buildCorpus,
+  it_prepareEmbeddingCache,
+  it_clearEmbeddingMemoryCache,
+} from "./core/it_notes";
 import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_parseQuestions } from "./core/it_questionParser";
@@ -1027,6 +1031,14 @@ export class InterviewTrainerExtension {
           `清理缓存失败：${error instanceof Error ? error.message : String(error)}`,
         );
       }
+      it_clearEmbeddingMemoryCache();
+      this.updateEmbeddingWarmup({
+        status: "running",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: "向量预计算准备中",
+      });
       this.scheduleEmbeddingWarmup("clear-cache", 1000);
       return { cleared: true, path: cacheDir };
     });

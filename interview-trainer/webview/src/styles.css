@@ -143,7 +143,7 @@
 
 .it-steps {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
 }
 
@@ -163,6 +163,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.it-step__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .it-step__dot {

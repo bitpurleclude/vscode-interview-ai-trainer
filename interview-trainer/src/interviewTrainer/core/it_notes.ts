@@ -59,6 +59,14 @@ const IT_EMBEDDING_CACHE_VERSION = 1;
 
 const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
 
+export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
+  if (cacheKey) {
+    cachedEmbeddings.delete(cacheKey);
+    return;
+  }
+  cachedEmbeddings.clear();
+}
+
 function it_readText(filePath: string): string {
   try {
     return fs.readFileSync(filePath, "utf-8");
