@@ -2174,19 +2174,6 @@ const InterviewTrainer: React.FC = () => {
                     )}
                   </div>
                 </div>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 80 }}>保存目录</div>
-                    <div className="it-settings__meta" style={{ flex: 1 }}>
-                      {config.sessionsDir}
-                    </div>
-                    <button
-                      className="it-button it-button--secondary it-button--compact"
-                      disabled={uiLocked}
-                      onClick={() => request("it/selectSessionsDir", undefined)}
-                    >
-                      选择保存目录
-                    </button>
-                  </div>
                   {apiSaveMessage && <div className="it-settings__hint">{apiSaveMessage}</div>}
                 </>
               ) : (
@@ -2479,6 +2466,19 @@ const InterviewTrainer: React.FC = () => {
               )}
               <div className="it-settings__hint">
                 向量检索会调用 embedding 接口，模型名称请按平台实际填入。
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>保存目录</div>
+                <div className="it-settings__meta" style={{ flex: 1 }}>
+                  {config?.sessionsDir || "sessions"}
+                </div>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked}
+                  onClick={() => request("it/selectSessionsDir", undefined)}
+                >
+                  选择保存目录
+                </button>
               </div>
               <div className="it-retrieval__list">
                 {retrievalDirs.map((item) => (
