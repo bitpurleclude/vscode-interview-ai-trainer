@@ -27,6 +27,7 @@ import {
 } from "./api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "./api/it_llm";
 import { it_callBaiduAsr } from "./api/it_baidu";
+import { it_callVolcAsr } from "./api/it_volc_asr";
 import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
 import {
@@ -38,6 +39,7 @@ import { it_listHistoryItems } from "./storage/it_history";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_parseQuestions } from "./core/it_questionParser";
 import { it_hashText } from "./utils/it_text";
+import { it_pcm16ToWavBuffer } from "./utils/it_wav";
 
 const IT_STATUS_INIT: ItState = {
   statusMessage: "等待开始面试训练",
@@ -1296,6 +1298,65 @@ export class InterviewTrainerExtension {
       if (provider === "mock") {
         return { ok: true, content: asrForm.mockText || "mock 文本" };
       }
+      const normalizedProvider = String(provider || "").toLowerCase();
+      if (
+        normalizedProvider === "volc_asr" ||
+        normalizedProvider === "volcengine_asr" ||
+        normalizedProvider === "volc_doubao"
+      ) {
+        if (!asrForm.apiKey || !asrForm.secretKey) {
+          throw new Error("缺少火山引擎 ASR 的 App Key 或 Access Key。");
+        }
+        const modeRaw = String(asrForm.mode || asrForm.volc_mode || "flash").toLowerCase();
+        const mode = modeRaw === "standard" ? "standard" : "flash";
+        const baseUrl = asrForm.baseUrl || "https://openspeech.bytedance.com";
+        const resourceId =
+          asrForm.resource_id ||
+          asrForm.resourceId ||
+          (mode === "standard" ? "volc.bigasr.auc" : "volc.bigasr.auc_turbo");
+        const modelName = asrForm.model_name || asrForm.modelName || "bigmodel";
+        const enablePunc =
+          asrForm.enable_punc ?? asrForm.enablePunc ?? true;
+        const userId = asrForm.user_id || asrForm.userId || "it-asr-test";
+        const audioUrl = asrForm.audio_url || asrForm.audioUrl || "";
+
+        const sampleRate = 16000;
+        const durationSec = 1;
+        const pcm = new Int16Array(sampleRate * durationSec);
+        const wavBuffer = it_pcm16ToWavBuffer(pcm, sampleRate, 1);
+        const audioPayload = audioUrl
+          ? { url: audioUrl, format: asrForm.audio_format || asrForm.audioFormat }
+          : {
+              data: wavBuffer.toString("base64"),
+              format: "wav",
+              rate: sampleRate,
+              bits: 16,
+              channel: 1,
+            };
+        if (mode === "standard" && !audioUrl) {
+          throw new Error(
+            "火山引擎 ASR 标准版需要 audio_url（可访问的音频地址）。请在 provider 配置中设置 audio_url 或切换到 flash 模式。",
+          );
+        }
+        const text = await it_callVolcAsr(
+          {
+            appKey: asrForm.apiKey,
+            accessKey: asrForm.secretKey,
+            baseUrl,
+            resourceId,
+            modelName,
+            enablePunc: Boolean(enablePunc),
+            userId,
+            mode,
+            timeoutSec: Number(asrForm.timeoutSec ?? 30),
+            maxRetries: Number(asrForm.maxRetries ?? 0),
+            pollIntervalSec: Number(asrForm.poll_interval_sec ?? 1),
+            maxPollSec: Number(asrForm.max_poll_sec ?? 60),
+          },
+          audioPayload,
+        );
+        return { ok: true, content: text || "(无识别结果，接口可用)" };
+      }
       if (provider !== "baidu_vop") {
         throw new Error("当前仅支持百度 ASR 测试。");
       }
@@ -1726,6 +1787,7 @@ export class InterviewTrainerExtension {
       });
 
       this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
       this.configBundle.api = await it_applySecretOverrides(
         this.context,
         this.configBundle.api,

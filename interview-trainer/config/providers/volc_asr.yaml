@@ -1,0 +1,13 @@
+provider: volc_asr
+display_name: Volcengine ASR
+asr:
+  provider: volc_asr
+  base_url: https://openspeech.bytedance.com
+  api_key: ""
+  secret_key: ""
+  resource_id: volc.bigasr.auc_turbo
+  model_name: bigmodel
+  mode: flash
+  enable_punc: true
+  timeout_sec: 120
+  max_retries: 1

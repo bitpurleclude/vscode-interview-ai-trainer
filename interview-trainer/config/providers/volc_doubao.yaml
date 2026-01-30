@@ -17,10 +17,14 @@ embedding:
   timeout_sec: 30
   max_retries: 1
 asr:
-  provider: ""
-  base_url: ""
+  provider: volc_doubao
+  base_url: https://openspeech.bytedance.com
   api_key: ""
   secret_key: ""
+  resource_id: volc.bigasr.auc_turbo
+  model_name: bigmodel
+  mode: flash
+  enable_punc: true
   language: zh
   dev_pid: 1537
   timeout_sec: 120

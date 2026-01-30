@@ -15,6 +15,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 
 import { it_callBaiduAsr } from "../api/it_baidu";
+import { it_callVolcAsr } from "../api/it_volc_asr";
 import { ItApiConfig } from "../api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
@@ -243,6 +244,44 @@ function it_isBaiduContentTooLong(error: unknown): boolean {
     lower.includes("content len too long") ||
     lower.includes("content length too long")
   );
+}
+
+function it_isVolcAsrProvider(provider: string): boolean {
+  const normalized = String(provider || "").toLowerCase();
+  return (
+    normalized === "volc_asr" ||
+    normalized === "volcengine_asr" ||
+    normalized === "volc_doubao"
+  );
+}
+
+function it_buildVolcAudioPayload(
+  audio: ItAnalyzeRequest["audio"],
+): {
+  data?: string;
+  format?: string;
+  rate?: number;
+  bits?: number;
+  channel?: number;
+} {
+  if (audio.format === "pcm") {
+    const pcm = it_decodePcm16(audio.base64);
+    const wavBuffer = it_pcm16ToWavBuffer(pcm, audio.sampleRate, 1);
+    return {
+      data: wavBuffer.toString("base64"),
+      format: "wav",
+      rate: audio.sampleRate,
+      bits: 16,
+      channel: 1,
+    };
+  }
+  return {
+    data: audio.base64,
+    format: audio.format,
+    rate: audio.sampleRate,
+    bits: 16,
+    channel: 1,
+  };
 }
 
 function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
@@ -872,8 +911,54 @@ async function it_transcribeAudio(
     reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
     return mockText;
   }
+  if (it_isVolcAsrProvider(asrProvider)) {
+    if (!asrCfg.api_key || !asrCfg.secret_key) {
+      throw new Error("缺少火山引擎 ASR 的 App Key 或 Access Key。");
+    }
+    const modeRaw = String(asrCfg.mode || asrCfg.volc_mode || "flash").toLowerCase();
+    const mode = modeRaw === "standard" ? "standard" : "flash";
+    const baseUrl = asrCfg.base_url || "https://openspeech.bytedance.com";
+    const resourceId =
+      asrCfg.resource_id ||
+      asrCfg.resourceId ||
+      (mode === "standard" ? "volc.bigasr.auc" : "volc.bigasr.auc_turbo");
+    const modelName = asrCfg.model_name || asrCfg.modelName || "bigmodel";
+    const enablePunc =
+      asrCfg.enable_punc ?? asrCfg.enablePunc ?? true;
+    const userId = asrCfg.user_id || asrCfg.userId || "it-user";
+    const audioUrl = asrCfg.audio_url || asrCfg.audioUrl || "";
+    const audioFormat = asrCfg.audio_format || asrCfg.audioFormat;
+    const audioPayload = audioUrl
+      ? { url: audioUrl, format: audioFormat }
+      : it_buildVolcAudioPayload(request.audio);
+    if (mode === "standard" && !audioUrl) {
+      throw new Error(
+        "火山引擎 ASR 标准版需要 audio_url（可访问的音频地址）。请在 provider 配置中设置 audio_url 或切换到 flash 模式。",
+      );
+    }
+    reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
+    const transcript = await it_callVolcAsr(
+      {
+        appKey: asrCfg.api_key || "",
+        accessKey: asrCfg.secret_key || "",
+        baseUrl,
+        resourceId,
+        modelName,
+        enablePunc: Boolean(enablePunc),
+        userId,
+        mode,
+        timeoutSec: Number(asrCfg.timeout_sec ?? 120),
+        maxRetries: Number(asrCfg.max_retries ?? 1),
+        pollIntervalSec: Number(asrCfg.poll_interval_sec ?? 1),
+        maxPollSec: Number(asrCfg.max_poll_sec ?? 300),
+      },
+      audioPayload,
+    );
+    reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
+    return transcript;
+  }
   if (asrProvider !== "baidu_vop") {
-    throw new Error("当前仅支持百度语音转文字（baidu_vop）。");
+    throw new Error("当前仅支持百度语音转文字（baidu_vop）与火山引擎 ASR（volc_asr）。");
   }
   if (!asrCfg.api_key || !asrCfg.secret_key) {
     throw new Error("缺少百度语音转文字的API Key或Secret Key。");
