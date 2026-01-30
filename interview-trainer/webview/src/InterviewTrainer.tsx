@@ -255,13 +255,13 @@ const InterviewTrainer: React.FC = () => {
       const providerProfile = cfg.providerProfiles?.[provider] || null;
       const asrProviderProfile = cfg.providerProfiles?.[asrProvider] || null;
       const llmProfile =
-        (providerProfile?.llm as any) ||
+        (cfg.llm && cfg.llm.provider === provider ? cfg.llm : null) ||
         (cfg.llmProfiles && cfg.llmProfiles[provider]) ||
-        (cfg.llm && cfg.llm.provider === provider ? cfg.llm : null);
+        (providerProfile?.llm as any);
       const asrProfile =
-        (asrProviderProfile?.asr as any) ||
+        (cfg.asr && cfg.asr.provider === asrProvider ? cfg.asr : null) ||
         (cfg.asrProfiles && cfg.asrProfiles[asrProvider]) ||
-        (cfg.asr && cfg.asr.provider === asrProvider ? cfg.asr : null);
+        (asrProviderProfile?.asr as any);
       const llmDefaults =
         provider === "volc_doubao"
           ? {
@@ -902,9 +902,9 @@ const InterviewTrainer: React.FC = () => {
                 model: "ernie-4.5-turbo-128k",
               };
         const nextProfile =
-          providerProfile ||
-          (prev.llmProfiles && prev.llmProfiles[provider]) ||
           (provider === prev.llm.provider ? prev.llm : undefined) ||
+          (prev.llmProfiles && prev.llmProfiles[provider]) ||
+          providerProfile ||
           {};
         return {
           ...prev,
@@ -934,9 +934,9 @@ const InterviewTrainer: React.FC = () => {
         const provider = String(value);
         const providerProfile = providerProfiles?.[provider]?.asr || {};
         const nextProfile =
-          providerProfile ||
-          (prev.asrProfiles && prev.asrProfiles[provider]) ||
           (provider === prev.asr.provider ? prev.asr : undefined) ||
+          (prev.asrProfiles && prev.asrProfiles[provider]) ||
+          providerProfile ||
           {};
         const defaults = {
           baseUrl: "https://vop.baidu.com/server_api",

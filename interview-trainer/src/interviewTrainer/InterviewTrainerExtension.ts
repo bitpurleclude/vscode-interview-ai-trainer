@@ -230,8 +230,31 @@ export class InterviewTrainerExtension {
       this.context,
       this.configBundle.api,
     );
+    await this.applyEmbeddingSecretOverrides();
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
     return this.configSnapshot;
+  }
+
+  private async applyEmbeddingSecretOverrides(): Promise<void> {
+    const env = this.configBundle.api.active?.environment || "prod";
+    const secret =
+      (await this.context.secrets.get(`interviewTrainer.${env}.embedding.apiKey`)) ||
+      "";
+    if (!secret) {
+      return;
+    }
+    const current = this.configBundle.skill.retrieval || {};
+    const currentVector = current.vector || {};
+    this.configBundle.skill = {
+      ...this.configBundle.skill,
+      retrieval: {
+        ...current,
+        vector: {
+          ...currentVector,
+          api_key: secret,
+        },
+      },
+    };
   }
 
   private it_getLlmConfig(): ItLlmConfig | null {
@@ -755,6 +778,15 @@ export class InterviewTrainerExtension {
     });
   }
 
+  private it_firstNonEmpty(...values: Array<string | undefined | null>): string {
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) {
+        return value;
+      }
+    }
+    return "";
+  }
+
   private registerHandlers(): void {
     this.webviewProtocol.on("it/getState", () => this.state);
     this.webviewProtocol.on("it/getConfig", async () => {
@@ -855,6 +887,10 @@ export class InterviewTrainerExtension {
       const current = this.configBundle.skill.retrieval || {};
       const currentVector = current.vector || {};
       const incomingVector = incoming.vector || {};
+      const env = this.configBundle.api.active?.environment || "prod";
+      const storedEmbeddingKey =
+        (await this.context.secrets.get(`interviewTrainer.${env}.embedding.apiKey`)) ||
+        "";
       this.configBundle.skill = {
         ...this.configBundle.skill,
         retrieval: {
@@ -875,7 +911,11 @@ export class InterviewTrainerExtension {
               incomingVector.baseUrl ??
               currentVector.base_url ??
               "https://ark.cn-beijing.volces.com",
-            api_key: incomingVector.apiKey ?? currentVector.api_key ?? "",
+            api_key: this.it_firstNonEmpty(
+              incomingVector.apiKey,
+              currentVector.api_key,
+              storedEmbeddingKey,
+            ),
             model: incomingVector.model ?? currentVector.model ?? "doubao-embedding",
             timeout_sec: Number(incomingVector.timeoutSec ?? currentVector.timeout_sec ?? 30),
             max_retries: Number(incomingVector.maxRetries ?? currentVector.max_retries ?? 1),
@@ -902,7 +942,11 @@ export class InterviewTrainerExtension {
             ...(existing.embedding || {}),
             provider: incomingVector.provider ?? existing.embedding?.provider ?? embeddingProvider,
             base_url: incomingVector.baseUrl ?? existing.embedding?.base_url ?? "",
-            api_key: incomingVector.apiKey ?? existing.embedding?.api_key ?? "",
+            api_key: this.it_firstNonEmpty(
+              incomingVector.apiKey,
+              existing.embedding?.api_key,
+              storedEmbeddingKey,
+            ),
             model: incomingVector.model ?? existing.embedding?.model ?? "",
             timeout_sec: Number(
               incomingVector.timeoutSec ?? existing.embedding?.timeout_sec ?? 30,
@@ -912,6 +956,14 @@ export class InterviewTrainerExtension {
             ),
           },
         });
+      }
+      const resolvedEmbeddingKey =
+        this.configBundle.skill.retrieval?.vector?.api_key || "";
+      if (resolvedEmbeddingKey) {
+        await this.context.secrets.store(
+          `interviewTrainer.${env}.embedding.apiKey`,
+          resolvedEmbeddingKey,
+        );
       }
       it_saveSkillConfig(this.context, this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
@@ -1130,6 +1182,15 @@ export class InterviewTrainerExtension {
         "prod";
 
       this.configBundle = it_loadConfigBundle(this.context);
+      const storedLlmKey =
+        (await this.context.secrets.get(`interviewTrainer.${environment}.llm.apiKey`)) ||
+        "";
+      const storedAsrKey =
+        (await this.context.secrets.get(`interviewTrainer.${environment}.asr.apiKey`)) ||
+        "";
+      const storedAsrSecret =
+        (await this.context.secrets.get(`interviewTrainer.${environment}.asr.secretKey`)) ||
+        "";
       const apiConfig = { ...this.configBundle.api };
       const envConfig = {
         ...(apiConfig.environments?.[environment] || {}),
@@ -1153,7 +1214,11 @@ export class InterviewTrainerExtension {
         provider: llmForm.provider || envConfig.llm?.provider || apiConfig.active?.llm || "baidu_qianfan",
         base_url: llmForm.baseUrl ?? envConfig.llm?.base_url ?? llmDefaultBase,
         model: llmForm.model ?? envConfig.llm?.model ?? llmDefaultModel,
-        api_key: llmForm.apiKey ?? envConfig.llm?.api_key ?? "",
+        api_key: this.it_firstNonEmpty(
+          llmForm.apiKey,
+          envConfig.llm?.api_key,
+          storedLlmKey,
+        ),
         temperature: Number(llmForm.temperature ?? envConfig.llm?.temperature ?? 0.8),
         top_p: Number(llmForm.topP ?? envConfig.llm?.top_p ?? 0.8),
         timeout_sec: Number(llmForm.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
@@ -1168,8 +1233,16 @@ export class InterviewTrainerExtension {
         ...(envConfig.asr || {}),
         provider: asrForm.provider || envConfig.asr?.provider || apiConfig.active?.asr || "baidu_vop",
         base_url: asrForm.baseUrl ?? envConfig.asr?.base_url ?? "https://vop.baidu.com/server_api",
-        api_key: asrForm.apiKey ?? envConfig.asr?.api_key ?? "",
-        secret_key: asrForm.secretKey ?? envConfig.asr?.secret_key ?? "",
+        api_key: this.it_firstNonEmpty(
+          asrForm.apiKey,
+          envConfig.asr?.api_key,
+          storedAsrKey,
+        ),
+        secret_key: this.it_firstNonEmpty(
+          asrForm.secretKey,
+          envConfig.asr?.secret_key,
+          storedAsrSecret,
+        ),
         mock_text: asrForm.mockText ?? envConfig.asr?.mock_text ?? "",
         language: asrForm.language ?? envConfig.asr?.language ?? "zh",
         dev_pid: Number(asrForm.devPid ?? envConfig.asr?.dev_pid ?? 1537),
