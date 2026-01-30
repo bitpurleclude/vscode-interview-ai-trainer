@@ -151,7 +151,13 @@ export async function it_callVolcAsrFlash(
   const data = await it_postWithRetries(url, payload, cfg);
   const code = it_parseVolcCode(data);
   if (code !== 0) {
-    throw new Error(`Volcengine ASR flash error ${code}: ${data.message || "unknown"}`);
+    const error = new Error(
+      `Volcengine ASR flash error ${code}: ${data.message || "unknown"}`,
+    );
+    (error as any).itDebug = {
+      response: data,
+    };
+    throw error;
   }
   return it_extractVolcText(data);
 }
@@ -171,9 +177,13 @@ export async function it_callVolcAsrStandard(
   const submitResp = await it_postWithRetries(submitUrl, submitPayload, cfg);
   const submitCode = it_parseVolcCode(submitResp);
   if (submitCode !== 0) {
-    throw new Error(
+    const error = new Error(
       `Volcengine ASR submit error ${submitCode}: ${submitResp.message || "unknown"}`,
     );
+    (error as any).itDebug = {
+      response: submitResp,
+    };
+    throw error;
   }
 
   const taskId =
@@ -194,9 +204,13 @@ export async function it_callVolcAsrStandard(
     const queryResp = await it_postWithRetries(queryUrl, { id: taskId }, cfg);
     const queryCode = it_parseVolcCode(queryResp);
     if (queryCode !== 0) {
-      throw new Error(
+      const error = new Error(
         `Volcengine ASR query error ${queryCode}: ${queryResp.message || "unknown"}`,
       );
+      (error as any).itDebug = {
+        response: queryResp,
+      };
+      throw error;
     }
     const text = it_extractVolcText(queryResp);
     if (text) {
@@ -207,9 +221,13 @@ export async function it_callVolcAsrStandard(
       return "";
     }
     if (["error", "failed", "fail", "abort"].includes(status)) {
-      throw new Error(
+      const error = new Error(
         `Volcengine ASR failed: ${queryResp.message || status || "unknown"}`,
       );
+      (error as any).itDebug = {
+        response: queryResp,
+      };
+      throw error;
     }
   }
 

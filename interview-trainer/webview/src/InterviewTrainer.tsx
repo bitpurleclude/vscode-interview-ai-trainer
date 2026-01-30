@@ -245,6 +245,7 @@ const InterviewTrainer: React.FC = () => {
   const [testingAsr, setTestingAsr] = useState(false);
   const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
   const [asrTestMessage, setAsrTestMessage] = useState<string | null>(null);
+  const [asrTestRaw, setAsrTestRaw] = useState<string | null>(null);
   const [testingEmbedding, setTestingEmbedding] = useState(false);
   const [embeddingTestMessage, setEmbeddingTestMessage] = useState<string | null>(null);
   const applyProfileToForm = useCallback(
@@ -887,6 +888,7 @@ const InterviewTrainer: React.FC = () => {
   ) => {
     setLlmTestMessage(null);
     setAsrTestMessage(null);
+    setAsrTestRaw(null);
     setApiForm((prev) => {
       if (scope === "llm" && key === "provider") {
         const provider = String(value);
@@ -1231,20 +1233,41 @@ const InterviewTrainer: React.FC = () => {
   const handleTestAsr = async () => {
     setTestingAsr(true);
     setAsrTestMessage(null);
+    setAsrTestRaw(null);
     try {
       const resp = await request("it/testAsr", { asr: apiForm.asr });
       if (resp?.status === "success") {
-        const content = resp.content?.content || resp.content;
-        setAsrTestMessage(
-          `ASR 接口正常：${String(content || "").slice(0, 40) || "(无识别结果)"}`,
-        );
+        const ok = resp.content?.ok !== false;
+        if (ok) {
+          const content = resp.content?.content ?? resp.content;
+          setAsrTestMessage(
+            `ASR 接口正常：${String(content || "").slice(0, 40) || "(无识别结果)"}`,
+          );
+        } else {
+          const error = resp.content?.error || "ASR 测试失败，请检查配置。";
+          setAsrTestMessage(`ASR 测试失败：${error}`);
+          if (resp.content?.raw) {
+            setAsrTestRaw(
+              typeof resp.content.raw === "string"
+                ? resp.content.raw
+                : JSON.stringify(resp.content.raw, null, 2),
+            );
+          }
+        }
       } else {
-        setAsrTestMessage("ASR 测试失败，请检查配置。");
+        const error = resp?.error || "ASR 测试失败，请检查配置。";
+        setAsrTestMessage(`ASR 测试失败：${error}`);
+        if (resp?.raw) {
+          setAsrTestRaw(
+            typeof resp.raw === "string" ? resp.raw : JSON.stringify(resp.raw, null, 2),
+          );
+        }
       }
     } catch (err) {
       setAsrTestMessage(
         `ASR 测试失败：${err instanceof Error ? err.message : String(err)}`,
       );
+      setAsrTestRaw(err instanceof Error ? err.stack || err.message : String(err));
     }
     setTestingAsr(false);
   };
@@ -2171,6 +2194,9 @@ const InterviewTrainer: React.FC = () => {
                     </div>
                     {asrTestMessage && (
                       <div className="it-settings__hint">{asrTestMessage}</div>
+                    )}
+                    {asrTestRaw && (
+                      <pre className="it-settings__raw">{asrTestRaw}</pre>
                     )}
                   </div>
                 </div>

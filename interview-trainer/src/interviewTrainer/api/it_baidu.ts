@@ -95,13 +95,25 @@ export async function it_callBaiduAsr(
       });
       const data = response.data;
       if (data?.err_no && data.err_no !== 0) {
-        throw new Error(
+        const error = new Error(
           `Baidu ASR error ${data.err_no}: ${data.err_msg || "unknown"}`,
         );
+        (error as any).itDebug = {
+          response: data,
+          status: response.status,
+        };
+        throw error;
       }
       const result = Array.isArray(data?.result) ? data.result.join("") : "";
       return result;
     } catch (err) {
+      const axiosError = err as any;
+      if (axiosError?.response) {
+        axiosError.itDebug = {
+          response: axiosError.response?.data,
+          status: axiosError.response?.status,
+        };
+      }
       lastError = err;
     }
   }

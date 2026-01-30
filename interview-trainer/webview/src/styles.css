@@ -689,6 +689,20 @@
   color: var(--vscode-descriptionForeground);
 }
 
+.it-settings__raw {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--vscode-sideBarSectionHeader-background);
+  border: 1px dashed var(--vscode-sideBar-border);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  max-height: 180px;
+  overflow: auto;
+}
+
 .it-settings__section--full {
   grid-column: 1 / -1;
 }
