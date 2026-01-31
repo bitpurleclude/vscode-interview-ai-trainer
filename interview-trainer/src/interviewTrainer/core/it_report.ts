@@ -79,7 +79,7 @@ export function it_renderReport(
   lines.push("\n");
 
   if (response.evaluation.noteUsage && response.evaluation.noteUsage.length) {
-    lines.push("### 绗旇寮曠敤\n\n");
+    lines.push("### 笔记引用\n\n");
     response.evaluation.noteUsage.forEach((item) => {
       lines.push(`- ${item}\n`);
     });
@@ -90,7 +90,7 @@ export function it_renderReport(
     response.evaluation.noteSuggestions &&
     response.evaluation.noteSuggestions.length
   ) {
-    lines.push("### 鍙敤绱犳潗/鍙弬鑰冩€濊矾\n\n");
+    lines.push("### 可用素材/可参考思路\n\n");
     response.evaluation.noteSuggestions.forEach((item) => {
       lines.push(`- ${item}\n`);
     });
@@ -120,6 +120,9 @@ export function it_renderReport(
       lines.push(`${idx + 1}. ${item.question} - [${start}-${end}] 用时 ${duration}${note}\n`);
     });
     lines.push("\n");
+  } else if (response.questionTimingNote) {
+    lines.push("### ????\n\n");
+    lines.push(`${response.questionTimingNote}\n\n`);
   }
 
   if (response.notes.length) {
@@ -187,11 +190,11 @@ export async function it_appendReportAsync(
     const header: string[] = [];
     header.push(`# ${topicTitle}\n\n`);
     if (questionText) {
-      header.push("棰樺共姝ｆ枃:\n");
+      header.push("题干正文:\n");
       header.push(`${questionText}\n\n`);
     }
     if (questionList && questionList.length) {
-      header.push("灏忛鍒楄〃:\n");
+      header.push("小题列表:\n");
       questionList.forEach((item, idx) => {
         header.push(`${idx + 1}. ${item}\n`);
       });

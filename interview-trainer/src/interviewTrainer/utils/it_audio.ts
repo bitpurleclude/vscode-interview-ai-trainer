@@ -286,7 +286,7 @@ export function it_buildDetailedTranscript(
       }
       const speechRate = seg.speechRateWpm ? `${seg.speechRateWpm}字/分钟` : "-";
       const volume = seg.volumeLabel || "正常";
-      const tone = seg.tone ? `，语调：${seg.tone}` : "";
+      const tone = seg.tone ? `，音量趋势：${seg.tone}` : "";
       const pause =
         seg.pauseSec && seg.pauseSec > 0.1 ? `，停顿：${seg.pauseSec}秒` : "";
       const content = seg.text?.trim() || "（语音片段）";
@@ -357,7 +357,7 @@ export function it_summarizeAudioMetrics(
   if (rmsDb.length) {
     const silence = rmsDb.filter((val) => val <= thresholdDb);
     if (silence.length) {
-      const speechMedian = rmsDb[Math.floor(rmsDb.length / 2)];
+      const speechMedian = sorted[Math.floor(sorted.length / 2)];
       const silenceMedian = silence.sort((a, b) => a - b)[
         Math.floor(silence.length / 2)
       ];

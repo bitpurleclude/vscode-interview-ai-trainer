@@ -71,12 +71,19 @@ export async function it_callBaiduAsr(
   req: ItBaiduAsrRequest,
 ): Promise<string> {
   const token = await it_getBaiduAccessToken(cfg.apiKey, cfg.secretKey);
+  const language = String(cfg.language || "").trim().toLowerCase();
+  let devPid = Number(cfg.devPid);
+  if (!Number.isFinite(devPid) || devPid <= 0) {
+    devPid = language.startsWith("en") ? 1737 : 1537;
+  } else if (devPid === 1537 && language.startsWith("en")) {
+    devPid = 1737;
+  }
   const payload = {
     format: req.format,
     rate: req.rate,
     channel: req.channel,
     cuid: req.cuid,
-    dev_pid: cfg.devPid,
+    dev_pid: devPid,
     speech: req.speech,
     len: req.len,
     token,
@@ -94,9 +101,13 @@ export async function it_callBaiduAsr(
         timeout: cfg.timeoutSec * 1000,
       });
       const data = response.data;
-      if (data?.err_no && data.err_no !== 0) {
+      const errNo = data?.err_no;
+      const errCode = Number(errNo);
+      const hasError =
+        Number.isFinite(errCode) ? errCode !== 0 : Boolean(errNo);
+      if (hasError) {
         const error = new Error(
-          `Baidu ASR error ${data.err_no}: ${data.err_msg || "unknown"}`,
+          `Baidu ASR error ${errNo}: ${data.err_msg || "unknown"}`,
         );
         (error as any).itDebug = {
           response: data,

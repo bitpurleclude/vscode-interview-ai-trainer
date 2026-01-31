@@ -28,26 +28,35 @@ export class WebviewProtocol {
       if (!handlers.length) {
         return;
       }
-      for (const handler of handlers) {
+      if (msg.messageId) {
+        const handler = handlers[0];
         try {
           const result = await handler(msg);
-          if (msg.messageId) {
-            this.send(msg.messageType, {
+          this.send(
+            msg.messageType,
+            {
               status: "success",
               content: result,
-            }, msg.messageId);
-          }
+            },
+            msg.messageId,
+          );
         } catch (error) {
-          if (msg.messageId) {
-            this.send(
-              msg.messageType,
-              {
-                status: "error",
-                error: error instanceof Error ? error.message : String(error),
-              },
-              msg.messageId,
-            );
-          }
+          this.send(
+            msg.messageType,
+            {
+              status: "error",
+              error: error instanceof Error ? error.message : String(error),
+            },
+            msg.messageId,
+          );
+        }
+        return;
+      }
+      for (const handler of handlers) {
+        try {
+          await handler(msg);
+        } catch {
+          // ignore broadcast handler errors
         }
       }
     });

@@ -45,6 +45,13 @@ const IT_STATUS_INIT: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
   recordingState: "idle",
+  draftTranscript: undefined,
+  draftDetailedTranscript: undefined,
+  draftAcoustic: undefined,
+  draftNotes: undefined,
+  draftQuestionTimings: undefined,
+  draftQuestionTimingNote: undefined,
+  draftEvaluation: undefined,
   embeddingWarmup: {
     status: "idle",
     progress: 0,
@@ -72,7 +79,7 @@ const IT_PROGRESS_WEIGHTS: Partial<Record<ItWorkflowStep, number>> = {
   write: 0.05,
 };
 
-export class InterviewTrainerExtension {
+export class InterviewTrainerExtension implements vscode.Disposable {
   private state: ItState = { ...IT_STATUS_INIT };
   private configSnapshot: ItConfigSnapshot;
   private configBundle: ReturnType<typeof it_loadConfigBundle>;
@@ -90,6 +97,9 @@ export class InterviewTrainerExtension {
   private embeddingWarmupTimer: ReturnType<typeof setTimeout> | null = null;
   private embeddingWarmupAbort: { aborted: boolean } | null = null;
   private embeddingWarmupRunning = false;
+  private analysisAbort: { aborted: boolean } | null = null;
+  private corpusDirty = true;
+  private corpusWatchers: vscode.FileSystemWatcher[] = [];
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -98,6 +108,7 @@ export class InterviewTrainerExtension {
     this.outputChannel = vscode.window.createOutputChannel("Interview Trainer");
     this.configBundle = it_loadConfigBundle(this.context);
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+    this.updateCorpusWatchers();
     this.registerHandlers();
     this.scheduleEmbeddingWarmup("startup");
   }
@@ -145,6 +156,22 @@ export class InterviewTrainerExtension {
     const workspace = this.configBundle.skill.workspace ?? {};
     const retrieval = this.configBundle.skill.retrieval ?? {};
     const vector = retrieval.vector ?? {};
+    const cacheRoot = this.context.globalStorageUri?.fsPath || "";
+    const workspaceRoot =
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
+    const corpusCacheDir = cacheRoot ? path.join(cacheRoot, "corpus_cache") : "";
+    const embeddingCacheDir = cacheRoot
+      ? path.join(
+          cacheRoot,
+          "embedding_cache",
+          workspaceRoot ? it_hashText(workspaceRoot) : "workspace",
+        )
+      : "";
+    const corpusCacheMb = Number(
+      retrieval.corpus_cache_mb ?? retrieval.corpus_cache_max_mb ?? 25,
+    );
+    const queryCacheSize = Number(retrieval.query_cache_size ?? 200);
+    const maxConcurrency = Number(retrieval.max_concurrency ?? 3);
     const vectorDefaults = {
       provider: "volc_doubao",
       base_url: "https://ark.cn-beijing.volces.com",
@@ -213,6 +240,14 @@ export class InterviewTrainerExtension {
           queryMaxChars: Number(vector.query_max_chars ?? vectorDefaults.query_max_chars),
         },
       },
+      retrievalCache: {
+        cacheRoot,
+        corpusCacheDir,
+        embeddingCacheDir,
+        corpusCacheMb,
+        queryCacheSize,
+        maxConcurrency,
+      },
       workspaceDirs: {
         notesDir: workspace.notes_dir || "inputs/notes",
         promptsDir: workspace.prompts_dir || "inputs/prompts/guangdong",
@@ -221,6 +256,42 @@ export class InterviewTrainerExtension {
         examplesDir: workspace.examples_dir || "inputs/examples",
       },
     };
+  }
+
+  private updateCorpusWatchers(): void {
+    this.corpusWatchers.forEach((watcher) => watcher.dispose());
+    this.corpusWatchers = [];
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      return;
+    }
+    const dirs = this.buildConfigSnapshot(this.configBundle.api).workspaceDirs;
+    const targets = Array.from(
+      new Set([
+        dirs.notesDir,
+        dirs.promptsDir,
+        dirs.rubricsDir,
+        dirs.knowledgeDir,
+        dirs.examplesDir,
+      ].filter((value) => Boolean(value))),
+    );
+    const markDirty = () => {
+      this.corpusDirty = true;
+    };
+    targets.forEach((dir) => {
+      const normalized = String(dir || "").replace(/\\/g, "/");
+      const pattern = new vscode.RelativePattern(
+        workspaceRoot,
+        path.join(normalized, "**/*"),
+      );
+      const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+      watcher.onDidCreate(markDirty);
+      watcher.onDidChange(markDirty);
+      watcher.onDidDelete(markDirty);
+      this.context.subscriptions.push(watcher);
+      this.corpusWatchers.push(watcher);
+    });
+    this.corpusDirty = true;
   }
 
   private async refreshConfigSnapshot(): Promise<ItConfigSnapshot> {
@@ -232,6 +303,7 @@ export class InterviewTrainerExtension {
     );
     await this.applyEmbeddingSecretOverrides();
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
+    this.updateCorpusWatchers();
     return this.configSnapshot;
   }
 
@@ -371,7 +443,16 @@ export class InterviewTrainerExtension {
       });
       return;
     }
+    const retrievalCfg = this.configBundle.skill.retrieval ?? {};
+    const cacheRoot = this.context.globalStorageUri?.fsPath;
+    const corpusCacheMb = Number(
+      retrievalCfg.corpus_cache_mb ?? retrievalCfg.corpus_cache_max_mb ?? 25,
+    );
+    const corpusCacheBytes = Number.isFinite(corpusCacheMb)
+      ? Math.max(0, corpusCacheMb) * 1024 * 1024
+      : undefined;
     const workspaceCfg = this.configBundle.skill.workspace ?? {};
+    const skipMtimeCheck = !this.corpusDirty;
     const corpus = await it_buildCorpusAsync({
       notes: path.join(workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
       prompts: path.join(
@@ -390,7 +471,12 @@ export class InterviewTrainerExtension {
         workspaceRoot,
         workspaceCfg.examples_dir || "inputs/examples",
       ),
+    }, {
+      cacheDir: cacheRoot,
+      maxCacheBytes: corpusCacheBytes,
+      skipMtimeCheck,
     });
+    this.corpusDirty = false;
     if (!corpus.length) {
       this.updateEmbeddingWarmup({
         status: "success",
@@ -402,7 +488,6 @@ export class InterviewTrainerExtension {
       return;
     }
 
-    const retrievalCfg = this.configBundle.skill.retrieval ?? {};
     const vectorCfg = retrievalCfg.vector ?? {};
     const providerProfiles = this.configBundle.providers ?? {};
     const embeddingProvider =
@@ -435,7 +520,6 @@ export class InterviewTrainerExtension {
       return;
     }
 
-    const cacheRoot = this.context.globalStorageUri?.fsPath;
     if (!cacheRoot) {
       this.updateEmbeddingWarmup({
         status: "error",
@@ -578,180 +662,6 @@ export class InterviewTrainerExtension {
     return Math.round((weighted / totalWeight) * 100);
   }
 
-  private it_getUserDataDir(): string {
-    const storagePath = this.context.globalStorageUri?.fsPath;
-    if (!storagePath) {
-      throw new Error("无法定位 VS Code 用户数据目录。");
-    }
-    return path.resolve(storagePath, "..", "..", "..");
-  }
-
-  private it_resetWebviewStorage(): {
-    userDataDir: string;
-    moved: string[];
-    missing: string[];
-    failed: string[];
-    clearedPreferences: string[];
-    locked: string[];
-  } {
-    const userDataDir = this.it_getUserDataDir();
-    const targets = ["WebStorage", "Local Storage", "SharedStorage"];
-    const moved: string[] = [];
-    const missing: string[] = [];
-    const failed: string[] = [];
-    const locked: string[] = [];
-    const clearedPreferences: string[] = [];
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-
-    for (const target of targets) {
-      const fullPath = path.join(userDataDir, target);
-      if (!fs.existsSync(fullPath)) {
-        missing.push(target);
-        continue;
-      }
-      let backupName = `${target}.bak-${stamp}`;
-      let backupPath = path.join(userDataDir, backupName);
-      if (fs.existsSync(backupPath)) {
-        backupName = `${target}.bak-${stamp}-${Math.random().toString(16).slice(2, 8)}`;
-        backupPath = path.join(userDataDir, backupName);
-      }
-      try {
-        fs.renameSync(fullPath, backupPath);
-        moved.push(backupName);
-      } catch (error) {
-        const stat = (() => {
-          try {
-            return fs.lstatSync(fullPath);
-          } catch {
-            return null;
-          }
-        })();
-        // Windows 上文件句柄占用时 rename 可能失败，尝试复制备份后删除源目录。
-        try {
-          if (stat && stat.isDirectory()) {
-            fs.cpSync(fullPath, backupPath, { recursive: true, errorOnExist: false });
-          } else {
-            fs.copyFileSync(fullPath, backupPath);
-          }
-          const lockedEntries = this.it_removeDirLoose(fullPath, Boolean(stat?.isDirectory()));
-          if (lockedEntries.length) {
-            locked.push(...lockedEntries);
-            moved.push(`${backupName} (partial)`);
-          } else {
-            moved.push(`${backupName} (copied)`);
-          }
-        } catch (fallbackError) {
-          failed.push(
-            `${target}: ${error instanceof Error ? error.message : String(error)}; fallback: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
-          );
-        }
-      }
-    }
-
-    // Clear persisted media permission decisions so the webview can re-prompt.
-    const preferencePath = path.join(userDataDir, "Preferences");
-    if (fs.existsSync(preferencePath)) {
-      try {
-        const raw = fs.readFileSync(preferencePath, "utf8");
-        const json = JSON.parse(raw);
-        const profile = (json.profile = json.profile ?? {});
-        const contentSettingsContainer = (profile.content_settings =
-          profile.content_settings ?? {});
-        const exceptions = (contentSettingsContainer.exceptions =
-          contentSettingsContainer.exceptions ?? {});
-
-        const permissionKeys = [
-          "media_stream_mic",
-          "media_stream_camera",
-          "media_stream",
-        ];
-
-        let changed = false;
-        for (const key of permissionKeys) {
-          const rules = exceptions[key];
-          if (!rules || typeof rules !== "object") {
-            continue;
-          }
-          for (const origin of Object.keys(rules)) {
-            if (origin.includes("vscode-webview") || origin.includes("vscode-file")) {
-              delete rules[origin];
-              clearedPreferences.push(`${key}:${origin}`);
-              changed = true;
-            }
-          }
-          if (Object.keys(rules).length === 0) {
-            delete exceptions[key];
-          }
-        }
-
-        if (changed) {
-          fs.writeFileSync(preferencePath, JSON.stringify(json, null, 2), "utf8");
-        }
-      } catch (error) {
-        failed.push(
-          `Preferences: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    return {
-      userDataDir,
-      moved,
-      missing,
-      failed,
-      clearedPreferences,
-      locked,
-    };
-  }
-
-  private it_removeDirLoose(dir: string, isDirectory: boolean): string[] {
-    const locked: string[] = [];
-    if (!fs.existsSync(dir)) {
-      return locked;
-    }
-    if (isDirectory) {
-      let entries: string[] = [];
-      try {
-        entries = fs.readdirSync(dir);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code || "";
-        if (code === "ENOTDIR") {
-          // 实际不是目录，走文件删除逻辑
-          return this.it_removeDirLoose(dir, false);
-        }
-        locked.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
-        return locked;
-      }
-      for (const entry of entries) {
-        const full = path.join(dir, entry);
-        try {
-          fs.rmSync(full, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code || "";
-          if (code === "EBUSY" || code === "EPERM") {
-            locked.push(full);
-          } else {
-            locked.push(`${full}: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
-      }
-      try {
-        fs.rmdirSync(dir);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code || "";
-        if (code === "EBUSY" || code === "EPERM") {
-          locked.push(dir);
-        }
-      }
-    } else {
-      try {
-        fs.rmSync(dir, { force: true, maxRetries: 2, retryDelay: 50 });
-      } catch (error) {
-        locked.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    return locked;
-  }
 
   private updateProgress(update: {
     step: ItWorkflowStep;
@@ -794,13 +704,24 @@ export class InterviewTrainerExtension {
       this.scheduleEmbeddingWarmup("config");
       return snapshot;
     });
-    this.webviewProtocol.on("it/listHistory", (msg) => {
+    this.webviewProtocol.on("it/listHistory", async (msg) => {
       const workspaceRoot = this.requireWorkspaceRoot();
       const sessionsRoot = path.join(
         workspaceRoot,
         this.configBundle.skill.sessions_dir || "sessions",
       );
-      return it_listHistoryItems(sessionsRoot, msg.data?.query, msg.data?.limit);
+      const filenames = this.configBundle.skill.filenames ?? {};
+      const topics = this.configBundle.skill.topics ?? {};
+      return await it_listHistoryItems(
+        sessionsRoot,
+        msg.data?.query,
+        msg.data?.limit,
+        {
+          allowUnicode: filenames.allow_unicode ?? true,
+          maxSlugLen: filenames.max_slug_len ?? 16,
+          centerSubdir: topics.center_subdir || "",
+        },
+      );
     });
     this.webviewProtocol.on("it/openSettings", async () => {
       it_ensureConfigFiles(this.context);
@@ -830,9 +751,6 @@ export class InterviewTrainerExtension {
         "请在系统设置中开启麦克风权限后重试。",
       );
     });
-    this.webviewProtocol.on("it/resetMicPermissionCache", async () => {
-      return this.it_resetWebviewStorage();
-    });
     this.webviewProtocol.on("it/reloadWindow", async () => {
       await vscode.commands.executeCommand("workbench.action.reloadWindow");
     });
@@ -843,7 +761,11 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/stopNativeRecording", async () => {
       return await this.it_stopNativeRecording();
     });
-    this.webviewProtocol.on("it/listNativeInputs", async () => {
+    this.webviewProtocol.on("it/listNativeInputs", async (msg) => {
+      if (msg?.data?.refresh) {
+        this.availableInputs = null;
+        this.detectedInput = null;
+      }
       const ffmpeg = await this.it_findFfmpeg();
       if (!ffmpeg) {
         throw new Error("未找到 ffmpeg，无法列出输入设备");
@@ -1070,11 +992,13 @@ export class InterviewTrainerExtension {
         "embedding_cache",
         it_hashText(workspaceRoot),
       );
-      if (!fs.existsSync(cacheDir)) {
+      try {
+        await fs.promises.access(cacheDir);
+      } catch {
         return { cleared: false, path: cacheDir };
       }
       try {
-        fs.rmSync(cacheDir, {
+        await fs.promises.rm(cacheDir, {
           recursive: true,
           force: true,
           maxRetries: 2,
@@ -1094,6 +1018,42 @@ export class InterviewTrainerExtension {
         message: "向量预计算准备中",
       });
       this.scheduleEmbeddingWarmup("clear-cache", 1000);
+      return { cleared: true, path: cacheDir };
+    });
+    this.webviewProtocol.on("it/clearCorpusCache", async () => {
+      const cacheRoot = this.context.globalStorageUri?.fsPath;
+      if (!cacheRoot) {
+        throw new Error("Cache root not available");
+      }
+      const cacheDir = path.join(cacheRoot, "corpus_cache");
+      try {
+        await fs.promises.access(cacheDir);
+      } catch {
+        it_clearEmbeddingMemoryCache();
+        return { cleared: false, path: cacheDir };
+      }
+      try {
+        await fs.promises.rm(cacheDir, {
+          recursive: true,
+          force: true,
+          maxRetries: 2,
+          retryDelay: 50,
+        });
+      } catch (error) {
+        throw new Error(
+          `Failed to clear corpus cache: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      it_clearEmbeddingMemoryCache();
+      this.corpusDirty = true;
+      this.updateEmbeddingWarmup({
+        status: "running",
+        progress: 0,
+        total: 0,
+        done: 0,
+        message: "Rebuilding corpus index",
+      });
+      this.scheduleEmbeddingWarmup("clear-corpus-cache", 1000);
       return { cleared: true, path: cacheDir };
     });
     this.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
@@ -1553,10 +1513,10 @@ export class InterviewTrainerExtension {
         );
       }
 
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "it-audio-"));
+      const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "it-audio-"));
       const inPath = path.join(tmpDir, `input.${ext || "m4a"}`);
       const outPath = path.join(tmpDir, "output.pcm");
-      fs.writeFileSync(inPath, Buffer.from(base64, "base64"));
+      await fs.promises.writeFile(inPath, Buffer.from(base64, "base64"));
 
       await new Promise<void>((resolve, reject) => {
         const args = [
@@ -1578,21 +1538,24 @@ export class InterviewTrainerExtension {
         });
         child.on("error", (err) => reject(err));
         child.on("close", (code) => {
-          if (code === 0 && fs.existsSync(outPath)) {
-            resolve();
-          } else {
+          if (code !== 0) {
             reject(new Error(`ffmpeg 转换失败: ${stderr || `code=${code}`}`));
+            return;
           }
+          fs.promises
+            .access(outPath)
+            .then(() => resolve())
+            .catch(() => reject(new Error("ffmpeg 转换失败：未生成输出文件")));
         });
       });
 
-      const pcm = fs.readFileSync(outPath);
+      const pcm = await fs.promises.readFile(outPath);
       const byteLength = pcm.byteLength;
       const durationSec = byteLength / (2 * 16000);
 
       // cleanup best-effort
       try {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
+        await fs.promises.rm(tmpDir, { recursive: true, force: true });
       } catch {}
 
       return {
@@ -1604,16 +1567,41 @@ export class InterviewTrainerExtension {
     this.webviewProtocol.on("it/analyzeAudio", async (msg) => {
       return await this.handleAnalyze(msg.data);
     });
+    this.webviewProtocol.on("it/cancelAnalyze", () => {
+      if (this.analysisAbort) {
+        this.analysisAbort.aborted = true;
+      }
+      this.updateState({
+        statusMessage: "已请求停止分析",
+        lastError: undefined,
+        steps: this.state.steps.map((step) =>
+          step.status === "running"
+            ? { ...step, status: "error", progress: step.progress }
+            : step,
+        ),
+      });
+      return { cancelled: true };
+    });
   }
 
   private async it_findFfmpeg(): Promise<string | null> {
     const bundled = typeof ffmpegStatic === "string" ? ffmpegStatic : null;
-    if (bundled && fs.existsSync(bundled)) {
-      return bundled;
+    if (bundled) {
+      try {
+        await fs.promises.access(bundled);
+        return bundled;
+      } catch {
+        // ignore
+      }
     }
     const envPath = process.env.IT_FFMPEG_PATH;
-    if (envPath && fs.existsSync(envPath)) {
-      return envPath;
+    if (envPath) {
+      try {
+        await fs.promises.access(envPath);
+        return envPath;
+      } catch {
+        // ignore
+      }
     }
 
     const candidates = process.platform === "win32" ? ["ffmpeg.exe", "ffmpeg"] : ["ffmpeg"];
@@ -1726,7 +1714,7 @@ export class InterviewTrainerExtension {
     if (!ffmpeg) {
       throw new Error("未找到 ffmpeg，请先安装并配置环境变量或 IT_FFMPEG_PATH");
     }
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "it-record-"));
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "it-record-"));
     const tmpPath = path.join(tmpDir, "capture.pcm");
     const commonArgs = ["-y", "-ac", "1", "-ar", "16000", "-f", "s16le", tmpPath];
     let inputArgs: string[];
@@ -1840,7 +1828,13 @@ export class InterviewTrainerExtension {
       stderr = this.recordingExitInfo.stderr;
     }
 
-    if (!fs.existsSync(tmpPath)) {
+    let exists = true;
+    try {
+      await fs.promises.access(tmpPath);
+    } catch {
+      exists = false;
+    }
+    if (!exists) {
       const detail =
         `ffmpeg 退出码=${exitCode ?? "未知"}, 信号=${exitSignal ?? "无"}, ` +
         `stderr=${stderr.trim() || "无"}`;
@@ -1848,14 +1842,14 @@ export class InterviewTrainerExtension {
         `录音文件不存在${killed ? "（进程被强制结束）" : ""}，请检查麦克风设备或 ffmpeg 输入参数。${detail}`,
       );
     }
-    const pcm = fs.readFileSync(tmpPath);
+    const pcm = await fs.promises.readFile(tmpPath);
     const byteLength = pcm.byteLength;
     const durationSec = byteLength / (2 * 16000);
 
     // cleanup
     const locked: string[] = [];
     try {
-      fs.rmSync(tmpRoot, {
+      await fs.promises.rm(tmpRoot, {
         recursive: true,
         force: true,
         maxRetries: 2,
@@ -1888,6 +1882,7 @@ export class InterviewTrainerExtension {
       if (this.embeddingWarmupAbort) {
         this.embeddingWarmupAbort.aborted = true;
       }
+      this.analysisAbort = { aborted: false };
       const steps = this.buildRunSteps().map((step) => {
         if (step.id === "recording") {
           return { ...step, status: "success" as ItStepStatus, progress: 100 };
@@ -1902,6 +1897,13 @@ export class InterviewTrainerExtension {
         steps,
         overallProgress: this.computeOverallProgress(steps),
         lastError: undefined,
+        draftTranscript: undefined,
+        draftDetailedTranscript: undefined,
+        draftAcoustic: undefined,
+        draftNotes: undefined,
+        draftQuestionTimings: undefined,
+        draftQuestionTimingNote: undefined,
+        draftEvaluation: undefined,
       });
 
       this.configBundle = it_loadConfigBundle(this.context);
@@ -1921,9 +1923,27 @@ export class InterviewTrainerExtension {
           },
           workspaceRoot,
           onProgress: (update) => this.updateProgress(update),
+          onPartial: (partial) => {
+            this.updateState({
+              draftTranscript: partial.transcript ?? this.state.draftTranscript ?? undefined,
+              draftDetailedTranscript:
+                partial.detailedTranscript ?? this.state.draftDetailedTranscript ?? undefined,
+              draftAcoustic: partial.acoustic ?? this.state.draftAcoustic ?? undefined,
+              draftNotes: partial.notes ?? this.state.draftNotes ?? undefined,
+              draftQuestionTimings:
+                partial.questionTimings ?? this.state.draftQuestionTimings ?? undefined,
+              draftQuestionTimingNote:
+                partial.questionTimingNote ?? this.state.draftQuestionTimingNote ?? undefined,
+              draftEvaluation: partial.evaluation ?? this.state.draftEvaluation ?? undefined,
+            });
+          },
+          corpusDirty: this.corpusDirty,
+          abortSignal: this.analysisAbort ?? undefined,
         },
         request,
       );
+
+      this.corpusDirty = false;
 
       this.updateState({
         statusMessage: "分析完成，可保存与复盘",
@@ -1944,8 +1964,24 @@ export class InterviewTrainerExtension {
       });
 
       this.scheduleEmbeddingWarmup("after-analysis", 3000);
+      this.analysisAbort = null;
       return response;
     } catch (error) {
+      if (error instanceof Error && error.message && error.message.includes("?????")) {
+        this.updateState({
+          statusMessage: "?????",
+          overallProgress: 0,
+          lastError: undefined,
+          steps: this.state.steps.map((step) =>
+            step.status === "running"
+              ? { ...step, status: "error", progress: step.progress }
+              : step,
+          ),
+        });
+        this.scheduleEmbeddingWarmup("after-analysis", 3000);
+        this.analysisAbort = null;
+        throw error;
+      }
       this.updateState({
         statusMessage: "分析失败，请检查API配置与音频格式",
         overallProgress: 0,
@@ -1961,7 +1997,28 @@ export class InterviewTrainerExtension {
         ),
       });
       this.scheduleEmbeddingWarmup("after-analysis", 3000);
+      this.analysisAbort = null;
       throw error;
     }
+  }
+
+  dispose(): void {
+    if (this.embeddingWarmupTimer) {
+      clearTimeout(this.embeddingWarmupTimer);
+      this.embeddingWarmupTimer = null;
+    }
+    if (this.embeddingWarmupAbort) {
+      this.embeddingWarmupAbort.aborted = true;
+      this.embeddingWarmupAbort = null;
+    }
+    if (this.recordingChild && !this.recordingChild.killed) {
+      try {
+        this.recordingChild.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+    this.recordingChild = null;
+    this.outputChannel.dispose();
   }
 }

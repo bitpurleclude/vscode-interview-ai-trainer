@@ -35,70 +35,47 @@ async function it_decodeToPcm16(
   targetRate: number,
 ): Promise<{ pcm: Int16Array; durationSec: number; sampleRate: number }> {
   const audioCtx = new AudioContext();
-  const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-  const channelData = decoded.getChannelData(0);
-  const sourceRate = decoded.sampleRate;
-  const ratio = sourceRate / targetRate;
-  const length = Math.floor(channelData.length / ratio);
-  const resampled = new Float32Array(length);
-  for (let i = 0; i < length; i += 1) {
-    const pos = i * ratio;
-    const left = Math.floor(pos);
-    const right = Math.min(channelData.length - 1, left + 1);
-    const interp = pos - left;
-    resampled[i] =
-      channelData[left] * (1 - interp) + channelData[right] * interp;
+  try {
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+    const channelData = decoded.getChannelData(0);
+    const sourceRate = decoded.sampleRate;
+    const ratio = sourceRate / targetRate;
+    const length = Math.floor(channelData.length / ratio);
+    const resampled = new Float32Array(length);
+    for (let i = 0; i < length; i += 1) {
+      const pos = i * ratio;
+      const left = Math.floor(pos);
+      const right = Math.min(channelData.length - 1, left + 1);
+      const interp = pos - left;
+      resampled[i] =
+        channelData[left] * (1 - interp) + channelData[right] * interp;
+    }
+    const pcm = new Int16Array(resampled.length);
+    for (let i = 0; i < resampled.length; i += 1) {
+      pcm[i] = Math.max(-1, Math.min(1, resampled[i])) * 32767;
+    }
+    return {
+      pcm,
+      durationSec: resampled.length / targetRate,
+      sampleRate: targetRate,
+    };
+  } finally {
+    void audioCtx.close();
   }
-  const pcm = new Int16Array(resampled.length);
-  for (let i = 0; i < resampled.length; i += 1) {
-    pcm[i] = Math.max(-1, Math.min(1, resampled[i])) * 32767;
-  }
-  return {
-    pcm,
-    durationSec: resampled.length / targetRate,
-    sampleRate: targetRate,
-  };
 }
 
 function it_pcmToBase64(pcm: Int16Array): string {
-  const buffer = new Uint8Array(pcm.buffer);
-  let binary = "";
-  for (let i = 0; i < buffer.length; i += 1) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary);
+  const buffer = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  return it_bytesToBase64(buffer);
 }
 
 function it_bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
   let binary = "";
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
   return btoa(binary);
-}
-
-function it_extractQuestions(raw: string): { prompt: string; questions: string[] } {
-  const text = (raw || "").replace(/\r\n/g, "\n").trim();
-  const marker = /第\s*[一二三四五六七八九十0-9]+\s*[题问][：:]/g;
-  const matches = Array.from(text.matchAll(marker));
-  if (!matches.length) {
-    return { prompt: text, questions: [] };
-  }
-  const firstIdx = matches[0].index ?? 0;
-  const prompt = text.slice(0, firstIdx).trim();
-  const questions: string[] = [];
-  for (let i = 0; i < matches.length; i += 1) {
-    const start = (matches[i].index ?? 0) + matches[i][0].length;
-    const end = i < matches.length - 1 ? matches[i + 1].index ?? text.length : text.length;
-    const chunk = text.slice(start, end).trim();
-    const cleaned = chunk
-      .split(/解析[:：]|答案[:：]|建议[:：]|参考[:：]|点评[:：]/)[0]
-      .trim();
-    if (cleaned) {
-      questions.push(cleaned);
-    }
-  }
-  return { prompt, questions };
 }
 
 async function it_parseQuestionsRemote(
@@ -129,6 +106,13 @@ const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",
   overallProgress: 0,
   recordingState: "idle",
+  draftTranscript: undefined,
+  draftDetailedTranscript: undefined,
+  draftAcoustic: undefined,
+  draftNotes: undefined,
+  draftQuestionTimings: undefined,
+  draftQuestionTimingNote: undefined,
+  draftEvaluation: undefined,
   embeddingWarmup: {
     status: "idle",
     progress: 0,
@@ -169,17 +153,25 @@ const InterviewTrainer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ResultTab>("transcript");
   const [questionText, setQuestionText] = useState("");
   const [questionList, setQuestionList] = useState("");
+  const [questionParsed, setQuestionParsed] = useState(false);
+  const [questionParsing, setQuestionParsing] = useState(false);
   const [customPrompt, setCustomPrompt] = useState(STRICT_SYSTEM_PROMPT);
   const [demoPrompt, setDemoPrompt] = useState(DEFAULT_DEMO_PROMPT);
   const [analysisResult, setAnalysisResult] = useState<ItAnalyzeResponse | null>(
     null,
   );
   const [historyItems, setHistoryItems] = useState<ItHistoryItem[]>([]);
+  const [showNoteHits, setShowNoteHits] = useState(false);
+  const [showDemoPrompt, setShowDemoPrompt] = useState(false);
+  const [showNoteUsage, setShowNoteUsage] = useState(false);
+  const [showNoteSuggestions, setShowNoteSuggestions] = useState(false);
   const [audioPayload, setAudioPayload] =
     useState<ItAnalyzeRequest["audio"] | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [nativeInputs, setNativeInputs] = useState<string[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>("");
+  const analysisRunRef = useRef(0);
+  const analysisCancelledRef = useRef(false);
   const [providerDraft, setProviderDraft] = useState({
     id: "",
     name: "",
@@ -234,6 +226,8 @@ const InterviewTrainer: React.FC = () => {
   const [embeddingCacheMessage, setEmbeddingCacheMessage] = useState<string | null>(
     null,
   );
+  const [clearingCorpusCache, setClearingCorpusCache] = useState(false);
+  const [corpusCacheMessage, setCorpusCacheMessage] = useState<string | null>(null);
   const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
   const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
     null,
@@ -348,18 +342,6 @@ const InterviewTrainer: React.FC = () => {
   const [recordingSession, setRecordingSession] = useState<{ startedAt: number | null }>({
     startedAt: null,
   });
-  const [micDiagnostic, setMicDiagnostic] = useState<{
-    status: "idle" | "running" | "done" | "error";
-    permissionState?: string;
-    audioInputCount?: number;
-    audioInputs?: Array<{ label: string; deviceId: string }>;
-    error?: string;
-    updatedAt?: string;
-  }>({ status: "idle" });
-  const [micFixStatus, setMicFixStatus] = useState<{
-    status: "idle" | "running" | "done" | "error";
-    message?: string;
-  }>({ status: "idle" });
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiLocked = !config;
   const providerProfiles = config?.providerProfiles || {};
@@ -372,9 +354,10 @@ const InterviewTrainer: React.FC = () => {
     return Array.from(new Set([...base, "heuristic"]));
   }, [providerList]);
   const asrProviders = useMemo(() => {
-    const base = providerList.length ? providerList : ["baidu_vop"];
+    const filtered = providerList.filter((id) => providerProfiles?.[id]?.asr);
+    const base = filtered.length ? filtered : ["baidu_vop"];
     return Array.from(new Set([...base, "mock"]));
-  }, [providerList]);
+  }, [providerList, providerProfiles]);
   const embeddingProviders = useMemo(() => {
     const base = providerList.length ? providerList : ["volc_doubao", "baidu_qianfan", "openai_compatible"];
     return Array.from(new Set(base));
@@ -525,6 +508,14 @@ const InterviewTrainer: React.FC = () => {
         .filter(Boolean),
     [questionList],
   );
+  const buildQuestionParseInput = useCallback(() => {
+    const text = questionText.trim();
+    const list = questionList.trim();
+    if (text && list) {
+      return `${text}\n\n${list}`;
+    }
+    return text || list;
+  }, [questionText, questionList]);
   const retrievalDirs = useMemo(() => {
     if (!config) {
       return [];
@@ -541,12 +532,154 @@ const InterviewTrainer: React.FC = () => {
     () => questionText.trim().length > 0 || parsedQuestionList.length > 0,
     [questionText, parsedQuestionList],
   );
+  const transcriptPreview = analysisResult?.transcript || itState.draftTranscript || "";
+  const detailedTranscriptPreview =
+    analysisResult?.detailedTranscript || itState.draftDetailedTranscript;
+  const acousticPreview = analysisResult?.acoustic || itState.draftAcoustic;
+  const notesPreview = analysisResult?.notes ?? itState.draftNotes;
+  const questionTimingsPreview =
+    analysisResult?.questionTimings ?? itState.draftQuestionTimings;
+  const questionTimingNotePreview =
+    analysisResult?.questionTimingNote ?? itState.draftQuestionTimingNote;
+  const evaluationPreview = analysisResult?.evaluation || itState.draftEvaluation || null;
+  const retrievalCacheInfo = config?.retrievalCache;
+  const corpusCachePath = retrievalCacheInfo?.corpusCacheDir || "";
+  const embeddingCachePath = retrievalCacheInfo?.embeddingCacheDir || "";
+  const corpusCacheMb = retrievalCacheInfo?.corpusCacheMb;
+  const queryCacheSize = retrievalCacheInfo?.queryCacheSize;
+  const maxConcurrency = retrievalCacheInfo?.maxConcurrency;
+  const hasAnyResult =
+    Boolean(analysisResult) ||
+    Boolean(itState.draftTranscript) ||
+    Boolean(itState.draftDetailedTranscript) ||
+    Boolean(itState.draftEvaluation) ||
+    Boolean(itState.draftAcoustic) ||
+    typeof itState.draftNotes !== "undefined" ||
+    Boolean(itState.draftQuestionTimings) ||
+    Boolean(itState.draftQuestionTimingNote);
 
   useEffect(() => {
     if (questionError && hasQuestion) {
       setQuestionError(false);
     }
   }, [questionError, hasQuestion]);
+
+  const handleQuestionTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setQuestionText(event.target.value);
+    if (questionParsed) {
+      setQuestionParsed(false);
+    }
+  };
+
+  const handleQuestionListChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setQuestionList(event.target.value);
+    if (questionParsed) {
+      setQuestionParsed(false);
+    }
+  };
+
+  const parseQuestionsFromText = useCallback(
+    async (
+      rawText: string,
+      options: { silent?: boolean; fallbackPrompt?: string } = {},
+    ) => {
+      const input = rawText.trim();
+      const fallbackPrompt = options.fallbackPrompt ?? questionText.trim();
+      if (!input) {
+        if (!options.silent) {
+          setItState((prev) => ({
+            ...prev,
+            statusMessage: "题干内容为空，无法识别题目。",
+            lastError: {
+              type: "question",
+              reason: "题干内容为空",
+              solution: "请粘贴题干或小题列表后再识别。",
+            },
+          }));
+        }
+        return {
+          questionText: fallbackPrompt,
+          questionList: parsedQuestionList,
+          recognized: false,
+        };
+      }
+      setQuestionParsing(true);
+      setQuestionParsed(false);
+      if (!options.silent) {
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: "题目识别中，请稍候...",
+        }));
+      }
+      try {
+        const remote = await it_parseQuestionsRemote(input);
+        if (remote && remote.questions.length) {
+          const nextPrompt = remote.prompt || fallbackPrompt;
+          const nextList = remote.questions;
+          setQuestionText(nextPrompt);
+          setQuestionList(nextList.join("\n"));
+          setQuestionParsed(true);
+          setQuestionError(false);
+          if (!options.silent) {
+            setItState((prev) => ({
+              ...prev,
+              statusMessage: `题目已识别，识别${nextList.length}题（${remote.source}）。`,
+            }));
+          }
+          return {
+            questionText: nextPrompt,
+            questionList: nextList,
+            recognized: true,
+          };
+        }
+        if (remote?.prompt && !questionText.trim()) {
+          setQuestionText(remote.prompt);
+        }
+        setQuestionParsed(false);
+        if (!options.silent) {
+          setItState((prev) => ({
+            ...prev,
+            statusMessage: "未识别到题目，请手动拆分。",
+          }));
+        }
+        return {
+          questionText: remote?.prompt || fallbackPrompt,
+          questionList: parsedQuestionList,
+          recognized: false,
+        };
+      } catch (err) {
+        setQuestionParsed(false);
+        if (!options.silent) {
+          setItState((prev) => ({
+            ...prev,
+            statusMessage: "题目识别失败，请检查配置或网络。",
+            lastError: {
+              type: "question",
+              reason: err instanceof Error ? err.message : String(err),
+              solution: "请检查网络或 LLM 配置后重试。",
+            },
+          }));
+        }
+        return {
+          questionText: fallbackPrompt,
+          questionList: parsedQuestionList,
+          recognized: false,
+        };
+      } finally {
+        setQuestionParsing(false);
+      }
+    },
+    [parsedQuestionList, questionText],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleStartRecording = async () => {
     if (recordingSession.startedAt) return;
@@ -604,12 +737,6 @@ const InterviewTrainer: React.FC = () => {
             recordingState: "idle",
             statusMessage: nextMessage,
           }));
-          if (resp.content.locked?.length) {
-            setMicFixStatus({
-              status: "error",
-              message: `缓存清理部分失败，锁定文件：${resp.content.locked.join("；")}`,
-            });
-          }
           return;
         }
         throw new Error(resp?.error || "录音停止失败，录音文件缺失或 ffmpeg 退出异常。");
@@ -652,7 +779,12 @@ const InterviewTrainer: React.FC = () => {
       try {
         // Fast path: decode in WebAudio (works for many WAV/MP3/AAC containers).
         const audioCtx = new AudioContext();
-        const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        let decoded!: AudioBuffer;
+        try {
+          decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        } finally {
+          void audioCtx.close();
+        }
         const targetRate = 16000;
         const targetLength = Math.ceil(decoded.duration * targetRate);
         const offline = new OfflineAudioContext(1, targetLength, targetRate);
@@ -736,37 +868,19 @@ const InterviewTrainer: React.FC = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      let recognizedInfo = "";
-      const remote = await it_parseQuestionsRemote(text);
-      if (remote && remote.questions.length) {
-        setQuestionList(remote.questions.join("\n"));
-        setQuestionText(remote.prompt || "");
-        recognizedInfo = `，已识别${remote.questions.length}题（${remote.source}）`;
-      } else {
-        const parsed = it_extractQuestions(text);
-        if (parsed.questions.length) {
-          setQuestionList(parsed.questions.join("\n"));
-          setQuestionText(parsed.prompt || "");
-        } else {
-          const lines = text
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .filter(Boolean);
-          const looksLikeList =
-            lines.length > 1 && lines.every((line) => line.length <= 80);
-          if (looksLikeList) {
-            setQuestionList(lines.join("\n"));
-            setQuestionText("");
-          } else {
-            setQuestionText(text.trim());
-            setQuestionList("");
-          }
-        }
+      const result = await parseQuestionsFromText(text, {
+        fallbackPrompt: text.trim(),
+      });
+      if (!result.recognized) {
+        setQuestionText(text.trim());
+        setQuestionList("");
       }
       setQuestionError(false);
       setItState((prev) => ({
         ...prev,
-        statusMessage: `已导入题干：${file.name}${recognizedInfo}`,
+        statusMessage: result.recognized
+          ? `已导入题干：${file.name}，已识别${result.questionList.length}题`
+          : `已导入题干：${file.name}，未识别到题目，请手动拆分`,
       }));
     } catch (err) {
       setItState((prev) => ({
@@ -799,28 +913,24 @@ const InterviewTrainer: React.FC = () => {
       return;
     }
     setIsProcessing(true);
+    setShowNoteHits(false);
+    analysisCancelledRef.current = false;
+    analysisRunRef.current += 1;
+    const currentRun = analysisRunRef.current;
     setItState((prev) => ({
       ...prev,
       statusMessage: "已发起分析请求，处理中...",
     }));
     let finalQuestionText = questionText.trim();
     let finalQuestionList = parsedQuestionList;
-    if (!finalQuestionList.length && finalQuestionText) {
-      const remote = await it_parseQuestionsRemote(finalQuestionText);
-      if (remote && remote.questions.length) {
-        finalQuestionText = remote.prompt || finalQuestionText;
-        finalQuestionList = remote.questions;
-        setQuestionList(remote.questions.join("\n"));
-        setQuestionText(remote.prompt || "");
-      } else {
-        const parsed = it_extractQuestions(finalQuestionText);
-        if (parsed.questions.length) {
-          finalQuestionText = parsed.prompt || finalQuestionText;
-          finalQuestionList = parsed.questions;
-          setQuestionList(parsed.questions.join("\n"));
-          setQuestionText(parsed.prompt || "");
-        }
-      }
+    if (!questionParsed) {
+      const merged = buildQuestionParseInput();
+      const result = await parseQuestionsFromText(merged, {
+        silent: true,
+        fallbackPrompt: finalQuestionText,
+      });
+      finalQuestionText = result.questionText.trim();
+      finalQuestionList = result.questionList;
     }
     if (!finalQuestionList.length) {
       setQuestionError(true);
@@ -844,28 +954,46 @@ const InterviewTrainer: React.FC = () => {
       demoPrompt: demoPrompt?.trim() || undefined,
     };
     try {
-      const response = await request("it/analyzeAudio", payload);
+      const response = await request("it/analyzeAudio", payload, { timeoutMs: 5 * 60 * 1000 });
+      if (analysisCancelledRef.current || currentRun !== analysisRunRef.current) {
+        return;
+      }
       if (response?.status === "success") {
         setAnalysisResult(response.content);
         setActiveTab("evaluation");
+      } else if (response?.error && String(response.error).includes("分析已停止")) {
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: "分析已停止",
+          lastError: undefined,
+        }));
       } else {
         setItState((prev) => ({
           ...prev,
           statusMessage: "分析失败，请检查配置或网络",
         }));
       }
-    } catch (err) {
-      setItState((prev) => ({
-        ...prev,
-        statusMessage: "分析请求失败",
-        lastError: {
-          type: "analysis",
-          reason: err instanceof Error ? err.message : String(err),
-          solution: "请检查网络与配置后重试。",
-        },
-      }));
+    } finally {
+      if (!analysisCancelledRef.current && currentRun === analysisRunRef.current) {
+        setIsProcessing(false);
+      }
     }
+  };
+
+  const handleCancelAnalyze = async () => {
+    if (!isProcessing) return;
+    analysisCancelledRef.current = true;
     setIsProcessing(false);
+    setItState((prev) => ({
+      ...prev,
+      statusMessage: "已请求停止分析",
+      lastError: undefined,
+    }));
+    try {
+      await request("it/cancelAnalyze");
+    } catch {
+      // ignore
+    }
   };
 
   const handleOpenReport = async () => {
@@ -1209,6 +1337,24 @@ const InterviewTrainer: React.FC = () => {
     }
     setClearingEmbeddingCache(false);
   };
+  const handleClearCorpusCache = async () => {
+    setClearingCorpusCache(true);
+    setCorpusCacheMessage(null);
+    try {
+      const resp = await request("it/clearCorpusCache", undefined);
+      if (resp?.status === "success") {
+        const cleared = Boolean(resp.content?.cleared);
+        setCorpusCacheMessage(cleared ? "已清理语料缓存" : "语料缓存为空");
+      } else {
+        setCorpusCacheMessage("清理语料缓存失败，请重试。");
+      }
+    } catch (err) {
+      setCorpusCacheMessage(
+        `清理语料缓存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setClearingCorpusCache(false);
+  };
   const handleTestLlm = async () => {
     setTestingLlm(true);
     setLlmTestMessage(null);
@@ -1278,6 +1424,10 @@ const InterviewTrainer: React.FC = () => {
       setApiSaveMessage("已重新加载配置。");
       applyProfileToForm(resp.content);
       applyRetrievalToForm(resp.content);
+      setCustomPrompt(
+        resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
+      );
+      setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
     }
   };
   const handleToggleRetrieval = async (enabled: boolean) => {
@@ -1287,7 +1437,7 @@ const InterviewTrainer: React.FC = () => {
     await request("it/selectWorkspaceDir", { kind });
   };
   const handleRefreshInputs = async () => {
-    const resp = await request("it/listNativeInputs", undefined);
+    const resp = await request("it/listNativeInputs", { refresh: true });
     if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
       const inputs = resp.content.inputs;
       setNativeInputs(inputs);
@@ -1300,79 +1450,6 @@ const InterviewTrainer: React.FC = () => {
       ...prev,
       statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
     }));
-  };
-  const handleMicDiagnostic = async () => {
-    setMicDiagnostic({
-      status: "done",
-      permissionState: "unknown",
-      audioInputCount: undefined,
-      audioInputs: [],
-      updatedAt: new Date().toLocaleString(),
-    });
-  };
-  const handleRequestMicPermission = async () => {
-    setMicDiagnostic({
-      status: "done",
-      permissionState: "unknown",
-      audioInputCount: undefined,
-      audioInputs: [],
-      updatedAt: new Date().toLocaleString(),
-    });
-  };
-  const handleFixMicPermission = async () => {
-    setMicFixStatus({ status: "running", message: "正在清理权限缓存..." });
-    const resp = await request("it/resetMicPermissionCache", undefined);
-    if (resp?.status === "success") {
-      const failed = Array.isArray(resp.content?.failed) ? resp.content.failed : [];
-      if (failed.length) {
-        setMicFixStatus({
-          status: "error",
-          message: `权限重置失败：${failed.join("；")}`,
-        });
-        return;
-      }
-      const moved = Array.isArray(resp.content?.moved) ? resp.content.moved : [];
-      const cleared = Array.isArray(resp.content?.clearedPreferences)
-        ? resp.content.clearedPreferences
-        : [];
-      const locked = Array.isArray(resp.content?.locked) ? resp.content.locked : [];
-      const hints: string[] = [];
-      if (cleared.length) {
-        hints.push(`已移除权限记录 ${cleared.length} 条；`);
-      }
-      if (moved.length) {
-        hints.push(`已备份 ${moved.join("、")} 缓存目录`);
-      }
-      if (locked.length) {
-        hints.push(`部分文件被占用，请关闭所有 VS Code 窗口后重试（锁定: ${locked.length}）`);
-      }
-      const detail = hints.length ? `（${hints.join(" ")}）` : "";
-      setMicFixStatus({
-        status: "done",
-        message: `权限缓存已清理，正在重启 VS Code...${detail}`,
-      });
-      setTimeout(() => {
-        void request("it/reloadWindow", undefined);
-      }, 400);
-      return;
-    }
-    setMicFixStatus({
-      status: "error",
-      message: resp?.error ? `权限重置失败：${resp.error}` : "权限重置失败",
-    });
-  };
-
-  const it_formatPermissionState = (state?: string) => {
-    switch (state) {
-      case "granted":
-        return "已授权";
-      case "denied":
-        return "被拒绝";
-      case "prompt":
-        return "待确认";
-      default:
-        return "未知";
-    }
   };
 
   useEffect(() => {
@@ -1396,6 +1473,9 @@ const InterviewTrainer: React.FC = () => {
             <div className="it-step__content">
               <div className="it-step__dot" />
               <div className="it-step__label">{STEP_LABELS[step.id]}</div>
+              {step.status !== "pending" && (
+                <div className="it-step__progress">{step.progress}%</div>
+              )}
             </div>
             {step.message && (
               <div className="it-step__meta">{step.message}</div>
@@ -1427,18 +1507,15 @@ const InterviewTrainer: React.FC = () => {
         {activePage === "practice" && (
           <div className="it-actions">
             <button
-              className="it-button it-button--primary"
-              disabled={uiLocked || itState.recordingState === "recording"}
-              onClick={handleStartRecording}
+              className={`it-button ${itState.recordingState === "recording" ? "it-button--danger" : "it-button--primary"}`}
+              disabled={uiLocked}
+              onClick={() =>
+                itState.recordingState === "recording"
+                  ? handleStopRecording()
+                  : handleStartRecording()
+              }
             >
-              开始录音
-            </button>
-            <button
-              className="it-button it-button--danger"
-              disabled={uiLocked || itState.recordingState !== "recording"}
-              onClick={handleStopRecording}
-            >
-              停止录音
+              {itState.recordingState === "recording" ? "停止录音" : "开始录音"}
             </button>
             <label className="it-button it-button--secondary">
               导入音频
@@ -1459,11 +1536,15 @@ const InterviewTrainer: React.FC = () => {
               />
             </label>
             <button
-              className="it-button"
-              disabled={uiLocked || !audioPayload || !hasQuestion || isProcessing || isImporting}
-              onClick={handleAnalyze}
+              className={`it-button ${isProcessing ? "it-button--danger" : ""}`}
+              disabled={
+                isProcessing
+                  ? uiLocked
+                  : uiLocked || !audioPayload || !hasQuestion || isImporting
+              }
+              onClick={isProcessing ? handleCancelAnalyze : handleAnalyze}
             >
-              开始分析
+              {isProcessing ? "结束分析" : "开始分析"}
             </button>
             <button
               className="it-button"
@@ -1537,6 +1618,92 @@ const InterviewTrainer: React.FC = () => {
                   </div>
                 </div>
               )}
+              <div className="it-question">
+                <textarea
+                  className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
+                  placeholder="题干材料（可选）"
+                  value={questionText}
+                  onChange={handleQuestionTextChange}
+                />
+                <textarea
+                  className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
+                  placeholder="小题列表（一行一个，可选）"
+                  value={questionList}
+                  onChange={handleQuestionListChange}
+                />
+                <div className="it-question__hint">
+                  题干或小题列表为必填，支持直接粘贴完整材料并自动识别第N题。
+                </div>
+                <div className="it-question__status">
+                  <span
+                    className={`it-status-badge ${
+                      questionParsing
+                        ? "it-status-badge--running"
+                        : questionParsed
+                          ? "it-status-badge--ok"
+                          : "it-status-badge--idle"
+                    }`}
+                  >
+                    题干状态：
+                    {questionParsing ? "识别中" : questionParsed ? "已识别" : "未识别"}
+                  </span>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked || questionParsing || !hasQuestion}
+                    onClick={async () => {
+                      const merged = buildQuestionParseInput();
+                      await parseQuestionsFromText(merged, {
+                        fallbackPrompt: questionText.trim(),
+                      });
+                    }}
+                  >
+                    {questionParsing ? "识别中..." : "识别题目"}
+                  </button>
+                </div>
+                {typeof notesPreview !== "undefined" && (
+                  <div className="it-question__notes">
+                    <div className="it-question__notes-header">
+                      <span>笔记命中</span>
+                      <button
+                        className="it-button it-button--secondary it-button--compact"
+                        type="button"
+                        onClick={() => setShowNoteHits((prev) => !prev)}
+                      >
+                        {showNoteHits ? "收起" : "展开"}
+                      </button>
+                    </div>
+                    {showNoteHits && (
+                      <>
+                        {config?.retrievalEnabled === false ? (
+                          <div className="it-placeholder">检索未启用</div>
+                        ) : notesPreview.length > 0 ? (
+                          <ul className="it-note-hits">
+                            {notesPreview.map((item, idx) => (
+                              <li key={`${idx}-${item.source}`} className="it-note-hits__item">
+                                <div className="it-note-hits__header">
+                                  <span className="it-note-hits__score">
+                                    {Number.isFinite(item.score)
+                                      ? item.score.toFixed(2)
+                                      : "-"}
+                                  </span>
+                                  <span className="it-note-hits__source">
+                                    {item.source}
+                                  </span>
+                                </div>
+                                <div className="it-note-hits__snippet">
+                                  {item.snippet}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="it-placeholder">暂无命中</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1568,48 +1735,49 @@ const InterviewTrainer: React.FC = () => {
               </button>
             </div>
             <div className="it-result-panel">
-              {!analysisResult && (
+              {!hasAnyResult && (
                 <div className="it-placeholder">等待分析结果...</div>
               )}
-              {analysisResult && activeTab === "transcript" && (
+              {(analysisResult || itState.draftTranscript || itState.draftDetailedTranscript) &&
+                activeTab === "transcript" && (
                 <div className="it-transcript">
-                  {analysisResult.detailedTranscript ? (
+                  {detailedTranscriptPreview ? (
                     <>
                       <div className="it-section-title">带时间标注</div>
                       <textarea
                         className="it-textarea it-textarea--tall"
-                        value={analysisResult.detailedTranscript}
+                        value={detailedTranscriptPreview}
                         readOnly
                       />
                       <div className="it-section-title">原始转写</div>
                       <textarea
                         className="it-textarea"
-                        value={analysisResult.transcript}
+                        value={transcriptPreview}
                         readOnly
                       />
                     </>
                   ) : (
                     <textarea
                       className="it-textarea"
-                      value={analysisResult.transcript}
+                      value={transcriptPreview}
                       readOnly
                     />
                   )}
                 </div>
               )}
-              {analysisResult && activeTab === "acoustic" && (
+              {acousticPreview && activeTab === "acoustic" && (
                 <div className="it-metrics">
-                  <div>时长：{analysisResult.acoustic.durationSec.toFixed(2)}s</div>
-                  <div>语速：{analysisResult.acoustic.speechRateWpm ?? "-"}</div>
-                  <div>停顿次数：{analysisResult.acoustic.pauseCount}</div>
-                  <div>平均停顿：{analysisResult.acoustic.pauseAvgSec}s</div>
-                  <div>最长停顿：{analysisResult.acoustic.pauseMaxSec}s</div>
-                  <div>RMS均值：{analysisResult.acoustic.rmsDbMean}dB</div>
-                  <div>RMS波动：{analysisResult.acoustic.rmsDbStd}dB</div>
-                  <div>SNR：{analysisResult.acoustic.snrDb ?? "-"}</div>
+                  <div>时长：{acousticPreview.durationSec.toFixed(2)}s</div>
+                  <div>语速：{acousticPreview.speechRateWpm ?? "-"}</div>
+                  <div>停顿次数：{acousticPreview.pauseCount}</div>
+                  <div>平均停顿：{acousticPreview.pauseAvgSec}s</div>
+                  <div>最长停顿：{acousticPreview.pauseMaxSec}s</div>
+                  <div>RMS均值：{acousticPreview.rmsDbMean}dB</div>
+                  <div>RMS波动：{acousticPreview.rmsDbStd}dB</div>
+                  <div>SNR：{acousticPreview.snrDb ?? "-"}</div>
                 </div>
               )}
-              {analysisResult && activeTab === "evaluation" && (
+              {activeTab === "evaluation" && (
                 <div className="it-evaluation">
                   {questionText.trim() && (
                     <div className="it-evaluation__section">
@@ -1631,13 +1799,12 @@ const InterviewTrainer: React.FC = () => {
                       </ul>
                     </div>
                   )}
-                  {analysisResult.questionTimings &&
-                  analysisResult.questionTimings.length > 0 && (
+                  {questionTimingsPreview && questionTimingsPreview.length > 0 ? (
                     <div className="it-question-timings">
                       <div className="it-question-timings__title">
                         题目用时
                       </div>
-                      {analysisResult.questionTimings.map((item, idx) => (
+                      {questionTimingsPreview.map((item, idx) => (
                         <div key={`${idx}-${item.question}`} className="it-question-timings__item">
                           <div className="it-question-timings__label">
                             {idx + 1}. {item.question}
@@ -1648,143 +1815,194 @@ const InterviewTrainer: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  )}
-                  <div className="it-evaluation__summary">
-                    {analysisResult.evaluation.topicSummary}
-                  </div>
-                  <div className="it-evaluation__overall">
-                    <span>总分</span>
-                    <span className="it-evaluation__overall-value">
-                      {analysisResult.evaluation.overallScore ?? "-"}
-                    </span>
-                  </div>
-                  <div className="it-evaluation__scores">
-                    {Object.entries(analysisResult.evaluation.scores || {}).map(
-                      ([key, value]) => (
-                        <div key={key} className="it-score">
-                          <span>{key}</span>
-                          <span>{value}</span>
+                  ) : questionTimingNotePreview ? (
+                    <div className="it-question-timings">
+                      <div className="it-question-timings__title">
+                        题目用时
+                      </div>
+                      <div className="it-question-timings__item">
+                        <div className="it-question-timings__label">状态</div>
+                        <div className="it-question-timings__value">
+                          {questionTimingNotePreview}
                         </div>
-                      ),
-                    )}
-                  </div>
-                  <div className="it-evaluation__section">
-                    <h4>优点</h4>
-                    <ul>
-                      {analysisResult.evaluation.strengths.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="it-evaluation__section">
-                    <h4>问题</h4>
-                    <ul>
-                      {analysisResult.evaluation.issues.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="it-evaluation__section">
-                    <h4>改进建议</h4>
-                    <ul>
-                      {analysisResult.evaluation.improvements.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="it-evaluation__section">
-                    <h4>练习重点</h4>
-                    <ul>
-                      {analysisResult.evaluation.nextFocus.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  {analysisResult.evaluation.revisedAnswers &&
-                  analysisResult.evaluation.revisedAnswers.length > 0 && (
-                    <div className="it-evaluation__section">
-                      <h4>示范性修改</h4>
-                      <div className="it-revised-list">
-                        {analysisResult.evaluation.revisedAnswers.map((item, idx) => (
-                          <div key={`${idx}-${item.question}`} className="it-revised-item">
-                            <div className="it-revised-item__title">
-                              {idx + 1}. {item.question}
-                              {typeof item.estimatedTimeMin === "number"
-                                ? `（建议${item.estimatedTimeMin}分钟）`
-                                : ""}
+                      </div>
+                    </div>
+                  ) : null}
+                  {evaluationPreview ? (
+                    <>
+                      <div className="it-evaluation__summary">
+                        {evaluationPreview.topicSummary}
+                      </div>
+                      <div className="it-evaluation__overall">
+                        <span>总分</span>
+                        <span className="it-evaluation__overall-value">
+                          {evaluationPreview.overallScore ?? "-"}
+                        </span>
+                      </div>
+                      <div className="it-evaluation__scores">
+                        {Object.entries(evaluationPreview.scores || {}).map(
+                          ([key, value]) => (
+                            <div key={key} className="it-score">
+                              <span>{key}</span>
+                              <span>{value}</span>
                             </div>
-                            <div className="it-revised-item__block">
-                              <span>原回答：</span>
-                              <span>{item.original}</span>
-                            </div>
-                            <div className="it-revised-item__block">
-                              <span>示范：</span>
-                              <span>{item.revised}</span>
-                            </div>
+                          ),
+                        )}
+                      </div>
+                      <div className="it-evaluation__section">
+                        <h4>优点</h4>
+                        <ul>
+                          {evaluationPreview.strengths.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="it-evaluation__section">
+                        <h4>问题</h4>
+                        <ul>
+                          {evaluationPreview.issues.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="it-evaluation__section">
+                        <h4>改进建议</h4>
+                        <ul>
+                          {evaluationPreview.improvements.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="it-evaluation__section">
+                        <h4>练习重点</h4>
+                        <ul>
+                          {evaluationPreview.nextFocus.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      {evaluationPreview.revisedAnswers &&
+                      evaluationPreview.revisedAnswers.length > 0 && (
+                        <div className="it-evaluation__section">
+                          <h4>示范性修改</h4>
+                          <div className="it-revised-list">
+                            {evaluationPreview.revisedAnswers.map((item, idx) => (
+                              <div key={`${idx}-${item.question}`} className="it-revised-item">
+                                <div className="it-revised-item__title">
+                                  {idx + 1}. {item.question}
+                                  {typeof item.estimatedTimeMin === "number"
+                                    ? `（建议${item.estimatedTimeMin}分钟）`
+                                    : ""}
+                                </div>
+                                <div className="it-revised-item__block">
+                                  <span>原回答：</span>
+                                  <span>{item.original}</span>
+                                </div>
+                                <div className="it-revised-item__block">
+                                  <span>示范：</span>
+                                  <span>{item.revised}</span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {analysisResult.evaluation.prompt && (
-                    <div className="it-evaluation__section">
-                      <h4>示范答题提示词</h4>
-                      <textarea
-                        className="it-textarea it-textarea--prompt"
-                        value={analysisResult.evaluation.prompt}
-                        readOnly
-                      />
-                    </div>
-                  )}
-                  {(analysisResult.evaluation.raw || showRawOutput) && (
-                    <div className="it-evaluation__section">
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 12,
-                        }}
-                      >
-                        <h4 style={{ margin: 0 }}>原始输出</h4>
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={!analysisResult.evaluation.raw}
-                          onClick={() => setShowRawOutput((prev) => !prev)}
-                        >
-                          {showRawOutput ? "收起" : "查看原始输出"}
-                        </button>
-                      </div>
-                      {showRawOutput && (
-                        <textarea
-                          className="it-textarea it-textarea--prompt"
-                          value={analysisResult.evaluation.raw || ""}
-                          readOnly
-                        />
+                        </div>
                       )}
-                    </div>
-                  )}
-                  {analysisResult.evaluation.noteUsage &&
-                  analysisResult.evaluation.noteUsage.length > 0 && (
-                    <div className="it-evaluation__section">
-                      <h4>笔记引用</h4>
-                      <ul>
-                        {analysisResult.evaluation.noteUsage.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {analysisResult.evaluation.noteSuggestions &&
-                  analysisResult.evaluation.noteSuggestions.length > 0 && (
-                    <div className="it-evaluation__section">
-                      <h4>可用素材/参考思路</h4>
-                      <ul>
-                        {analysisResult.evaluation.noteSuggestions.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
+                      {evaluationPreview.prompt && (
+                        <div className="it-evaluation__section">
+                          <div className="it-section-header">
+                            <h4>示范答题提示词</h4>
+                            <button
+                              className="it-button it-button--secondary it-button--compact"
+                              type="button"
+                              onClick={() => setShowDemoPrompt((prev) => !prev)}
+                            >
+                              {showDemoPrompt ? "收起" : "展开"}
+                            </button>
+                          </div>
+                          {showDemoPrompt && (
+                            <textarea
+                              className="it-textarea it-textarea--prompt"
+                              value={evaluationPreview.prompt}
+                              readOnly
+                            />
+                          )}
+                        </div>
+                      )}
+                      {(evaluationPreview.raw || showRawOutput) && (
+                        <div className="it-evaluation__section">
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 12,
+                            }}
+                          >
+                            <h4 style={{ margin: 0 }}>原始输出</h4>
+                            <button
+                              className="it-button it-button--secondary it-button--compact"
+                              disabled={!evaluationPreview.raw}
+                              onClick={() => setShowRawOutput((prev) => !prev)}
+                            >
+                              {showRawOutput ? "收起" : "查看原始输出"}
+                            </button>
+                          </div>
+                          {showRawOutput && (
+                            <textarea
+                              className="it-textarea it-textarea--prompt"
+                              value={evaluationPreview.raw || ""}
+                              readOnly
+                            />
+                          )}
+                        </div>
+                      )}
+                      {evaluationPreview.noteUsage &&
+                      evaluationPreview.noteUsage.length > 0 && (
+                        <div className="it-evaluation__section">
+                          <div className="it-section-header">
+                            <h4>笔记引用</h4>
+                            <button
+                              className="it-button it-button--secondary it-button--compact"
+                              type="button"
+                              onClick={() => setShowNoteUsage((prev) => !prev)}
+                            >
+                              {showNoteUsage ? "收起" : "展开"}
+                            </button>
+                          </div>
+                          {showNoteUsage && (
+                            <ul>
+                              {evaluationPreview.noteUsage.map((item, idx) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                      {evaluationPreview.noteSuggestions &&
+                      evaluationPreview.noteSuggestions.length > 0 && (
+                        <div className="it-evaluation__section">
+                          <div className="it-section-header">
+                            <h4>可用素材/参考思路</h4>
+                            <button
+                              className="it-button it-button--secondary it-button--compact"
+                              type="button"
+                              onClick={() => setShowNoteSuggestions((prev) => !prev)}
+                            >
+                              {showNoteSuggestions ? "收起" : "展开"}
+                            </button>
+                          </div>
+                          {showNoteSuggestions && (
+                            <ul>
+                              {evaluationPreview.noteSuggestions.map((item, idx) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="it-placeholder">评价生成中...</div>
                   )}
                 </div>
               )}
@@ -1815,23 +2033,6 @@ const InterviewTrainer: React.FC = () => {
             </div>
           </div>
 
-          <div className="it-question">
-            <textarea
-              className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
-              placeholder="题干材料（可选）"
-              value={questionText}
-              onChange={(event) => setQuestionText(event.target.value)}
-            />
-            <textarea
-              className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
-              placeholder="小题列表（一行一个，可选）"
-              value={questionList}
-              onChange={(event) => setQuestionList(event.target.value)}
-            />
-            <div className="it-question__hint">
-              题干或小题列表为必填，支持直接粘贴完整材料并自动识别第N题。
-            </div>
-          </div>
         </>
       )}
 
@@ -2124,53 +2325,63 @@ const InterviewTrainer: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 80 }}>语言</div>
-                        <input
-                          className="it-input"
-                          value={apiForm.asr.language}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "language", event.target.value)
-                          }
-                        />
-                        <div style={{ minWidth: 80 }}>dev_pid</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.asr.devPid}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "devPid", Number(event.target.value))
-                          }
-                        />
+                      <div className="it-input-row it-input-row--pairs">
+                        <div className="it-input-pair">
+                          <div>语言</div>
+                          <input
+                            className="it-input"
+                            value={apiForm.asr.language}
+                            onChange={(event) =>
+                              handleApiFieldChange("asr", "language", event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="it-input-pair">
+                          <div>dev_pid</div>
+                          <input
+                            className="it-input"
+                            type="number"
+                            value={apiForm.asr.devPid}
+                            onChange={(event) =>
+                              handleApiFieldChange("asr", "devPid", Number(event.target.value))
+                            }
+                          />
+                        </div>
                       </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 80 }}>分片(s)</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.asr.maxChunkSec}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "maxChunkSec", Number(event.target.value))
-                          }
-                        />
-                        <div style={{ minWidth: 80 }}>超时(s)</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.asr.timeoutSec}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "timeoutSec", Number(event.target.value))
-                          }
-                        />
-                        <div style={{ minWidth: 60 }}>重试</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.asr.maxRetries}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "maxRetries", Number(event.target.value))
-                          }
-                        />
+                      <div className="it-input-row it-input-row--pairs">
+                        <div className="it-input-pair">
+                          <div>分片(s)</div>
+                          <input
+                            className="it-input"
+                            type="number"
+                            value={apiForm.asr.maxChunkSec}
+                            onChange={(event) =>
+                              handleApiFieldChange("asr", "maxChunkSec", Number(event.target.value))
+                            }
+                          />
+                        </div>
+                        <div className="it-input-pair">
+                          <div>超时(s)</div>
+                          <input
+                            className="it-input"
+                            type="number"
+                            value={apiForm.asr.timeoutSec}
+                            onChange={(event) =>
+                              handleApiFieldChange("asr", "timeoutSec", Number(event.target.value))
+                            }
+                          />
+                        </div>
+                        <div className="it-input-pair">
+                          <div>重试</div>
+                          <input
+                            className="it-input"
+                            type="number"
+                            value={apiForm.asr.maxRetries}
+                            onChange={(event) =>
+                              handleApiFieldChange("asr", "maxRetries", Number(event.target.value))
+                            }
+                          />
+                        </div>
                       </div>
                       <div className="it-input-row">
                         <div style={{ minWidth: 80 }}>Mock 文本</div>
@@ -2463,6 +2674,13 @@ const InterviewTrainer: React.FC = () => {
                 >
                   {clearingEmbeddingCache ? "清理中..." : "清理向量缓存"}
                 </button>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || clearingCorpusCache}
+                  onClick={handleClearCorpusCache}
+                >
+                  {clearingCorpusCache ? "清理中..." : "清理语料索引缓存"}
+                </button>
               </div>
               {retrievalSaveMessage && (
                 <div className="it-settings__hint">{retrievalSaveMessage}</div>
@@ -2472,6 +2690,9 @@ const InterviewTrainer: React.FC = () => {
               )}
               {embeddingCacheMessage && (
                 <div className="it-settings__hint">{embeddingCacheMessage}</div>
+              )}
+              {corpusCacheMessage && (
+                <div className="it-settings__hint">{corpusCacheMessage}</div>
               )}
               {showEmbeddingWarmup && embeddingWarmup && (
                 <div className="it-progress it-progress--compact">
@@ -2489,6 +2710,41 @@ const InterviewTrainer: React.FC = () => {
                     />
                   </div>
                 </div>
+              )}
+              <div className="it-settings__hint">
+                索引与向量缓存会落盘保存，目录变更后会自动重新索引。
+              </div>
+              {retrievalCacheInfo && (
+                <>
+                  <div className="it-input-row">
+                    <div style={{ minWidth: 80 }}>语料缓存</div>
+                    <div className="it-settings__meta" style={{ flex: 1 }}>
+                      {corpusCachePath || "-"}
+                    </div>
+                  </div>
+                  <div className="it-input-row">
+                    <div style={{ minWidth: 80 }}>向量缓存</div>
+                    <div className="it-settings__meta" style={{ flex: 1 }}>
+                      {embeddingCachePath || "-"}
+                    </div>
+                  </div>
+                  <div className="it-input-row it-input-row--nowrap">
+                    <div style={{ minWidth: 80 }}>缓存上限</div>
+                    <div className="it-settings__meta" style={{ flex: 1 }}>
+                      {typeof corpusCacheMb === "number" ? `${corpusCacheMb} MB` : "-"}
+                    </div>
+                    <div style={{ minWidth: 80 }}>并发</div>
+                    <div className="it-settings__meta" style={{ flex: 1 }}>
+                      {typeof maxConcurrency === "number" ? maxConcurrency : "-"}
+                    </div>
+                  </div>
+                  <div className="it-input-row">
+                    <div style={{ minWidth: 80 }}>Query 缓存</div>
+                    <div className="it-settings__meta" style={{ flex: 1 }}>
+                      {typeof queryCacheSize === "number" ? queryCacheSize : "-"}
+                    </div>
+                  </div>
+                </>
               )}
               <div className="it-settings__hint">
                 向量检索会调用 embedding 接口，模型名称请按平台实际填入。

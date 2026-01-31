@@ -26,6 +26,9 @@ export interface ItRetrievalOptions {
   minScore: number;
   vector?: ItVectorSearchConfig;
   cacheDir?: string;
+  cacheKey?: string;
+  maxConcurrency?: number;
+  queryCacheSize?: number;
 }
 
 export interface ItEmbeddingWarmupResult {
@@ -57,8 +60,12 @@ const IT_DEFAULT_QUERY_MAX_CHARS = 1500;
 const IT_SNIPPET_MAX_LEN = IT_MAX_CHUNK_LEN;
 const IT_DEFAULT_BATCH_SIZE = 16;
 const IT_EMBEDDING_CACHE_VERSION = 1;
+const IT_CORPUS_CACHE_VERSION = 1;
+const IT_MAX_CORPUS_CACHE_BYTES = 25 * 1024 * 1024;
+const IT_DEFAULT_QUERY_CACHE_SIZE = 200;
 
 const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
+const cachedQueries: Map<string, ItNoteHit[]> = new Map();
 
 export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
   if (cacheKey) {
@@ -66,13 +73,75 @@ export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
     return;
   }
   cachedEmbeddings.clear();
+  cachedQueries.clear();
+  cachedCorpus = undefined;
+}
+
+function it_isSameDirMtimes(
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
+function it_getCorpusCachePath(cacheDir: string, key: string): string {
+  const safe = it_hashText(`${IT_CORPUS_CACHE_VERSION}:${key}`);
+  return path.join(cacheDir, "corpus_cache", `${safe}.json`);
+}
+
+function it_getQueryCacheKey(
+  query: string,
+  options: ItRetrievalOptions,
+): string {
+  const mode = options.mode || "vector";
+  const topK = Number.isFinite(options.topK) ? Math.max(1, options.topK) : 5;
+  const minScore = Number.isFinite(options.minScore) ? options.minScore : 0;
+  const vectorKey =
+    mode === "vector" && options.vector
+      ? it_buildEmbeddingCacheKey(options.vector)
+      : "keyword";
+  const queryKey = query.trim().slice(0, 300);
+  const raw = `${mode}|${topK}|${minScore}|${vectorKey}|${options.cacheKey || ""}|${queryKey}`;
+  return it_hashText(raw);
+}
+
+function it_getCachedQuery(
+  key: string,
+): ItNoteHit[] | undefined {
+  const cached = cachedQueries.get(key);
+  if (!cached) {
+    return undefined;
+  }
+  cachedQueries.delete(key);
+  cachedQueries.set(key, cached);
+  return cached;
+}
+
+function it_setCachedQuery(
+  key: string,
+  value: ItNoteHit[],
+  maxSize: number,
+): void {
+  cachedQueries.set(key, value);
+  if (cachedQueries.size <= maxSize) {
+    return;
+  }
+  const firstKey = cachedQueries.keys().next().value;
+  if (firstKey) {
+    cachedQueries.delete(firstKey);
+  }
 }
 
 function it_readText(filePath: string): string {
   try {
     return fs.readFileSync(filePath, "utf-8");
   } catch {
-    return fs.readFileSync(filePath, "utf-8");
+    return "";
   }
 }
 
@@ -80,7 +149,7 @@ async function it_readTextAsync(filePath: string): Promise<string> {
   try {
     return await fs.promises.readFile(filePath, "utf-8");
   } catch {
-    return fs.promises.readFile(filePath, "utf-8");
+    return "";
   }
 }
 
@@ -160,11 +229,12 @@ function it_splitText(text: string, maxLen: number): string[] {
 }
 
 function it_tokenize(text: string): string[] {
-  const normalized = text.replace(/\s+/g, "");
-  const hasChinese = /[\u4e00-\u9fff]/.test(normalized);
+  const raw = String(text || "");
+  const hasChinese = /[\u4e00-\u9fff]/.test(raw);
   if (!hasChinese) {
-    return normalized.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    return raw.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   }
+  const normalized = raw.replace(/\s+/g, "");
   const tokens: string[] = [];
   for (let i = 0; i < normalized.length - 1; i += 1) {
     tokens.push(normalized.slice(i, i + 2));
@@ -177,7 +247,7 @@ function it_buildSnippet(text: string): string {
   if (normalized.length <= IT_SNIPPET_MAX_LEN) {
     return normalized;
   }
-  return `${normalized.slice(0, IT_SNIPPET_MAX_LEN)}…`;
+  return `${normalized.slice(0, IT_SNIPPET_MAX_LEN)}...`;
 }
 
 function it_scoreTokens(queryTokens: string[], textTokens: string[]): number {
@@ -328,23 +398,78 @@ function it_getDirMtime(dirPath: string): number {
   if (!dirPath || !fs.existsSync(dirPath)) {
     return 0;
   }
-  try {
-    return fs.statSync(dirPath).mtimeMs || 0;
-  } catch {
-    return 0;
+  let maxMtime = 0;
+  const stack = [dirPath];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+    let entries: fs.Dirent[] = [];
+    try {
+      const stat = fs.statSync(current);
+      maxMtime = Math.max(maxMtime, stat.mtimeMs || 0);
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) {
+        continue;
+      }
+      const fullPath = path.join(current, entry.name);
+      try {
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+        } else {
+          const stat = fs.statSync(fullPath);
+          maxMtime = Math.max(maxMtime, stat.mtimeMs || 0);
+        }
+      } catch {
+        continue;
+      }
+    }
   }
+  return maxMtime;
 }
 
 async function it_getDirMtimeAsync(dirPath: string): Promise<number> {
   if (!dirPath) {
     return 0;
   }
-  try {
-    const stat = await fs.promises.stat(dirPath);
-    return stat.mtimeMs || 0;
-  } catch {
-    return 0;
+  let maxMtime = 0;
+  const stack = [dirPath];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+    let entries: fs.Dirent[] = [];
+    try {
+      const stat = await fs.promises.stat(current);
+      maxMtime = Math.max(maxMtime, stat.mtimeMs || 0);
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) {
+        continue;
+      }
+      const fullPath = path.join(current, entry.name);
+      try {
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+        } else {
+          const stat = await fs.promises.stat(fullPath);
+          maxMtime = Math.max(maxMtime, stat.mtimeMs || 0);
+        }
+      } catch {
+        continue;
+      }
+    }
   }
+  return maxMtime;
 }
 
 async function it_collectCorpusAsync(
@@ -407,32 +532,43 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
     if (!fs.existsSync(dirPath)) {
       continue;
     }
-    const files = fs.readdirSync(dirPath, { withFileTypes: true });
-    for (const entry of files) {
-      if (entry.name.startsWith(".")) {
+    const stack = [dirPath];
+    while (stack.length) {
+      const current = stack.pop();
+      if (!current) {
         continue;
       }
-      if (entry.isDirectory()) {
-        const child = path.join(dirPath, entry.name);
-        corpus.push(...it_buildCorpus({ [kind]: child }));
-        continue;
-      }
-      const ext = path.extname(entry.name).toLowerCase();
-      if (!IT_ALLOWED_EXTS.includes(ext)) {
-        continue;
-      }
-      const fullPath = path.join(dirPath, entry.name);
+      let files: fs.Dirent[] = [];
       try {
-        const stat = fs.statSync(fullPath);
-        if (stat.size > IT_MAX_FILE_SIZE) {
-          continue;
-        }
+        files = fs.readdirSync(current, { withFileTypes: true });
       } catch {
         continue;
       }
-      const text = it_readText(fullPath);
-      for (const chunk of it_splitText(text, IT_MAX_CHUNK_LEN)) {
-        corpus.push({ kind, source: fullPath, text: chunk });
+      for (const entry of files) {
+        if (entry.name.startsWith(".")) {
+          continue;
+        }
+        const fullPath = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+          continue;
+        }
+        const ext = path.extname(entry.name).toLowerCase();
+        if (!IT_ALLOWED_EXTS.includes(ext)) {
+          continue;
+        }
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > IT_MAX_FILE_SIZE) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
+        const text = it_readText(fullPath);
+        for (const chunk of it_splitText(text, IT_MAX_CHUNK_LEN)) {
+          corpus.push({ kind, source: fullPath, text: chunk });
+        }
       }
     }
   }
@@ -442,9 +578,41 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
 
 export async function it_buildCorpusAsync(
   inputs: Record<string, string>,
+  options: { cacheDir?: string; maxCacheBytes?: number; skipMtimeCheck?: boolean } = {},
 ): Promise<ItCorpusItem[]> {
   const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
   const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
+  const maxCacheBytes = Number.isFinite(options.maxCacheBytes)
+    ? Math.max(0, Number(options.maxCacheBytes))
+    : IT_MAX_CORPUS_CACHE_BYTES;
+  const cachePath = options.cacheDir ? it_getCorpusCachePath(options.cacheDir, key) : "";
+  if (options.skipMtimeCheck) {
+    if (cachedCorpus && cachedCorpus.key === key) {
+      return cachedCorpus.corpus;
+    }
+    if (cachePath) {
+      try {
+        const raw = await fs.promises.readFile(cachePath, "utf-8");
+        const parsed = JSON.parse(raw || "{}");
+        if (
+          parsed &&
+          parsed.version === IT_CORPUS_CACHE_VERSION &&
+          parsed.key === key &&
+          parsed.corpus
+        ) {
+          cachedCorpus = {
+            key,
+            dirMtimes: parsed.dirMtimes || {},
+            corpus: parsed.corpus as ItCorpusItem[],
+          };
+          return cachedCorpus.corpus;
+        }
+      } catch {
+        // ignore cache read errors
+      }
+    }
+  }
+
   const dirMtimes: Record<string, number> = {};
   for (const [kind, dirPath] of entries) {
     dirMtimes[kind] = await it_getDirMtimeAsync(dirPath);
@@ -457,12 +625,54 @@ export async function it_buildCorpusAsync(
       return cachedCorpus.corpus;
     }
   }
+  if (cachePath) {
+    try {
+      const stat = await fs.promises.stat(cachePath);
+      if (stat.isFile() && stat.size > 0 && stat.size <= maxCacheBytes) {
+        const raw = await fs.promises.readFile(cachePath, "utf-8");
+        const parsed = JSON.parse(raw || "{}");
+        if (
+          parsed &&
+          parsed.version === IT_CORPUS_CACHE_VERSION &&
+          parsed.key === key &&
+          parsed.corpus &&
+          parsed.dirMtimes &&
+          it_isSameDirMtimes(parsed.dirMtimes, dirMtimes)
+        ) {
+          cachedCorpus = {
+            key,
+            dirMtimes,
+            corpus: parsed.corpus as ItCorpusItem[],
+          };
+          return cachedCorpus.corpus;
+        }
+      }
+    } catch {
+      // ignore cache read errors
+    }
+  }
 
   const corpus: ItCorpusItem[] = [];
   for (const [kind, dirPath] of entries) {
     await it_collectCorpusAsync(kind, dirPath, corpus);
   }
   cachedCorpus = { key, dirMtimes, corpus };
+  if (cachePath && corpus.length) {
+    try {
+      await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
+      const payload = JSON.stringify({
+        version: IT_CORPUS_CACHE_VERSION,
+        key,
+        dirMtimes,
+        corpus,
+      });
+      if (Buffer.byteLength(payload, "utf-8") <= maxCacheBytes) {
+        await fs.promises.writeFile(cachePath, payload, "utf-8");
+      }
+    } catch {
+      // ignore cache write errors
+    }
+  }
   return corpus;
 }
 
@@ -557,6 +767,16 @@ export async function it_retrieveNotes(
   if (!query || !corpus.length) {
     return [];
   }
+  const maxCacheSize = Number.isFinite(options.queryCacheSize)
+    ? Math.max(0, Number(options.queryCacheSize))
+    : IT_DEFAULT_QUERY_CACHE_SIZE;
+  if (maxCacheSize > 0) {
+    const cacheKey = it_getQueryCacheKey(query, options);
+    const cached = it_getCachedQuery(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
   const topK = Number.isFinite(options.topK) ? Math.max(1, options.topK) : 5;
   const minScore = Number.isFinite(options.minScore) ? options.minScore : 0;
   const mode = options.mode || "vector";
@@ -571,11 +791,16 @@ export async function it_retrieveNotes(
       .sort((a, b) => b.score - a.score)
       .slice(0, topK);
 
-    return scored.map(({ score, item }) => ({
+    const hits = scored.map(({ score, item }) => ({
       score: Number(score.toFixed(3)),
       source: item.source,
       snippet: it_buildSnippet(item.text),
     }));
+    if (maxCacheSize > 0) {
+      const cacheKey = it_getQueryCacheKey(query, options);
+      it_setCachedQuery(cacheKey, hits, maxCacheSize);
+    }
+    return hits;
   }
   if (mode !== "vector") {
     return [];
@@ -647,11 +872,16 @@ export async function it_retrieveNotes(
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 
-  return scored.map(({ score, item }) => ({
+  const hits = scored.map(({ score, item }) => ({
     score: Number(score.toFixed(3)),
     source: item.source,
     snippet: it_buildSnippet(item.text),
   }));
+  if (maxCacheSize > 0) {
+    const cacheKey = it_getQueryCacheKey(query, options);
+    it_setCachedQuery(cacheKey, hits, maxCacheSize);
+  }
+  return hits;
 }
 
 function it_mergeQueryHits(
@@ -718,17 +948,36 @@ export async function it_retrieveNotesMulti(
   const topK = Number.isFinite(options.topK) ? Math.max(1, options.topK) : 5;
   const baseMinScore = Number.isFinite(options.minScore) ? options.minScore : 0;
   const perQueryTopK = Math.max(topK, Math.min(topK * 2, 20));
+  const maxConcurrency = Number.isFinite(options.maxConcurrency)
+    ? Math.max(1, Number(options.maxConcurrency))
+    : 3;
+
+  const runWithLimit = async <T, R>(
+    list: T[],
+    limit: number,
+    task: (item: T) => Promise<R>,
+  ): Promise<R[]> => {
+    const results: R[] = new Array(list.length);
+    let cursor = 0;
+    const workers = new Array(Math.min(limit, list.length)).fill(0).map(async () => {
+      while (cursor < list.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await task(list[index]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  };
 
   const runOnce = async (minScore: number): Promise<ItNoteHit[]> => {
-    const lists: ItNoteHit[][] = [];
-    for (const query of limited) {
-      const hits = await it_retrieveNotes(query, corpus, {
+    const lists = await runWithLimit(limited, maxConcurrency, (query) =>
+      it_retrieveNotes(query, corpus, {
         ...options,
         topK: perQueryTopK,
         minScore,
-      });
-      lists.push(hits);
-    }
+      }),
+    );
     return it_mergeQueryHits(lists, topK);
   };
 

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import * as vscode from "vscode";
 import { WebviewProtocol } from "./WebviewProtocol";
 
@@ -59,7 +60,7 @@ export class InterviewTrainerWebviewViewProvider
       </div>
     `;
 
-    const nonce = String(Math.random()).slice(2);
+    const nonce = crypto.randomBytes(16).toString("hex");
 
     return `<!DOCTYPE html>
       <html lang="zh-CN">

@@ -13,8 +13,16 @@ async function it_callDoubaoChat(
   cfg: ItLlmConfig,
   messages: ItLlmMessage[],
 ): Promise<string> {
-  const base = cfg.baseUrl || "https://ark.cn-beijing.volces.com";
-  const url = `${base.replace(/\/$/, "")}/api/v3/chat/completions`;
+  const base = (cfg.baseUrl || "https://ark.cn-beijing.volces.com").trim().replace(/\/$/, "");
+  const lower = base.toLowerCase();
+  const url =
+    lower.includes("/api/v3/chat/completions") || lower.endsWith("/chat/completions")
+      ? base
+      : lower.endsWith("/api/v3")
+        ? `${base}/chat/completions`
+        : lower.endsWith("/api/v3/chat")
+          ? `${base}/completions`
+          : `${base}/api/v3/chat/completions`;
   const headers = {
     Authorization: `Bearer ${cfg.apiKey}`,
     "Content-Type": "application/json",

@@ -498,7 +498,8 @@ export async function it_evaluateAnswer(
     });
   }
 
-  const resolvedRetries = Math.max(5, Number(config.maxRetries ?? 0));
+  const retryValue = Number(config.maxRetries ?? 1);
+  const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
   const formatGuard =
     "上次输出未通过 JSON 校验。请仅输出合法 JSON 对象，不要代码块或多余文本。";
   const parseAttempts = 2;
@@ -588,7 +589,7 @@ export async function it_evaluateAnswer(
         : parsedNoteUsage;
     const fallbackNoteSuggestions =
       notes.length && !parsedNoteSuggestions.length
-        ? notes.slice(0, 3).map((note) => `鍙互鍙傝€? ${note.snippet}`)
+        ? notes.slice(0, 3).map((note) => `可参考：${note.snippet}`)
         : parsedNoteSuggestions;
     const revisedAnswers = parsedRevised.map((item: any, idx: number) => {
       const estimated =

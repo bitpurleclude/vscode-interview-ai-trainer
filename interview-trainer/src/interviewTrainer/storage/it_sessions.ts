@@ -81,7 +81,8 @@ export function it_findExistingTopicDir(
   cfg: ItSessionsConfig,
 ): string | null {
   const threshold = cfg.similarityThreshold;
-  const candidateHash = it_hashText(it_normalizeText(candidateTitle || candidateText));
+  const candidateBase = candidateTitle || candidateText;
+  const candidateHash = it_hashText(it_normalizeText(candidateBase));
   let bestMatch: string | null = null;
   let bestScore = 0;
 
@@ -108,8 +109,8 @@ export function it_findExistingTopicDir(
       return path.dirname(metaPath);
     }
     const score = Math.max(
-      it_similarityRatio(candidateTitle || "", meta.topicTitle || ""),
-      it_similarityRatio(candidateTitle || "", (meta.questionText || "").slice(0, 64)),
+      it_similarityRatio(candidateBase || "", meta.topicTitle || ""),
+      it_similarityRatio(candidateBase || "", (meta.questionText || "").slice(0, 64)),
     );
     if (score >= threshold && score > bestScore) {
       bestScore = score;
@@ -126,7 +127,8 @@ export async function it_findExistingTopicDirAsync(
   cfg: ItSessionsConfig,
 ): Promise<string | null> {
   const threshold = cfg.similarityThreshold;
-  const candidateHash = it_hashText(it_normalizeText(candidateTitle || candidateText));
+  const candidateBase = candidateTitle || candidateText;
+  const candidateHash = it_hashText(it_normalizeText(candidateBase));
   let bestMatch: string | null = null;
   let bestScore = 0;
 
@@ -165,8 +167,8 @@ export async function it_findExistingTopicDirAsync(
       return path.dirname(metaPath);
     }
     const score = Math.max(
-      it_similarityRatio(candidateTitle || "", meta.topicTitle || ""),
-      it_similarityRatio(candidateTitle || "", (meta.questionText || "").slice(0, 64)),
+      it_similarityRatio(candidateBase || "", meta.topicTitle || ""),
+      it_similarityRatio(candidateBase || "", (meta.questionText || "").slice(0, 64)),
     );
     if (score >= threshold && score > bestScore) {
       bestScore = score;

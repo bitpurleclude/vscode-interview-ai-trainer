@@ -13,11 +13,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(
       InterviewTrainerWebviewViewProvider.viewType,
       viewProvider,
-      { webviewOptions: { retainContextWhenHidden: true } },
+      { webviewOptions: { retainContextWhenHidden: false } },
     ),
   );
 
-  new InterviewTrainerExtension(context, viewProvider.webviewProtocol);
+  const trainer = new InterviewTrainerExtension(context, viewProvider.webviewProtocol);
+  context.subscriptions.push(trainer);
 
   const specifyCommand = "itInterviewTrainer.runSpecify";
   let specifyTerminal: vscode.Terminal | undefined;

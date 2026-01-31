@@ -19,7 +19,7 @@ import { it_callVolcAsr } from "../api/it_volc_asr";
 import { ItApiConfig } from "../api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
-import { it_buildCorpusAsync, it_retrieveNotesMulti } from "./it_notes";
+import { ItCorpusItem, it_buildCorpusAsync, it_retrieveNotesMulti } from "./it_notes";
 import {
   it_appendAttemptDataAsync,
   it_nextAttemptIndexAsync,
@@ -43,6 +43,17 @@ interface ItAnalyzeDeps {
   skillConfig: Record<string, any>;
   workspaceRoot: string;
   onProgress?: (update: ItAnalyzeProgress) => void;
+  onPartial?: (partial: {
+    transcript?: string;
+    detailedTranscript?: string;
+    acoustic?: ItAcousticMetrics;
+    notes?: ItNoteHit[];
+    questionTimings?: ItQuestionTiming[];
+    questionTimingNote?: string;
+    evaluation?: ItEvaluation;
+  }) => void;
+  corpusDirty?: boolean;
+  abortSignal?: { aborted: boolean };
 }
 
 interface ItAnalyzeProgress {
@@ -116,19 +127,44 @@ function it_buildQuestionTimingsFromSegments(
   if (!questionList.length || !segments.length) {
     return [];
   }
-  const cnNums = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  const cnDigits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  const toCn = (num: number): string => {
+    if (num <= 0) {
+      return "";
+    }
+    if (num < 10) {
+      return cnDigits[num];
+    }
+    if (num === 10) {
+      return "十";
+    }
+    if (num < 20) {
+      return `十${cnDigits[num - 10]}`;
+    }
+    if (num < 100) {
+      const tens = Math.floor(num / 10);
+      const ones = num % 10;
+      return `${cnDigits[tens]}十${ones ? cnDigits[ones] : ""}`;
+    }
+    return String(num);
+  };
   const startTimes: Array<number | undefined> = new Array(questionList.length).fill(
     undefined,
   );
-  startTimes[0] = 0;
-  for (let idx = 1; idx < questionList.length; idx += 1) {
-    const cn = cnNums[idx - 1] ?? "";
-    const digit = String(idx + 1);
-    const regex = new RegExp(`第\\s*(${cn}|${digit})\\s*[题问]`);
+  const findMarker = (index: number): number | undefined => {
+    const digit = String(index + 1);
+    const cn = toCn(index + 1);
+    const pattern = cn ? `${cn}|${digit}` : digit;
+    const regex = new RegExp(`第\\s*(${pattern})\\s*[题问]`);
     const hit = segments.find((seg) => seg.text && regex.test(seg.text));
-    if (hit) {
-      startTimes[idx] = hit.startSec;
-    }
+    return hit ? hit.startSec : undefined;
+  };
+  for (let idx = 0; idx < questionList.length; idx += 1) {
+    startTimes[idx] = findMarker(idx);
+  }
+  if (startTimes[0] === undefined) {
+    const firstSpeech = segments.find((seg) => seg.type === "speech");
+    startTimes[0] = firstSpeech?.startSec ?? 0;
   }
   const fullMarkers = startTimes.slice(1).every((t) => typeof t === "number");
   if (!fullMarkers) {
@@ -293,7 +329,8 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
     llm.provider === "volc_doubao"
       ? "https://ark.cn-beijing.volces.com"
       : "https://qianfan.baidubce.com/v2";
-  const resolvedRetries = Math.max(5, Number(llm.max_retries ?? 1));
+  const retryValue = Number(llm.max_retries ?? 1);
+  const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
   return {
     provider: llm.provider,
     apiKey: llm.api_key || "",
@@ -338,8 +375,7 @@ async function it_assignSegmentsWithLlm(
     return null;
   }
   const speechSegments = segments
-    .filter((seg) => seg.type === "speech" && seg.text && seg.text.trim())
-    .slice(0, 120);
+    .filter((seg) => seg.type === "speech" && seg.text && seg.text.trim());
   if (!speechSegments.length) {
     return null;
   }
@@ -349,7 +385,7 @@ async function it_assignSegmentsWithLlm(
       `${idx}. [${it_formatSeconds(seg.startSec)}-${it_formatSeconds(seg.endSec)}] ${seg.text}`,
   );
   const systemPrompt =
-    "你是中文面试答题分段助手。根据题目列表，将转写分段归属到对应题目。仅输出JSON。";
+    "你是中文面试答题分段助手。根据题目列表，将转写分段归属到对应题目。允许只回答部分题目，仅输出JSON。";
   const userPrompt = [
     "题目列表:",
     questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n"),
@@ -361,6 +397,7 @@ async function it_assignSegmentsWithLlm(
     "1) 输出 JSON: {assignments:[{segmentIndex, questionIndex}]}。",
     "2) questionIndex 从 0 开始，对应题目顺序。",
     "3) 非答题内容可标记为 -1。",
+    "4) 可能只回答部分题目，未回答题目无需分配。",
   ].join("\n");
 
   try {
@@ -375,10 +412,10 @@ async function it_assignSegmentsWithLlm(
     if (!assignments.length) {
       return null;
     }
-    const mapping: Array<number> = new Array(speechSegments.length).fill(-1);
-    assignments.forEach((item: any) => {
-      const segIndex = Number(item?.segmentIndex);
-      const qIndex = Number(item?.questionIndex);
+  const mapping: Array<number> = new Array(speechSegments.length).fill(-1);
+  assignments.forEach((item: any) => {
+    const segIndex = Number(item?.segmentIndex);
+    const qIndex = Number(item?.questionIndex);
       if (
         Number.isFinite(segIndex) &&
         Number.isFinite(qIndex) &&
@@ -390,27 +427,33 @@ async function it_assignSegmentsWithLlm(
     });
 
     const timings: ItQuestionTiming[] = [];
-    const answers: Array<{ question: string; answer: string }> = [];
+    const answers: Array<{ question: string; answer: string }> = questions.map(
+      (question) => ({ question, answer: "" }),
+    );
+    let answeredCount = 0;
     for (let q = 0; q < questions.length; q += 1) {
       const segs = speechSegments.filter((_, idx) => mapping[idx] === q);
       if (!segs.length) {
-        return null;
+        continue;
       }
+      answeredCount += 1;
       const startSec = Math.min(...segs.map((seg) => seg.startSec));
       const endSec = Math.max(...segs.map((seg) => seg.endSec));
-      timings.push({
+      timings[q] = {
         question: questions[q],
         startSec,
         endSec,
         durationSec: Math.max(0, endSec - startSec),
         note: "LLM分段",
-      });
-      answers.push({
-        question: questions[q],
-        answer: segs.map((seg) => seg.text?.trim()).filter(Boolean).join(""),
-      });
+      };
+      answers[q].answer = segs
+        .map((seg) => seg.text?.trim())
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
     }
-    return { timings, answers };
+    return answeredCount ? { timings, answers } : null;
   } catch {
     return null;
   }
@@ -426,7 +469,7 @@ async function it_splitAnswersWithLlm(
   }
 
   const systemPrompt =
-    "你是中文面试逐题拆分助手。请把考生完整回答按题目顺序拆分为逐题答案，仅输出 JSON。";
+    "你是中文面试逐题拆分助手。请按整题识别考生回答，允许只回答部分题目，仅输出 JSON。";
   const userPrompt = [
     "题目列表:",
     questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n"),
@@ -435,9 +478,10 @@ async function it_splitAnswersWithLlm(
     transcript.trim(),
     "",
     "输出要求:",
-    "1) 仅输出 JSON: {answers:[\"题1回答\",\"题2回答\",...]}。",
-    "2) answers 数组长度必须等于题目数，顺序一致。",
-    "3) 不要输出多余文字或解释。",
+    "1) 仅输出 JSON: {answers:[{questionIndex, answer, confidence?}]}。",
+    "2) questionIndex 从 0 开始，仅包含有回答的题目。",
+    "3) answer 必须尽量使用原文连续片段，不要改写或总结。",
+    "4) 不确定可省略该题或给出低置信度。",
   ].join("\n");
 
   try {
@@ -447,13 +491,64 @@ async function it_splitAnswersWithLlm(
     ]);
     const parsed = it_extractJson(content);
     const answers = Array.isArray(parsed?.answers) ? parsed.answers : [];
-    if (answers.length !== questions.length) {
+    if (!answers.length) {
       return null;
     }
-    return answers.map((item: any, idx: number) => ({
-      question: questions[idx],
-      answer: typeof item === "string" ? item.trim() : String(item?.answer ?? item ?? "").trim(),
-    }));
+    const normalizedQuestions = questions.map((q) => it_normalizeText(q));
+    const findQuestionIndex = (value: string): number => {
+      const normalized = it_normalizeText(value);
+      if (!normalized) {
+        return -1;
+      }
+      const exact = normalizedQuestions.indexOf(normalized);
+      if (exact !== -1) {
+        return exact;
+      }
+      return -1;
+    };
+    if (answers.length === questions.length && typeof answers[0] === "string") {
+      return answers.map((item: any, idx: number) => ({
+        question: questions[idx],
+        answer: typeof item === "string" ? item.trim() : String(item ?? "").trim(),
+      }));
+    }
+    const result = questions.map((question) => ({ question, answer: "" }));
+    let answeredCount = 0;
+    answers.forEach((item: any) => {
+      const rawAnswer =
+        typeof item?.answer === "string"
+          ? item.answer
+          : typeof item?.text === "string"
+            ? item.text
+            : typeof item === "string"
+              ? item
+              : String(item?.answer ?? item?.text ?? "");
+      const answerText = String(rawAnswer || "").trim();
+      if (!answerText) {
+        return;
+      }
+      let qIndex = Number(
+        item?.questionIndex ??
+          item?.index ??
+          item?.qIndex ??
+          item?.question_index ??
+          -1,
+      );
+      if (!Number.isFinite(qIndex) || qIndex < 0 || qIndex >= questions.length) {
+        if (typeof item?.question === "string") {
+          qIndex = findQuestionIndex(item.question);
+        }
+      }
+      if (!Number.isFinite(qIndex) || qIndex < 0 || qIndex >= questions.length) {
+        return;
+      }
+      const existing = result[qIndex].answer;
+      result[qIndex].answer = existing
+        ? `${existing} ${answerText}`.replace(/\s+/g, " ").trim()
+        : answerText;
+      answeredCount += 1;
+    });
+    return answeredCount ? result : null;
   } catch {
     return null;
   }
@@ -549,7 +644,7 @@ function it_collectAnswersFromSegments(
       .filter(Boolean) as string[];
     return {
       question: timing.question,
-      answer: texts.join(""),
+      answer: texts.join(" ").replace(/\s+/g, " ").trim(),
     };
   });
 }
@@ -772,11 +867,14 @@ function it_mergeEvaluations(params: {
 }
 
 function it_extractKeywords(text: string, limit: number): string[] {
-  const cleaned = (text || "").replace(/[^0-9A-Za-z\u4e00-\u9fff]+/g, "");
-  if (!cleaned) {
+  const raw = String(text || "");
+  const hasChinese = /[\u4e00-\u9fff]/.test(raw);
+  const cleaned = hasChinese
+    ? raw.replace(/[^0-9A-Za-z\u4e00-\u9fff]+/g, "")
+    : raw.toLowerCase();
+  if (!cleaned.trim()) {
     return [];
   }
-  const hasChinese = /[\u4e00-\u9fff]/.test(cleaned);
   const tokens: string[] = [];
   if (hasChinese) {
     for (let i = 0; i < cleaned.length - 1; i += 1) {
@@ -785,7 +883,6 @@ function it_extractKeywords(text: string, limit: number): string[] {
   } else {
     tokens.push(
       ...cleaned
-        .toLowerCase()
         .split(/[^a-z0-9]+/)
         .filter(Boolean),
     );
@@ -879,7 +976,7 @@ async function it_transcribePcmWithChunks(
         parts.push(part);
         onProgress?.(idx + 1, chunks.length);
       }
-      return parts.join("");
+      return parts.join(" ").replace(/\s+/g, " ").trim();
     } catch (err) {
       lastError = err;
       if (it_isBaiduContentTooLong(err) && chunkSec > 5) {
@@ -1082,6 +1179,11 @@ export async function it_runAnalysis(
   deps: ItAnalyzeDeps,
   request: ItAnalyzeRequest,
 ): Promise<ItAnalyzeResponse> {
+  const ensureNotAborted = () => {
+    if (deps.abortSignal?.aborted) {
+      throw new Error("分析已停止");
+    }
+  };
   const reportProgress = (
     step: ItWorkflowStep,
     progress: number,
@@ -1103,9 +1205,70 @@ export async function it_runAnalysis(
   if (!questionText && !questionList.length) {
     throw new Error("请先填写题干或导入题干文件。");
   }
+  ensureNotAborted();
+
+  const workspaceCfg = deps.skillConfig.workspace ?? {};
+  const retrievalCfg = deps.skillConfig.retrieval ?? {};
+  const retrievalEnabled = retrievalCfg.enabled !== false;
+  const retrievalMode = String(retrievalCfg.mode || "vector");
+  const retrievalLabel = retrievalMode === "keyword" ? "词面" : "向量";
+  const cacheRoot = deps.context.globalStorageUri?.fsPath;
+  const corpusCacheMb = Number(
+    retrievalCfg.corpus_cache_mb ?? retrievalCfg.corpus_cache_max_mb ?? 25,
+  );
+  const corpusCacheBytes = Number.isFinite(corpusCacheMb)
+    ? Math.max(0, corpusCacheMb) * 1024 * 1024
+    : undefined;
+  let corpusPromise: Promise<{
+    corpus: ItCorpusItem[];
+    sourceCount: number;
+    scanElapsedSec: string;
+  }> | null = null;
+  if (retrievalEnabled) {
+    const notesStart = Date.now();
+    const skipMtimeCheck = deps.corpusDirty === false;
+    reportProgress(
+      "notes",
+      5,
+      `${retrievalLabel}语料扫描 5% · 本地${skipMtimeCheck ? "（复用缓存）" : ""}`,
+      "running",
+    );
+    corpusPromise = it_buildCorpusAsync(
+      {
+        notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
+        prompts: path.join(
+          deps.workspaceRoot,
+          workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
+        ),
+        rubrics: path.join(
+          deps.workspaceRoot,
+          workspaceCfg.rubrics_dir || "inputs/rubrics",
+        ),
+        knowledge: path.join(
+          deps.workspaceRoot,
+          workspaceCfg.knowledge_dir || "inputs/knowledge",
+        ),
+        examples: path.join(
+          deps.workspaceRoot,
+          workspaceCfg.examples_dir || "inputs/examples",
+        ),
+      },
+      {
+        cacheDir: cacheRoot,
+        maxCacheBytes: corpusCacheBytes,
+        skipMtimeCheck,
+      },
+    ).then((corpus) => {
+      const scanElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
+      const sourceCount = new Set(corpus.map((item) => item.source)).size;
+      return { corpus, sourceCount, scanElapsedSec };
+    });
+  }
 
   const asrCfg = envConfig.asr ?? {};
   const transcript = await it_transcribeAudio(request, asrCfg, reportProgress);
+  ensureNotAborted();
+  deps.onPartial?.({ transcript });
 
   reportProgress("acoustic", 20, "声学分析 20% · 本地", "running");
   const acoustic =
@@ -1127,6 +1290,8 @@ export async function it_runAnalysis(
           snrDb: undefined,
         };
   reportProgress("acoustic", 100, "声学分析 100% · 本地", "success");
+  ensureNotAborted();
+  deps.onPartial?.({ acoustic });
 
   let detailedTranscript: string | undefined = undefined;
   let audioSegments = undefined;
@@ -1138,9 +1303,13 @@ export async function it_runAnalysis(
     );
     detailedTranscript = detailed.detailedTranscript;
     audioSegments = detailed.segments;
+    if (detailedTranscript) {
+      deps.onPartial?.({ detailedTranscript });
+    }
   }
 
   let questionTimings: ItQuestionTiming[] = [];
+  let questionTimingNote: string | undefined = undefined;
   let questionAnswers: Array<{ question: string; answer: string }> | undefined =
     undefined;
   let llmTimingAttempted = false;
@@ -1156,25 +1325,49 @@ export async function it_runAnalysis(
       if (splitAnswers) {
         questionAnswers = splitAnswers;
         const alignedTimings: ItQuestionTiming[] = [];
+        let alignedCount = 0;
+        let missingAlignment = false;
         for (let idx = 0; idx < splitAnswers.length; idx += 1) {
-          const aligned = it_alignAnswerToSegments(
-            splitAnswers[idx].answer,
-            audioSegments,
-          );
-          if (!aligned) {
-            alignedTimings.length = 0;
-            break;
+          const answerText = splitAnswers[idx].answer.trim();
+          if (!answerText) {
+            continue;
           }
-          alignedTimings.push({
+          const aligned = it_alignAnswerToSegments(answerText, audioSegments);
+          if (!aligned) {
+            missingAlignment = true;
+            continue;
+          }
+          alignedTimings[idx] = {
             question: splitAnswers[idx].question,
             startSec: aligned.startSec,
             endSec: aligned.endSec,
             durationSec: Math.max(0, aligned.endSec - aligned.startSec),
             note: "LLM逐题对齐",
-          });
+          };
+          alignedCount += 1;
         }
-        if (alignedTimings.length === questionList.length) {
+        if (alignedCount) {
           questionTimings = alignedTimings;
+        }
+        if (missingAlignment) {
+          const assigned = await it_assignSegmentsWithLlm(
+            llmConfig,
+            questionList,
+            audioSegments,
+          );
+          if (assigned) {
+            questionTimings = assigned.timings;
+            questionAnswers = questionAnswers
+              ? questionAnswers.map((item, idx) => ({
+                  question: item.question,
+                  answer: item.answer.trim()
+                    ? item.answer
+                    : assigned.answers[idx]?.answer || "",
+                }))
+              : assigned.answers;
+          } else if (!questionTimings.length) {
+            llmTimingFailed = true;
+          }
         }
       }
       if (!questionTimings.length) {
@@ -1202,14 +1395,8 @@ export async function it_runAnalysis(
   } else if (questionList.length === 1 && !questionAnswers) {
     questionAnswers = [{ question: questionList[0], answer: transcript }];
   }
-  if (!questionTimings.length && questionList.length) {
-    questionTimings = questionList.map((q) => ({
-      question: q,
-      startSec: 0,
-      endSec: 0,
-      durationSec: 0,
-      note: "LLM时间计算失败",
-    }));
+  if (!questionTimings.length && questionList.length && llmTimingFailed) {
+    questionTimingNote = "无法计算（LLM分段失败）";
   }
   if (!questionAnswers && questionList.length) {
     questionAnswers = questionList.map((q) => ({
@@ -1217,51 +1404,49 @@ export async function it_runAnalysis(
       answer: "",
     }));
   }
+  if (questionTimings.length || questionTimingNote) {
+    deps.onPartial?.({
+      questionTimings: questionTimings.length ? questionTimings : undefined,
+      questionTimingNote,
+    });
+  }
 
   let notes: ItAnalyzeResponse["notes"] = [];
   let notesByQuestion: ItNoteHit[][] = [];
-  const retrievalEnabled = deps.skillConfig.retrieval?.enabled !== false;
   if (!retrievalEnabled) {
     reportProgress("notes", 100, "笔记检索 已关闭 · 本地", "success");
   } else {
-    const workspaceCfg = deps.skillConfig.workspace ?? {};
+    let corpus: ItCorpusItem[] = [];
+    let sourceCount = 0;
+    let scanElapsedSec = "0.0";
+    let notesError: string | undefined;
+    let notesErrorStage: "load" | "retrieve" | undefined;
+    if (corpusPromise) {
+      try {
+        const result = await corpusPromise;
+        corpus = result.corpus;
+        sourceCount = result.sourceCount;
+        scanElapsedSec = result.scanElapsedSec;
+        reportProgress(
+          "notes",
+          40,
+          `笔记加载 40%：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s · 本地`,
+          "running",
+        );
+      } catch (err) {
+        notesError = err instanceof Error ? err.message : String(err);
+        notesErrorStage = "load";
+      }
+    }
+    if (notesError) {
+      reportProgress(
+        "notes",
+        100,
+        `笔记加载失败：${notesError}`,
+        "error",
+      );
+    }
     const notesStart = Date.now();
-    const retrievalMode = String(deps.skillConfig.retrieval?.mode || "vector");
-    const retrievalLabel = retrievalMode === "keyword" ? "词面" : "向量";
-    reportProgress(
-      "notes",
-      10,
-      `${retrievalLabel}检索/文件扫描中 · 本地`,
-      "running",
-    );
-    const corpus = await it_buildCorpusAsync({
-      notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
-      prompts: path.join(
-        deps.workspaceRoot,
-        workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
-      ),
-      rubrics: path.join(
-        deps.workspaceRoot,
-        workspaceCfg.rubrics_dir || "inputs/rubrics",
-      ),
-      knowledge: path.join(
-        deps.workspaceRoot,
-        workspaceCfg.knowledge_dir || "inputs/knowledge",
-      ),
-      examples: path.join(
-        deps.workspaceRoot,
-        workspaceCfg.examples_dir || "inputs/examples",
-      ),
-    });
-    const scanElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
-    const sourceCount = new Set(corpus.map((item) => item.source)).size;
-    reportProgress(
-      "notes",
-      60,
-      `笔记加载：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s · 本地`,
-      "running",
-    );
-    const retrievalCfg = deps.skillConfig.retrieval ?? {};
     const vectorCfg = retrievalCfg.vector ?? {};
     const providerProfiles = deps.skillConfig.providers ?? {};
     const embeddingProvider =
@@ -1280,10 +1465,14 @@ export async function it_runAnalysis(
     };
     const notesTopK = Number(retrievalCfg.top_k ?? 5);
     const notesMinScore = Number(retrievalCfg.min_score ?? 0.2);
-    const cacheRoot = deps.context.globalStorageUri?.fsPath;
     const notesCacheDir = cacheRoot
       ? path.join(cacheRoot, "embedding_cache", it_hashText(deps.workspaceRoot))
       : undefined;
+    const queryCacheSize = Number(retrievalCfg.query_cache_size ?? 200);
+    const maxConcurrency = Number(retrievalCfg.max_concurrency ?? 3);
+    const queryCacheKey = it_hashText(
+      `${deps.workspaceRoot}:${sourceCount}:${corpus.length}`,
+    );
     let retrievalAnswers = questionAnswers;
     if (
       (!retrievalAnswers || retrievalAnswers.length !== questionList.length) &&
@@ -1292,56 +1481,41 @@ export async function it_runAnalysis(
     ) {
       retrievalAnswers = it_collectAnswersFromSegments(questionTimings, audioSegments);
     }
-    let notesError: string | undefined;
-    try {
-      const questionsForNotes = questionList.length
-        ? questionList
-        : questionText
-          ? [questionText]
-          : [];
-      const resolvedAnswers =
-        retrievalAnswers && retrievalAnswers.length === questionsForNotes.length
-          ? retrievalAnswers
-          : questionsForNotes.map((question) => ({ question, answer: "" }));
-      if (questionsForNotes.length) {
-        const noteTasks = questionsForNotes.map((question, idx) => {
-          const answer = resolvedAnswers[idx]?.answer || "";
-          const queries = it_buildRetrievalQueries({
-            questionText: question,
-            questionList: [question],
-            transcript: answer || transcript,
-            answers: answer ? [{ question, answer }] : undefined,
-          });
-          const queryList = queries.length ? queries : [question];
-          return it_retrieveNotesMulti(queryList, corpus, {
-            mode: retrievalMode === "keyword" ? "keyword" : "vector",
-            topK: notesTopK,
-            minScore: notesMinScore,
-            cacheDir: notesCacheDir,
-            vector: {
-              provider: resolvedVector.provider || "",
-              apiKey: resolvedVector.api_key || "",
-              baseUrl: resolvedVector.base_url || "",
-              model: resolvedVector.model || "",
-              timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
-              maxRetries: Number(resolvedVector.max_retries ?? 1),
-              batchSize: Number(resolvedVector.batch_size ?? 16),
-              queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
-            },
-          });
-        });
-        notesByQuestion = await Promise.all(noteTasks);
-        notes = it_mergeNoteHits(notesByQuestion, notesTopK);
-      } else {
-        const fallbackQuery = transcript.trim()
-          ? [transcript.trim().slice(0, 240)]
-          : [];
-        notes = fallbackQuery.length
-          ? await it_retrieveNotesMulti(fallbackQuery, corpus, {
+    if (!notesError) {
+      try {
+        reportProgress(
+          "notes",
+          70,
+          `${retrievalLabel}检索 70% · 本地`,
+          "running",
+        );
+        const questionsForNotes = questionList.length
+          ? questionList
+          : questionText
+            ? [questionText]
+            : [];
+        const resolvedAnswers =
+          retrievalAnswers && retrievalAnswers.length === questionsForNotes.length
+            ? retrievalAnswers
+            : questionsForNotes.map((question) => ({ question, answer: "" }));
+        if (questionsForNotes.length) {
+          const noteTasks = questionsForNotes.map((question, idx) => {
+            const answer = resolvedAnswers[idx]?.answer || "";
+            const queries = it_buildRetrievalQueries({
+              questionText: question,
+              questionList: [question],
+              transcript: answer || transcript,
+              answers: answer ? [{ question, answer }] : undefined,
+            });
+            const queryList = queries.length ? queries : [question];
+            return it_retrieveNotesMulti(queryList, corpus, {
               mode: retrievalMode === "keyword" ? "keyword" : "vector",
               topK: notesTopK,
               minScore: notesMinScore,
               cacheDir: notesCacheDir,
+            cacheKey: queryCacheKey,
+            queryCacheSize,
+            maxConcurrency,
               vector: {
                 provider: resolvedVector.provider || "",
                 apiKey: resolvedVector.api_key || "",
@@ -1352,22 +1526,53 @@ export async function it_runAnalysis(
                 batchSize: Number(resolvedVector.batch_size ?? 16),
                 queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
               },
-            })
-          : [];
+            });
+          });
+          notesByQuestion = await Promise.all(noteTasks);
+          notes = it_mergeNoteHits(notesByQuestion, notesTopK);
+        } else {
+          const fallbackQuery = transcript.trim()
+            ? [transcript.trim().slice(0, 240)]
+            : [];
+          notes = fallbackQuery.length
+            ? await it_retrieveNotesMulti(fallbackQuery, corpus, {
+                mode: retrievalMode === "keyword" ? "keyword" : "vector",
+                topK: notesTopK,
+                minScore: notesMinScore,
+                cacheDir: notesCacheDir,
+            cacheKey: queryCacheKey,
+            queryCacheSize,
+            maxConcurrency,
+                vector: {
+                  provider: resolvedVector.provider || "",
+                  apiKey: resolvedVector.api_key || "",
+                  baseUrl: resolvedVector.base_url || "",
+                  model: resolvedVector.model || "",
+                  timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
+                  maxRetries: Number(resolvedVector.max_retries ?? 1),
+                  batchSize: Number(resolvedVector.batch_size ?? 16),
+                  queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
+                },
+              })
+            : [];
+        }
+      } catch (err) {
+        notesError = err instanceof Error ? err.message : String(err);
+        notesErrorStage = "retrieve";
       }
-    } catch (err) {
-      notesError = err instanceof Error ? err.message : String(err);
     }
     const notesElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
     const slowHint =
       sourceCount > 200 ? "文件较多，建议精简 inputs 目录" : undefined;
     const notesMessage = notesError
-      ? `向量检索失败：${notesError}`
-      : `${retrievalLabel}检索/扫描 ${sourceCount} 份，过滤 ${corpus.length} 段，命中 ${notes.length} 条 · ${notesElapsedSec}s · 本地${
+      ? `${notesErrorStage === "load" ? "笔记加载失败" : "向量检索失败"}：${notesError}`
+      : `${retrievalLabel}检索 100%：${sourceCount}份 · ${corpus.length}段 · 命中 ${notes.length} 条 · ${notesElapsedSec}s · 本地${
           slowHint ? `，${slowHint}` : ""
         }`;
     reportProgress("notes", 100, notesMessage, notesError ? "error" : "success");
   }
+  deps.onPartial?.({ notes });
+  ensureNotAborted();
   const topicTitle = it_deriveTopicTitle(
     questionText,
     questionList,
@@ -1479,6 +1684,8 @@ export async function it_runAnalysis(
     timePlan,
   });
   reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
+  deps.onPartial?.({ evaluation });
+  ensureNotAborted();
 
   const response: ItAnalyzeResponse = {
     transcript,
@@ -1488,6 +1695,7 @@ export async function it_runAnalysis(
     notes,
     audioSegments,
     questionTimings,
+    questionTimingNote,
     reportPath,
     topicDir,
     audioPath: storedAudioPath,

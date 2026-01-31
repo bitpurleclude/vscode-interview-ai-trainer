@@ -76,7 +76,7 @@ function it_extractVolcText(data: ItVolcAsrResponse | null | undefined): string 
       .map((item) => String(item).trim())
       .filter(Boolean);
     if (parts.length) {
-      return parts.join("");
+      return parts.join(" ").replace(/\s+/g, " ").trim();
     }
   }
   return "";

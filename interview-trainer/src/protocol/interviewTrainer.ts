@@ -35,6 +35,13 @@ export interface ItState {
   recordingState: ItRecordingState;
   steps: ItStepState[];
   embeddingWarmup?: ItEmbeddingWarmupState;
+  draftTranscript?: string;
+  draftDetailedTranscript?: string;
+  draftAcoustic?: ItAcousticMetrics;
+  draftNotes?: ItNoteHit[];
+  draftQuestionTimings?: ItQuestionTiming[];
+  draftQuestionTimingNote?: string;
+  draftEvaluation?: ItEvaluation;
   lastError?: ItUserError;
 }
 
@@ -127,6 +134,7 @@ export interface ItAnalyzeResponse {
   notes: ItNoteHit[];
   audioSegments?: ItAudioSegment[];
   questionTimings?: ItQuestionTiming[];
+  questionTimingNote?: string;
   reportPath: string;
   topicDir: string;
   audioPath: string;
@@ -192,6 +200,14 @@ export interface ItConfigSnapshot {
       batchSize: number;
       queryMaxChars: number;
     };
+  };
+  retrievalCache?: {
+    cacheRoot: string;
+    corpusCacheDir: string;
+    embeddingCacheDir: string;
+    corpusCacheMb: number;
+    queryCacheSize: number;
+    maxConcurrency: number;
   };
   workspaceDirs: {
     notesDir: string;

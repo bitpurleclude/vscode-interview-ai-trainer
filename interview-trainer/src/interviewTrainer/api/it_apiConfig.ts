@@ -28,8 +28,12 @@ const IT_DEFAULT_FILES = ["api_config.yaml", "skill_config.yaml", "app_config.ya
 const IT_PROVIDER_DIR = "providers";
 
 function it_readYamlFile(filePath: string): any {
-  const raw = fs.readFileSync(filePath, "utf-8");
-  return YAML.parse(raw) ?? {};
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return YAML.parse(raw) ?? {};
+  } catch {
+    return {};
+  }
 }
 
 function it_writeYamlFile(filePath: string, payload: any): void {

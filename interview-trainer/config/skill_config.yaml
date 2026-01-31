@@ -23,6 +23,9 @@ retrieval:
   mode: vector
   top_k: 5
   min_score: 0.2
+  max_concurrency: 3
+  query_cache_size: 200
+  corpus_cache_mb: 25
   embedding_provider: volc_doubao
   vector:
     provider: volc_doubao
