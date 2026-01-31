@@ -36,6 +36,17 @@
 - ⏳ 中 - Embedding 响应数组缺失部分向量时 `it_parseEmbeddingResponse` 会返回部分结果且不校验数量，导致向量与输入错位。`src/interviewTrainer/api/it_embedding.ts:66`
 - ⏳ 中 - 多题场景 `it_buildQuestionTimingsFromSegments` 只要有一个题号标记缺失就返回空数组，放弃已找到的起点，导致用时统计被整体放弃。`src/interviewTrainer/core/it_analyze.ts:122`
 - ⏳ 中 - LLM/Embedding 请求重试 `for (attempt <= cfg.maxRetries)` 未设默认值，`maxRetries` 未配置时循环不执行而直接失败。`src/interviewTrainer/api/it_llm.ts:38`, `src/interviewTrainer/api/it_embedding.ts:147`
+- ⏳ 中 - 题目解析请求异常未捕获，`parseQuestionsFromText` 抛错会导致 `isProcessing` 无法复位，界面卡在“处理中”。`webview/src/InterviewTrainer.tsx:900`, `webview/src/InterviewTrainer.tsx:928`
+- ⏳ 中 - 导入音频无文件体积限制，直接整文件读入内存并走 `OfflineAudioContext` 渲染，大文件易导致 UI 卡死或内存暴涨。`webview/src/InterviewTrainer.tsx:765`
+- ⏳ 中 - 嵌入预热在录音/分析中直接 `return` 且不重试，忙碌期触发的 warmup 可能被永久跳过。`src/interviewTrainer/InterviewTrainerExtension.ts:410`
+- ⏳ 中 - `max_chunk_sec` 未校验，若配置为 0/负数会退化为 1 字节分片，造成极端分片数量与 ASR 调用风暴。`src/interviewTrainer/core/it_analyze.ts:109`
+- ⏳ 中 - PCM 分片先一次性构建所有 base64 块，长音频会在内存中同时保留全部分片，存在内存峰值风险。`src/interviewTrainer/core/it_analyze.ts:109`
+- ⏳ 中 - 多题检索时任一查询失败会让 `Promise.all` 整体拒绝，导致所有检索结果丢失且无法降级。`src/interviewTrainer/core/it_notes.ts:959`
+- ⏳ 中 - 向量检索请求出错会直接抛出并中断分析流程，缺少“返回空检索/降级词面检索”的兜底。`src/interviewTrainer/core/it_notes.ts:827`
+- ⏳ 中 - Embedding 内存缓存无上限策略，长期运行或语料规模扩大时可能造成内存持续增长。`src/interviewTrainer/core/it_notes.ts:43`
+- ⏳ 中 - 火山标准版轮询在 `status=success` 但文本为空时直接返回空串，后续分析按“成功转写”继续，易产出空报告。`src/interviewTrainer/api/it_volc_asr.ts:217`
+- ⏳ 中 - `timeoutSec` 未做有效数值校验，配置为 0/NaN 时会传入 axios 导致立即失败或失去超时保护。`src/interviewTrainer/api/it_llm.ts:42`, `src/interviewTrainer/api/it_embedding.ts:151`, `src/interviewTrainer/api/it_qianfan.ts:47`
+- ⏳ 中 - `attempts.json` 采用读-改-写且无锁，多次并发分析/保存时存在覆盖丢失记录的竞争条件。`src/interviewTrainer/storage/it_sessions.ts:252`
 
 ### 低
 - ⏳ 低 - Webview 样式多处使用 `color-mix(...)`，旧版 VS Code/Chromium 不支持时背景与按钮高亮可能失效。`webview/src/styles.css:9`
@@ -55,6 +66,15 @@
 - ⏳ 低 - 话题相似度使用逐字符位置对比，前缀相同但主题不同也可能被合并，产生错用历史目录的问题。`src/interviewTrainer/storage/it_sessions.ts:33`
 - ⏳ 低 - 录音停止若未生成文件直接抛错并提前退出，未清理临时目录，长期使用会堆积垃圾文件。`src/interviewTrainer/InterviewTrainerExtension.ts:1837`
 - ⏳ 低 - JSON 候选提取未忽略字符串内花括号，`it_extractJsonCandidates` 可能截断有效 JSON 导致解析失败。`src/interviewTrainer/core/it_evaluation.ts:110`
+- ⏳ 低 - 新一轮分析开始未清空 `analysisResult`，处理中仍展示上次结果，易造成误判。`webview/src/InterviewTrainer.tsx:900`
+- ⏳ 低 - 打开报告未检查返回状态，失败时无提示，用户无法感知打开失败原因。`webview/src/InterviewTrainer.tsx:999`
+- ⏳ 低 - 加载历史列表未处理失败分支，请求异常时无反馈且界面保持旧列表。`webview/src/InterviewTrainer.tsx:1004`
+- ⏳ 低 - 音频转换 fallback 使用默认超时（60s），大文件转换可能超时后仅提示“浏览器无法解码”，掩盖真实原因。`webview/src/InterviewTrainer.tsx:818`
+- ⏳ 低 - `it/convertAudioToPcm` 仅在成功路径清理临时目录，失败时残留临时文件夹。`src/interviewTrainer/InterviewTrainerExtension.ts:1502`
+- ⏳ 低 - 检索缓存 key 对查询文本仅取前 300 字符，长文本场景易发生缓存碰撞导致命中错误。`src/interviewTrainer/core/it_notes.ts:103`
+- ⏳ 低 - 题目解析 JSON 提取仅取首尾 `{}`，遇到代码块/多段 JSON 时容易解析失败并回退。`src/interviewTrainer/core/it_questionParser.ts:61`
+- ⏳ 低 - 千帆聊天未校验 `baseUrl` 是否为空，空值会生成 `/chat/completions` 相对路径，报错信息不直观。`src/interviewTrainer/api/it_qianfan.ts:17`
+- ⏳ 低 - `it_nextAttemptIndex` 仅按 `##` 标题计数，报告正文出现同级标题会导致尝试次数误增。`src/interviewTrainer/storage/it_sessions.ts:278`
 
 ## 已解决问题（✅）
 
@@ -108,6 +128,26 @@
 - 中 - 多题场景 `it_buildQuestionTimingsFromSegments` 只要有一个题号标记缺失就返回空数组，放弃已找到的起点，导致用时统计被整体放弃。`src/interviewTrainer/core/it_analyze.ts:122`
 - 中 - LLM/Embedding 请求重试 `for (attempt <= cfg.maxRetries)` 未设默认值，`maxRetries` 未配置时循环不执行而直接失败。`src/interviewTrainer/api/it_llm.ts:38`, `src/interviewTrainer/api/it_embedding.ts:147`
 - 低 - JSON 候选提取未忽略字符串内花括号，`it_extractJsonCandidates` 可能截断有效 JSON 导致解析失败。`src/interviewTrainer/core/it_evaluation.ts:110`
+- 中 - 题目解析请求异常未捕获，`parseQuestionsFromText` 抛错会导致 `isProcessing` 无法复位，界面卡在“处理中”。`webview/src/InterviewTrainer.tsx:900`, `webview/src/InterviewTrainer.tsx:928`
+- 中 - 导入音频无文件体积限制，直接整文件读入内存并走 `OfflineAudioContext` 渲染，大文件易导致 UI 卡死或内存暴涨。`webview/src/InterviewTrainer.tsx:765`
+- 中 - 嵌入预热在录音/分析中直接 `return` 且不重试，忙碌期触发的 warmup 可能被永久跳过。`src/interviewTrainer/InterviewTrainerExtension.ts:410`
+- 中 - `max_chunk_sec` 未校验，若配置为 0/负数会退化为 1 字节分片，造成极端分片数量与 ASR 调用风暴。`src/interviewTrainer/core/it_analyze.ts:109`
+- 中 - PCM 分片先一次性构建所有 base64 块，长音频会在内存中同时保留全部分片，存在内存峰值风险。`src/interviewTrainer/core/it_analyze.ts:109`
+- 中 - 多题检索时任一查询失败会让 `Promise.all` 整体拒绝，导致所有检索结果丢失且无法降级。`src/interviewTrainer/core/it_notes.ts:959`
+- 中 - 向量检索请求出错会直接抛出并中断分析流程，缺少“返回空检索/降级词面检索”的兜底。`src/interviewTrainer/core/it_notes.ts:827`
+- 中 - Embedding 内存缓存无上限策略，长期运行或语料规模扩大时可能造成内存持续增长。`src/interviewTrainer/core/it_notes.ts:43`
+- 中 - 火山标准版轮询在 `status=success` 但文本为空时直接返回空串，后续分析按“成功转写”继续，易产出空报告。`src/interviewTrainer/api/it_volc_asr.ts:217`
+- 中 - `timeoutSec` 未做有效数值校验，配置为 0/NaN 时会传入 axios 导致立即失败或失去超时保护。`src/interviewTrainer/api/it_llm.ts:42`, `src/interviewTrainer/api/it_embedding.ts:151`, `src/interviewTrainer/api/it_qianfan.ts:47`
+- 中 - `attempts.json` 采用读-改-写且无锁，多次并发分析/保存时存在覆盖丢失记录的竞争条件。`src/interviewTrainer/storage/it_sessions.ts:252`
+- 低 - 新一轮分析开始未清空 `analysisResult`，处理中仍展示上次结果，易造成误判。`webview/src/InterviewTrainer.tsx:900`
+- 低 - 打开报告未检查返回状态，失败时无提示，用户无法感知打开失败原因。`webview/src/InterviewTrainer.tsx:999`
+- 低 - 加载历史列表未处理失败分支，请求异常时无反馈且界面保持旧列表。`webview/src/InterviewTrainer.tsx:1004`
+- 低 - 音频转换 fallback 使用默认超时（60s），大文件转换可能超时后仅提示“浏览器无法解码”，掩盖真实原因。`webview/src/InterviewTrainer.tsx:818`
+- 低 - `it/convertAudioToPcm` 仅在成功路径清理临时目录，失败时残留临时文件夹。`src/interviewTrainer/InterviewTrainerExtension.ts:1502`
+- 低 - 检索缓存 key 对查询文本仅取前 300 字符，长文本场景易发生缓存碰撞导致命中错误。`src/interviewTrainer/core/it_notes.ts:103`
+- 低 - 题目解析 JSON 提取仅取首尾 `{}`，遇到代码块/多段 JSON 时容易解析失败并回退。`src/interviewTrainer/core/it_questionParser.ts:61`
+- 低 - 千帆聊天未校验 `baseUrl` 是否为空，空值会生成 `/chat/completions` 相对路径，报错信息不直观。`src/interviewTrainer/api/it_qianfan.ts:17`
+- 低 - `it_nextAttemptIndex` 仅按 `##` 标题计数，报告正文出现同级标题会导致尝试次数误增。`src/interviewTrainer/storage/it_sessions.ts:278`
 
 ## 以后审查格式模板
 - ⏳ <严重程度> - <问题描述> `path:line`
