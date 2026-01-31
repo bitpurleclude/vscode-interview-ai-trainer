@@ -192,3 +192,33 @@
 
 ## 追加（第33轮）
 - 低：异常分支使用 `\"?????\"` 字符串作为判断/提示，明显为乱码占位，实际错误难以触发且提示不可读。`src/interviewTrainer/InterviewTrainerExtension.ts:1970`
+
+## 追加（第34轮）
+- 中等：Webview 分析请求超时仅返回错误对象，不会通知后端取消；长任务仍会继续并写入报告，UI 显示失败但文件已生成。`webview/src/messenger.ts:41`, `webview/src/InterviewTrainer.tsx:957`
+
+## 追加（第35轮）
+- 中等：后端未限制并发分析请求，超时后用户重复发起会同时运行多个分析，可能竞争写入同一主题目录。`src/interviewTrainer/InterviewTrainerExtension.ts:1932`
+
+## 追加（第36轮）
+- 中等：`it_buildCorpusAsync` 在 `skipMtimeCheck` 分支直接读取缓存文件，未按 `maxCacheBytes` 做大小保护，可能读入超大缓存导致内存飙升。`src/interviewTrainer/core/it_notes.ts:200`
+
+## 追加（第37轮）
+- 低：历史记录回溯报告路径时，找不到目标文件会选取最新 `.md` 作为报告，若目录内有其他笔记会打开错误文件。`src/interviewTrainer/storage/it_history.ts:28`
+
+## 追加（第38轮）
+- 低：话题相似度使用逐字符位置对比，前缀相同但主题不同也可能被合并，产生错用历史目录的问题。`src/interviewTrainer/storage/it_sessions.ts:33`
+
+## 追加（第39轮）
+- 中等：主题目录基于截断 slug，当同日出现相同前缀题目时会复用目录，导致两题记录混在一起。`src/interviewTrainer/storage/it_sessions.ts:192`
+
+## 追加（第40轮）
+- 中等：逐题检索与评价使用 `Promise.all` 并发请求，多题场景可能集中触发 Embedding/LLM 限流，导致整体失败率升高。`src/interviewTrainer/core/it_analyze.ts:1504`, `src/interviewTrainer/core/it_analyze.ts:1661`
+
+## 追加（第41轮）
+- 中等：LLM 分段/拆分的 JSON 提取仅截取首尾花括号，遇到模型输出多段 JSON 或文本内含括号时易解析失败。`src/interviewTrainer/core/it_analyze.ts:350`
+
+## 追加（第42轮）
+- 低：录音停止若未生成文件直接抛错并提前退出，未清理临时目录，长期使用会堆积垃圾文件。`src/interviewTrainer/InterviewTrainerExtension.ts:1837`
+
+## 追加（第43轮）
+- 中等：火山 ASR flash 模式不分片上传，长音频仍走单次请求，可能超出服务端限制并导致转写失败。`src/interviewTrainer/core/it_analyze.ts:1011`
