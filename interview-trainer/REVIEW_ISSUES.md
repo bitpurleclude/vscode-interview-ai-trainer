@@ -162,3 +162,33 @@
 
 ## 追加（第23轮）
 - 低：导入音频仅取 `getChannelData(0)`，立体声右声道被丢弃，可能遗漏有效语音内容。`webview/src/InterviewTrainer.tsx:797`
+
+## 追加（第24轮）
+- 中等：取消分析仅设置 abort 标记，但 ASR 分片循环/LLM 调用未检查，取消后仍可能继续转写并写入报告。`src/interviewTrainer/core/it_analyze.ts:945`, `src/interviewTrainer/core/it_analyze.ts:1182`
+
+## 追加（第25轮）
+- 中等：Baidu ASR 仅在 PCM 时分片；WAV/M4A 直接整段发送，大文件易触发长度限制导致失败。`src/interviewTrainer/core/it_analyze.ts:1074`
+
+## 追加（第26轮）
+- 低：题目解析启发式仅识别“第N题/问：”格式，常见的“1.”、“一、”或“第1题”无冒号会被识别为无题目。`src/interviewTrainer/core/it_questionParser.ts:23`, `src/interviewTrainer/core/it_questionParser.ts:24`
+
+## 追加（第27轮）
+- 低：Markdown 分段仅识别 `##/###` 标题，`#` 一级标题与更深层级被忽略，导致整篇合并为大块、检索粒度变差。`src/interviewTrainer/core/it_notes.ts:183`
+
+## 追加（第28轮）
+- 中等：单段落超长时 `it_splitByParagraphs` 不再继续切分，可能生成超过上限的块，向量检索易超出模型输入限制。`src/interviewTrainer/core/it_notes.ts:156`
+
+## 追加（第29轮）
+- 低：按时间段取答案时采用“重叠即归属”，跨题边界的语音片段会被多个题目重复收录，影响逐题评估。`src/interviewTrainer/core/it_analyze.ts:635`
+
+## 追加（第30轮）
+- 低：LLM 分段映射未校验 questionIndex 范围，越界值被静默丢弃，可能出现已回答但结果为空。`src/interviewTrainer/core/it_analyze.ts:415`
+
+## 追加（第31轮）
+- 低：Embedding 缓存 key 直接使用 baseUrl 原串，尾部 `/` 或大小写差异会造成缓存重复/命中率下降。`src/interviewTrainer/core/it_notes.ts:267`
+
+## 追加（第32轮）
+- 中等：检索 answers 只在数量完全匹配时生效，LLM 仅回答部分题目时会丢弃已识别答案，检索查询退化为纯题干。`src/interviewTrainer/core/it_analyze.ts:1476`
+
+## 追加（第33轮）
+- 低：异常分支使用 `\"?????\"` 字符串作为判断/提示，明显为乱码占位，实际错误难以触发且提示不可读。`src/interviewTrainer/InterviewTrainerExtension.ts:1970`
