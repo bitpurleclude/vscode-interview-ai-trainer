@@ -132,3 +132,33 @@
 
 ## 追加（第13轮）
 - 低：火山 ASR 多句返回使用 `parts.join("")` 无分隔符，英文/数字容易粘连影响可读性与后续检索。`src/interviewTrainer/api/it_volc_asr.ts:79`
+
+## 追加（第14轮）
+- 低：`questionList` 仅过滤非空但未 trim，前后空格会导致后续按题目匹配的检索/映射失效。`src/interviewTrainer/core/it_analyze.ts:1204`
+
+## 追加（第15轮）
+- 中等：检索查询缓存 key 只包含 workspaceRoot/sourceCount/corpus.length，内容变更但数量不变时会命中旧缓存，笔记命中可能过期。`src/interviewTrainer/core/it_analyze.ts:1473`
+
+## 追加（第16轮）
+- 中等：千帆 LLM baseUrl 无规范化，始终拼接 `/chat/completions`，当用户已配置完整路径时会重复拼接导致请求失败。`src/interviewTrainer/api/it_qianfan.ts:22`
+
+## 追加（第17轮）
+- 低：Webview `request` 超时只 resolve 错误对象而非 reject，且部分调用未检查 `status`（如取消/打开报告），会静默失败缺少提示。`webview/src/messenger.ts:41`, `webview/src/InterviewTrainer.tsx:993`, `webview/src/InterviewTrainer.tsx:1001`
+
+## 追加（第18轮）
+- 中等：火山引擎标准版轮询只要返回非空文本就直接结束，可能在状态未完成时提前返回导致转写不完整。`src/interviewTrainer/api/it_volc_asr.ts:215`
+
+## 追加（第19轮）
+- 低：`it_postWithRetries` 没有退避/延时，错误时会快速重试，易触发服务端限流或配额消耗。`src/interviewTrainer/api/it_volc_asr.ts:105`
+
+## 追加（第20轮）
+- 中等：`it_makeSlug` 在允许 Unicode 时仅替换非法字符，未处理结尾空格/点号及保留名，Windows 下可能生成无效文件名导致写入失败。`src/interviewTrainer/utils/it_text.ts:23`
+
+## 追加（第21轮）
+- 低：会话目录日期使用 `toISOString()`（UTC），本地跨时区/临界时刻可能归档到前/后一天。`src/interviewTrainer/storage/it_sessions.ts:194`
+
+## 追加（第22轮）
+- 中等：语料目录监听使用 `RelativePattern(workspaceRoot, path.join(normalized,...))`，若用户配置为绝对路径，pattern 可能失效导致语料更新不触发重建。`src/interviewTrainer/InterviewTrainerExtension.ts:283`
+
+## 追加（第23轮）
+- 低：导入音频仅取 `getChannelData(0)`，立体声右声道被丢弃，可能遗漏有效语音内容。`webview/src/InterviewTrainer.tsx:797`
