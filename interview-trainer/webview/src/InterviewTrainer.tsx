@@ -336,6 +336,10 @@ const InterviewTrainer: React.FC = () => {
   const [retrievalForm, setRetrievalForm] = useState({
     mode: "vector",
     topK: 5,
+    topKNotes: 5,
+    topKKnowledge: 5,
+    topKRubrics: 5,
+    topKExamples: 5,
     minScore: 0.2,
     vector: {
       provider: "volc_doubao",
@@ -455,6 +459,10 @@ const InterviewTrainer: React.FC = () => {
     setRetrievalForm({
       mode: retrieval.mode || "vector",
       topK: Number(retrieval.topK ?? 5),
+      topKNotes: Number(retrieval.topKNotes ?? retrieval.topK ?? 5),
+      topKKnowledge: Number(retrieval.topKKnowledge ?? retrieval.topK ?? 5),
+      topKRubrics: Number(retrieval.topKRubrics ?? retrieval.topK ?? 5),
+      topKExamples: Number(retrieval.topKExamples ?? retrieval.topK ?? 5),
       minScore: Number(retrieval.minScore ?? 0.2),
       vector: {
         provider: embeddingProvider,
@@ -1334,7 +1342,17 @@ const InterviewTrainer: React.FC = () => {
       );
     }
   };
-  const handleRetrievalFieldChange = (key: "mode" | "topK" | "minScore", value: any) => {
+  const handleRetrievalFieldChange = (
+    key:
+      | "mode"
+      | "topK"
+      | "topKNotes"
+      | "topKKnowledge"
+      | "topKRubrics"
+      | "topKExamples"
+      | "minScore",
+    value: any,
+  ) => {
     setRetrievalForm((prev) => ({
       ...prev,
       [key]: value,
@@ -1358,6 +1376,10 @@ const InterviewTrainer: React.FC = () => {
           enabled: config?.retrievalEnabled ?? true,
           mode: retrievalForm.mode,
           topK: Number(retrievalForm.topK),
+          topKNotes: Number(retrievalForm.topKNotes),
+          topKKnowledge: Number(retrievalForm.topKKnowledge),
+          topKRubrics: Number(retrievalForm.topKRubrics),
+          topKExamples: Number(retrievalForm.topKExamples),
           minScore: Number(retrievalForm.minScore),
           embeddingProvider: retrievalForm.vector.provider,
           vector: {
@@ -2728,6 +2750,50 @@ const InterviewTrainer: React.FC = () => {
                   disabled={uiLocked}
                   onChange={(event) =>
                     handleRetrievalFieldChange("minScore", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 80 }}>笔记TopK</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.topKNotes}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange("topKNotes", Number(event.target.value))
+                  }
+                />
+                <div style={{ minWidth: 90 }}>知识库TopK</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.topKKnowledge}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange("topKKnowledge", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 80 }}>评分标准TopK</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.topKRubrics}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange("topKRubrics", Number(event.target.value))
+                  }
+                />
+                <div style={{ minWidth: 90 }}>示例答案TopK</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.topKExamples}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange("topKExamples", Number(event.target.value))
                   }
                 />
               </div>

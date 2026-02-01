@@ -22,6 +22,10 @@ retrieval:
   enabled: true
   mode: vector
   top_k: 5
+  top_k_notes: 5
+  top_k_knowledge: 5
+  top_k_rubrics: 5
+  top_k_examples: 5
   min_score: 0.2
   max_concurrency: 3
   query_cache_size: 200

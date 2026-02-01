@@ -195,6 +195,10 @@ export interface ItConfigSnapshot {
   retrieval: {
     mode: string;
     topK: number;
+    topKNotes?: number;
+    topKKnowledge?: number;
+    topKRubrics?: number;
+    topKExamples?: number;
     minScore: number;
     embeddingProvider?: string;
     vector: {

@@ -762,6 +762,20 @@ function it_mergeNoteHits(lists: ItNoteHit[][], topK: number): ItNoteHit[] {
     .slice(0, Math.max(1, topK));
 }
 
+function it_mergeNoteHitsAll(lists: ItNoteHit[][]): ItNoteHit[] {
+  const merged = new Map<string, ItNoteHit>();
+  lists.forEach((hits) => {
+    hits.forEach((hit) => {
+      const key = `${hit.source}::${hit.snippet}`;
+      const existing = merged.get(key);
+      if (!existing || hit.score > existing.score) {
+        merged.set(key, hit);
+      }
+    });
+  });
+  return Array.from(merged.values()).sort((a, b) => b.score - a.score);
+}
+
 function it_mergeEvaluations(params: {
   topicTitle: string;
   questions: string[];
@@ -1579,6 +1593,10 @@ export async function it_runAnalysis(
       query_max_chars: Number(vectorCfg.query_max_chars ?? 1500),
     };
     const notesTopK = Number(retrievalCfg.top_k ?? 5);
+    const notesTopKNotes = Number(retrievalCfg.top_k_notes ?? notesTopK);
+    const notesTopKKnowledge = Number(retrievalCfg.top_k_knowledge ?? notesTopK);
+    const notesTopKRubrics = Number(retrievalCfg.top_k_rubrics ?? notesTopK);
+    const notesTopKExamples = Number(retrievalCfg.top_k_examples ?? notesTopK);
     const notesMinScore = Number(retrievalCfg.min_score ?? 0.2);
     const notesCacheDir = cacheRoot
       ? path.join(cacheRoot, "embedding_cache", it_hashText(deps.workspaceRoot))
@@ -1596,6 +1614,61 @@ export async function it_runAnalysis(
     ) {
       retrievalAnswers = it_collectAnswersFromSegments(questionTimings, audioSegments);
     }
+    const kindLabels: Record<string, string> = {
+      notes: "笔记",
+      knowledge: "知识库",
+      rubrics: "评分标准",
+      examples: "示例答案",
+    };
+    const corpusByKind = {
+      notes: corpus.filter((item) => item.kind === "notes"),
+      knowledge: corpus.filter(
+        (item) => item.kind === "knowledge" || item.kind === "prompts",
+      ),
+      rubrics: corpus.filter((item) => item.kind === "rubrics"),
+      examples: corpus.filter((item) => item.kind === "examples"),
+    };
+    const kindTopK = {
+      notes: notesTopKNotes,
+      knowledge: notesTopKKnowledge,
+      rubrics: notesTopKRubrics,
+      examples: notesTopKExamples,
+    };
+    const retrieveByKind = async (
+      kind: keyof typeof corpusByKind,
+      queryList: string[],
+    ): Promise<ItNoteHit[]> => {
+      const filtered = corpusByKind[kind];
+      const topK = kindTopK[kind];
+      if (!filtered.length || topK <= 0) {
+        return [];
+      }
+      const hits = await it_retrieveNotesMulti(queryList, filtered, {
+        mode: retrievalMode === "keyword" ? "keyword" : "vector",
+        topK,
+        minScore: notesMinScore,
+        cacheDir: notesCacheDir,
+        cacheKey: `${queryCacheKey}:${kind}`,
+        queryCacheSize,
+        maxConcurrency,
+        vector: {
+          provider: resolvedVector.provider || "",
+          apiKey: resolvedVector.api_key || "",
+          baseUrl: resolvedVector.base_url || "",
+          model: resolvedVector.model || "",
+          timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
+          maxRetries: Number(resolvedVector.max_retries ?? 1),
+          batchSize: Number(resolvedVector.batch_size ?? 16),
+          queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
+        },
+      });
+      const label = kindLabels[kind] || kind;
+      return hits.map((hit) => ({
+        ...hit,
+        source: `[${label}] ${hit.source}`,
+      }));
+    };
+
     if (!notesError) {
       try {
         reportProgress(
@@ -1639,58 +1712,36 @@ export async function it_runAnalysis(
               answers: answer ? [{ question, answer }] : undefined,
             });
             const queryList = queries.length ? queries : [question];
-            return it_retrieveNotesMulti(queryList, corpus, {
-              mode: retrievalMode === "keyword" ? "keyword" : "vector",
-              topK: notesTopK,
-              minScore: notesMinScore,
-              cacheDir: notesCacheDir,
-              cacheKey: queryCacheKey,
-              queryCacheSize,
-              maxConcurrency,
-              vector: {
-                provider: resolvedVector.provider || "",
-                apiKey: resolvedVector.api_key || "",
-                baseUrl: resolvedVector.base_url || "",
-                model: resolvedVector.model || "",
-                timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
-                maxRetries: Number(resolvedVector.max_retries ?? 1),
-                batchSize: Number(resolvedVector.batch_size ?? 16),
-                queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
-              },
-            })
-              .then((result) => {
-                notesByQuestion[idx] = result;
-                return result;
+            return Promise.all([
+              retrieveByKind("notes", queryList),
+              retrieveByKind("knowledge", queryList),
+              retrieveByKind("rubrics", queryList),
+              retrieveByKind("examples", queryList),
+            ])
+              .then((results) => {
+                const combined = results.flat();
+                notesByQuestion[idx] = combined;
+                return combined;
               })
               .finally(bumpNotesProgress);
           });
           await Promise.all(noteTasks);
-          notes = it_mergeNoteHits(notesByQuestion, notesTopK);
+          notes = it_mergeNoteHitsAll(notesByQuestion);
         } else {
           const fallbackQuery = transcript.trim()
             ? [transcript.trim().slice(0, 240)]
             : [];
-          notes = fallbackQuery.length
-            ? await it_retrieveNotesMulti(fallbackQuery, corpus, {
-                mode: retrievalMode === "keyword" ? "keyword" : "vector",
-                topK: notesTopK,
-                minScore: notesMinScore,
-                cacheDir: notesCacheDir,
-                cacheKey: queryCacheKey,
-                queryCacheSize,
-                maxConcurrency,
-                vector: {
-                  provider: resolvedVector.provider || "",
-                  apiKey: resolvedVector.api_key || "",
-                  baseUrl: resolvedVector.base_url || "",
-                  model: resolvedVector.model || "",
-                  timeoutSec: Number(resolvedVector.timeout_sec ?? 30),
-                  maxRetries: Number(resolvedVector.max_retries ?? 1),
-                  batchSize: Number(resolvedVector.batch_size ?? 16),
-                  queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
-                },
-              })
-            : [];
+          if (fallbackQuery.length) {
+            const results = await Promise.all([
+              retrieveByKind("notes", fallbackQuery),
+              retrieveByKind("knowledge", fallbackQuery),
+              retrieveByKind("rubrics", fallbackQuery),
+              retrieveByKind("examples", fallbackQuery),
+            ]);
+            notes = results.flat();
+          } else {
+            notes = [];
+          }
           bumpNotesProgress();
         }
       } catch (err) {

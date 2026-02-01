@@ -243,6 +243,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       retrieval: {
         mode: retrieval.mode || "vector",
         topK: Number(retrieval.top_k ?? 5),
+        topKNotes: Number(retrieval.top_k_notes ?? retrieval.top_k ?? 5),
+        topKKnowledge: Number(retrieval.top_k_knowledge ?? retrieval.top_k ?? 5),
+        topKRubrics: Number(retrieval.top_k_rubrics ?? retrieval.top_k ?? 5),
+        topKExamples: Number(retrieval.top_k_examples ?? retrieval.top_k ?? 5),
         minScore: Number(retrieval.min_score ?? 0.2),
         embeddingProvider:
           retrieval.embedding_provider || vector.provider || vectorDefaults.provider,
@@ -844,6 +848,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           enabled: incoming.enabled ?? current.enabled,
           mode: incoming.mode || current.mode || "vector",
           top_k: Number(incoming.topK ?? current.top_k ?? 5),
+          top_k_notes: Number(incoming.topKNotes ?? current.top_k_notes ?? current.top_k ?? 5),
+          top_k_knowledge: Number(incoming.topKKnowledge ?? current.top_k_knowledge ?? current.top_k ?? 5),
+          top_k_rubrics: Number(incoming.topKRubrics ?? current.top_k_rubrics ?? current.top_k ?? 5),
+          top_k_examples: Number(incoming.topKExamples ?? current.top_k_examples ?? current.top_k ?? 5),
           min_score: Number(incoming.minScore ?? current.min_score ?? 0.2),
           embedding_provider:
             incoming.embeddingProvider ||
