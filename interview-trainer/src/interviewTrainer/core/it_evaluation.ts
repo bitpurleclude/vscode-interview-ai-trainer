@@ -444,7 +444,8 @@ export async function it_evaluateAnswer(
       "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
       "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
-      "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
+      "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
+      "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
       "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
     ].join("\n");
   const demoPrompt = customDemoPrompt?.trim();
@@ -478,7 +479,8 @@ export async function it_evaluateAnswer(
           .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
           .join("\n")}`
       : "本次评审回答: 无",
-    "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
+    "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
+    "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
   ];
 
   if (demoPrompt) {
@@ -596,11 +598,31 @@ export async function it_evaluateAnswer(
         Number(item?.estimatedTimeMin ?? item?.estimated_time_min) ||
         timePlan[idx] ||
         3;
+      const outlineOriginal = it_toStringArray(
+        item?.outlineOriginal ??
+          item?.outline_original ??
+          item?.outlineUser ??
+          item?.outline_user ??
+          item?.outlineMine ??
+          item?.outline_mine ??
+          item?.originalOutline ??
+          item?.original_outline,
+      );
+      const outlineRevised = it_toStringArray(
+        item?.outlineRevised ??
+          item?.outline_revised ??
+          item?.outlineDemo ??
+          item?.outline_demo ??
+          item?.revisedOutline ??
+          item?.revised_outline,
+      );
       return {
         question: String(item?.question || questions[idx] || `第${idx + 1}题`),
         original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
         revised: String(item?.revised || ""),
         estimatedTimeMin: estimated,
+        outlineOriginal: outlineOriginal.length ? outlineOriginal : undefined,
+        outlineRevised: outlineRevised.length ? outlineRevised : undefined,
       };
     });
     return {

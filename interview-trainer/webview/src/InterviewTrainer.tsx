@@ -139,7 +139,8 @@ const STRICT_SYSTEM_PROMPT = [
   "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
   "若提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与参考思路（每项至少2条）。",
   "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
-  "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin。",
+  "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
+  "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
 ].join("\n");
 const DEFAULT_DEMO_PROMPT = [
   "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），内容过长需压缩到对应时长。",
@@ -1899,8 +1900,32 @@ const InterviewTrainer: React.FC = () => {
                                   <span>{item.original}</span>
                                 </div>
                                 <div className="it-revised-item__block">
+                                  <span>答题提纲（你的回答）：</span>
+                                  {item.outlineOriginal && item.outlineOriginal.length > 0 ? (
+                                    <ul>
+                                      {item.outlineOriginal.map((outline, oIdx) => (
+                                        <li key={`${idx}-orig-outline-${oIdx}`}>{outline}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <span>（未提供）</span>
+                                  )}
+                                </div>
+                                <div className="it-revised-item__block">
                                   <span>示范：</span>
                                   <span>{item.revised}</span>
+                                </div>
+                                <div className="it-revised-item__block">
+                                  <span>答题提纲（示范）：</span>
+                                  {item.outlineRevised && item.outlineRevised.length > 0 ? (
+                                    <ul>
+                                      {item.outlineRevised.map((outline, oIdx) => (
+                                        <li key={`${idx}-demo-outline-${oIdx}`}>{outline}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <span>（未提供）</span>
+                                  )}
                                 </div>
                               </div>
                             ))}

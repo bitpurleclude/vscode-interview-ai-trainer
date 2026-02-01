@@ -20,25 +20,6 @@ function it_indentLines(text: string, prefix: string): string {
     .join("\n");
 }
 
-function it_buildOutlineItems(text: string, maxItems: number = 6): string[] {
-  const raw = String(text || "").replace(/\r\n/g, "\n");
-  if (!raw.trim()) {
-    return [];
-  }
-  const parts = raw
-    .split(/[\n\r]+|[。！？!?；;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const items: string[] = [];
-  for (const part of parts) {
-    if (items.length >= maxItems) {
-      break;
-    }
-    items.push(part);
-  }
-  return items;
-}
-
 function it_renderOutline(items: string[], prefix: string): string {
   if (!items.length) {
     return `${prefix}- （空）\n`;
@@ -209,16 +190,12 @@ export function it_renderReport(
       lines.push("   - 原回答:\n");
       lines.push(`${it_indentLines(item.original, "     ")}\n`);
       lines.push("   - 答题提纲（你的回答）:\n");
-      lines.push(`${it_renderOutline(it_buildOutlineItems(item.original), "     ")}\n`);
+      lines.push(`${it_renderOutline(item.outlineOriginal ?? [], "     ")}\n`);
       lines.push("   - 示范:\n");
       lines.push(`${it_indentLines(item.revised, "     ")}\n`);
       lines.push("   - 答题提纲（示范）:\n");
-      lines.push(`${it_renderOutline(it_buildOutlineItems(item.revised), "     ")}\n`);
+      lines.push(`${it_renderOutline(item.outlineRevised ?? [], "     ")}\n`);
     });
-    lines.push("\n");
-  } else if (response.transcript) {
-    lines.push("### 答题提纲\n\n");
-    lines.push(it_renderOutline(it_buildOutlineItems(response.transcript), "- "));
     lines.push("\n");
   }
 

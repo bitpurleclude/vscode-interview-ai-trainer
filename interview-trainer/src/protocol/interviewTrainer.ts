@@ -124,6 +124,8 @@ export interface ItRevisedAnswer {
   original: string;
   revised: string;
   estimatedTimeMin?: number;
+  outlineOriginal?: string[];
+  outlineRevised?: string[];
 }
 
 export interface ItAnalyzeResponse {
