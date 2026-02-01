@@ -86,49 +86,93 @@ function it_toStringArray(value: unknown): string[] {
   return [];
 }
 
-function it_parseMarkdownOutline(text: string): string[] {
-  const lines = String(text || "").split(/\r?\n/);
-  const paths: string[] = [];
-  const stack: Array<{ depth: number; text: string }> = [];
-  const marker =
-    /^(?<indent>\s*)(?:[-*+]\s+|\d+[.)]\s+|[一二三四五六七八九十]+、\s+|[（(]?[一二三四五六七八九十]+[）)]\s+)(?<text>.+)$/;
-  lines.forEach((line) => {
-    const match = line.match(marker);
-    if (!match?.groups?.text) {
-      return;
+function it_splitOutlineLines(text: string): string[] {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\t/g, "  ").replace(/\s+$/g, ""))
+    .filter((line) => line.trim().length > 0);
+}
+
+function it_outlineTreeFromPaths(paths: string[][]): Array<{ text: string; children: any[] }> {
+  const roots: Array<{ text: string; children: any[] }> = [];
+  const findOrCreate = (
+    list: Array<{ text: string; children: any[] }>,
+    text: string,
+  ) => {
+    const existing = list.find((node) => node.text === text);
+    if (existing) {
+      return existing;
     }
-    const indentRaw = match.groups.indent || "";
-    const indent = indentRaw.replace(/\t/g, "  ").length;
-    const depth = Math.max(0, Math.floor(indent / 2));
-    const text = match.groups.text.trim();
-    if (!text) {
-      return;
-    }
-    while (stack.length && stack[stack.length - 1].depth >= depth) {
-      stack.pop();
-    }
-    stack.push({ depth, text });
-    paths.push(stack.map((item) => item.text).join("->"));
+    const node = { text, children: [] as any[] };
+    list.push(node);
+    return node;
+  };
+  paths.forEach((parts) => {
+    let current = roots;
+    parts.forEach((part) => {
+      const node = findOrCreate(current, part);
+      current = node.children;
+    });
   });
-  return paths;
+  return roots;
+}
+
+function it_outlineLinesFromTree(
+  nodes: Array<{ text: string; children: any[] }>,
+  level: number = 0,
+): string[] {
+  const indent = "  ".repeat(level);
+  const lines: string[] = [];
+  nodes.forEach((node) => {
+    lines.push(`${indent}- ${node.text}`);
+    if (node.children?.length) {
+      lines.push(...it_outlineLinesFromTree(node.children, level + 1));
+    }
+  });
+  return lines;
+}
+
+function it_pathsToOutlineLines(lines: string[]): string[] {
+  const paths: string[][] = [];
+  lines.forEach((line) => {
+    if (!line.includes("->")) {
+      return;
+    }
+    const parts = line
+      .split("->")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length) {
+      paths.push(parts);
+    }
+  });
+  if (!paths.length) {
+    return lines;
+  }
+  const tree = it_outlineTreeFromPaths(paths);
+  return it_outlineLinesFromTree(tree, 0);
 }
 
 function it_toOutlineArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item)).filter(Boolean);
+    const rawLines = value.map((item) => String(item)).filter(Boolean);
+    const hasArrow = rawLines.some((line) => line.includes("->"));
+    if (hasArrow) {
+      return it_pathsToOutlineLines(rawLines);
+    }
+    return rawLines.map((line) => line.replace(/\t/g, "  ").replace(/\s+$/g, ""));
   }
   if (typeof value === "string") {
     const raw = value.trim();
     if (!raw) {
       return [];
     }
-    if (/^\s*[-*+]\s+|\d+[.)]\s+|[一二三四五六七八九十]+、\s+|[（(]?[一二三四五六七八九十]+[）)]\s+/m.test(raw)) {
-      const parsed = it_parseMarkdownOutline(raw);
-      if (parsed.length) {
-        return parsed;
-      }
+    const lines = it_splitOutlineLines(raw);
+    const hasArrow = lines.some((line) => line.includes("->"));
+    if (hasArrow) {
+      return it_pathsToOutlineLines(lines);
     }
-    return raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    return lines;
   }
   return [];
 }
@@ -138,21 +182,22 @@ function it_isOutlineKeywordLike(items?: string[]): boolean {
     return false;
   }
   for (const item of items) {
-    const trimmed = String(item || "").trim();
+    const raw = String(item || "");
+    const trimmed = raw.trim();
     if (!trimmed) {
       return false;
     }
     if (/[。！？]/.test(trimmed)) {
       return false;
     }
-    const segments = trimmed
-      .split("->")
-      .map((seg) => seg.trim())
-      .filter(Boolean);
-    if (!segments.length) {
+    const cleaned = trimmed.replace(
+      /^\s*(?:[-*+]\s+|\d+[.)]\s+|[一二三四五六七八九十]+、\s+|[（(]?[一二三四五六七八九十]+[）)]\s+)/,
+      "",
+    );
+    if (!cleaned) {
       return false;
     }
-    if (segments.some((seg) => seg.length > 24)) {
+    if (cleaned.length > 24) {
       return false;
     }
   }
@@ -169,7 +214,7 @@ async function it_generateOutlines(
   const systemPrompt = [
     "你是答题提纲生成器，只输出 JSON。",
     "每题输出 outlineOriginal/outlineRevised，为关键词式提纲（数组或 Markdown 列表文本）。",
-    "使用“->”表示层级，或用 Markdown 列表缩进（推荐），必须包含多层结构（至少两级）。",
+    "必须包含多层结构（至少两级），请使用 Markdown 列表缩进表示层级，禁止使用箭头符号。",
     "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
     "每条<=20字，尽量用关键词短语，避免完整长句。",
     "系统会自动解析 Markdown 列表缩进。",
@@ -187,7 +232,7 @@ async function it_generateOutlines(
       )
       .join("\n\n"),
     "",
-    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": [...], \"outlineRevised\": [...] } ] }，outlineOriginal/outlineRevised 也可用 Markdown 列表字符串。",
+    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": [...], \"outlineRevised\": [...] } ] }，outlineOriginal/outlineRevised 也可用 Markdown 列表字符串（禁止使用箭头符号）。",
   ].join("\n");
   try {
     const content = await it_callLlmChat(
@@ -590,7 +635,7 @@ export async function it_evaluateAnswer(
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
       "outlineOriginal/outlineRevised 为要点数组或 Markdown 列表文本（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-      "提纲必须是关键词式（避免完整长句），使用“->”表示层级，或用 Markdown 列表缩进（推荐），至少两级。",
+      "提纲必须是关键词式（避免完整长句），用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
       "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
       "每条<=20字。",
       "系统会自动解析 Markdown 列表缩进。",
@@ -616,7 +661,7 @@ export async function it_evaluateAnswer(
           .join("\n")}`
       : "检索笔记: 无",
     `评分维度(每项1-10分): ${dimensions.join("。")}`,
-    "评分输出字段必须使用 overallScore 与 scores（维度->分数），禁止使用“评分/维度评分/维度Scores”等变体。",
+    "评分输出字段必须使用 overallScore 与 scores（维度:分数），禁止使用“评分/维度评分/维度Scores”等变体。",
     questions.length
       ? `本次评审题目列表:\n${questions
           .map((q, idx) => `${idx + 1}. ${q}`)
@@ -629,7 +674,7 @@ export async function it_evaluateAnswer(
       : "本次评审回答: 无",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
     "outlineOriginal/outlineRevised 为要点数组或 Markdown 列表文本（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-    "提纲必须是关键词式（避免完整长句），使用“->”表示层级，或用 Markdown 列表缩进（推荐），至少两级。",
+    "提纲必须是关键词式（避免完整长句），用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
     "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
     "每条<=20字。",
     "系统会自动解析 Markdown 列表缩进。",
