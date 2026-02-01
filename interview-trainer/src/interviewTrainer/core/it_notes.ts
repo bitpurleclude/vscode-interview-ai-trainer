@@ -209,18 +209,24 @@ async function it_ensureEmbeddingCacheOnce(
   corpus: ItCorpusItem[],
   cache: Map<string, number[]>,
   cachePath?: string,
-  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+  options?: {
+    onTrace?: (message: string, detail?: Record<string, unknown>) => void;
+    pruneStale?: boolean;
+  },
 ): Promise<ItEmbeddingEnsureResult> {
   let pending = cachedEmbeddingEnsurePromises.get(ensureKey);
   if (!pending) {
     pending = (async () => {
       const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
       const result = await it_ensureEmbeddings(vectorCfg, corpus, cache);
+      const pruneStale = options?.pruneStale !== false;
       let hasStale = false;
-      for (const key of cache.keys()) {
-        if (!validKeys.has(key)) {
-          cache.delete(key);
-          hasStale = true;
+      if (pruneStale) {
+        for (const key of cache.keys()) {
+          if (!validKeys.has(key)) {
+            cache.delete(key);
+            hasStale = true;
+          }
         }
       }
       if (cachePath && (result.created > 0 || hasStale)) {
@@ -228,7 +234,7 @@ async function it_ensureEmbeddingCacheOnce(
           it_saveEmbeddingCache(cachePath, it_buildEmbeddingCacheKey(vectorCfg), cache);
           if (!loggedEmbeddingCacheWrites.has(cachePath)) {
             loggedEmbeddingCacheWrites.add(cachePath);
-            onTrace?.("向量缓存写入", {
+            options?.onTrace?.("向量缓存写入", {
               cachePath,
               items: cache.size,
             });
@@ -1351,7 +1357,10 @@ export async function it_retrieveNotes(
     corpus,
     cache,
     cachePath,
-    options.onTrace,
+    {
+      onTrace: options.onTrace,
+      pruneStale: false,
+    },
   );
   if (metrics && !metrics.ensureKeys.has(ensureKey)) {
     metrics.ensureKeys.add(ensureKey);
