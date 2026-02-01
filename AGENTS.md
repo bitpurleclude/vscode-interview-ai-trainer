@@ -1,30 +1,31 @@
-ï»¿# AGENTS.md
+# AGENTS.md
 
-æœ¬ä»“åº“åŒ…å« VS Code/Windsurf æ’ä»¶ï¼šé¢è¯•è®­ç»ƒåŠ©æ‰‹ï¼ˆinterview-trainerï¼‰ã€‚æœ¬æ–‡ä»¶ä¸º AI ç¼–ç ä»£ç†æä¾›æœ€å°å¼€å‘æŒ‡å¼•ã€‚
+±¾²Ö¿â°üº¬ VS Code/Windsurf ²å¼ş£ºÃæÊÔÑµÁ·ÖúÊÖ£¨interview-trainer£©¡£±¾ÎÄ¼şÎª AI ±àÂë´úÀíÌá¹©×îĞ¡¿ª·¢Ö¸Òı¡£
 
-## å…³é”®ç›®å½•
+## ¹Ø¼üÄ¿Â¼
 
-- `interview-trainer/`ï¼šæ’ä»¶ä¸»é¡¹ç›®
-  - `src/`ï¼šæ‰©å±•ç«¯é€»è¾‘ï¼ˆVS Code Extensionï¼‰
-  - `webview/`ï¼šå‰ç«¯ UIï¼ˆReactï¼‰
-  - `scripts/`ï¼šæ„å»ºè„šæœ¬
-  - `build/`ï¼šæ‰“åŒ…äº§ç‰©
-- `docs/`ï¼šè¯´æ˜æ–‡æ¡£
-- `testdata/`ï¼šæµ‹è¯•æ•°æ®
+- `interview-trainer/`£º²å¼şÖ÷ÏîÄ¿
+  - `src/`£ºÀ©Õ¹¶ËÂß¼­£¨VS Code Extension£©
+  - `webview/`£ºÇ°¶Ë UI£¨React£©
+  - `scripts/`£º¹¹½¨½Å±¾
+  - `build/`£º´ò°ü²úÎï
+- `docs/`£ºËµÃ÷ÎÄµµ
+- `testdata/`£º²âÊÔÊı¾İ
 
-## å¸¸ç”¨å‘½ä»¤ï¼ˆåœ¨ `interview-trainer/` å†…æ‰§è¡Œï¼‰
+## ³£ÓÃÃüÁî£¨ÔÚ `interview-trainer/` ÄÚÖ´ĞĞ£©
 
-- å®‰è£…ä¾èµ–ï¼š`npm install`
-- æ„å»ºï¼š`npm run build`ï¼ˆæ„å»º webview + extensionï¼‰
-- æ‰“åŒ…ï¼š`npm run package`ï¼ˆç”Ÿæˆ `build/interview-trainer.vsix`ï¼‰
+- °²×°ÒÀÀµ£º`npm install`
+- ¹¹½¨£º`npm run build`£¨¹¹½¨ webview + extension£©
+- ´ò°ü£º`npm run package`£¨Éú³É `build/interview-trainer.vsix`£©
 
-## è¾“å‡ºä¸ä¼šè¯
+## Êä³öÓë»á»°
 
-- æŠ¥å‘Šè¾“å‡ºé»˜è®¤ç›®å½•ï¼š`<å·¥ä½œåŒº>/sessions/YYYYMMDD/<topic-slug>/`
-- åŒ…å«éŸ³é¢‘ã€æŠ¥å‘Šå’Œå…ƒæ•°æ®æ–‡ä»¶
+- ±¨¸æÊä³öÄ¬ÈÏÄ¿Â¼£º`<¹¤×÷Çø>/sessions/YYYYMMDD/<topic-slug>/`
+- °üº¬ÒôÆµ¡¢±¨¸æºÍÔªÊı¾İÎÄ¼ş
 
-## è¯´æ˜
+## ËµÃ÷
 
-- ç›®å‰æ— ç‹¬ç«‹æµ‹è¯•è„šæœ¬ï¼›å¦‚ä¿®æ”¹æ ¸å¿ƒé€»è¾‘ï¼Œå»ºè®®è‡³å°‘è¿è¡Œ `npm run build` éªŒè¯ã€‚
-- VSIX æ‰“åŒ…äº§ç‰©ä½äº `interview-trainer/build/`ã€‚
-- æ’ä»¶ä¾èµ–å†…ç½® ffmpegï¼ˆ`ffmpeg-static`ï¼‰ï¼Œæ‰“åŒ…æ—¶å¿…é¡»åŒ…å« `node_modules/ffmpeg-static`ï¼Œå¦åˆ™å½•éŸ³/è½¬å†™/éŸ³é¢‘å¤„ç†æ— æ³•æ­£å¸¸è¿è¡Œã€‚
+- ËùÓĞĞ´ÈëÎÄ±¾±ØĞëÊ¹ÓÃ UTF-8 ±àÂë£¬±ÜÃâ³öÏÖÂÒÂë¡£
+- Ä¿Ç°ÎŞ¶ÀÁ¢²âÊÔ½Å±¾£»ÈçĞŞ¸ÄºËĞÄÂß¼­£¬½¨ÒéÖÁÉÙÔËĞĞ `npm run build` ÑéÖ¤¡£
+- VSIX ´ò°ü²úÎïÎ»ÓÚ `interview-trainer/build/`¡£
+- ²å¼şÒÀÀµÄÚÖÃ ffmpeg£¨`ffmpeg-static`£©£¬´ò°üÊ±±ØĞë°üº¬ `node_modules/ffmpeg-static`£¬·ñÔòÂ¼Òô/×ªĞ´/ÒôÆµ´¦ÀíÎŞ·¨Õı³£ÔËĞĞ¡£
