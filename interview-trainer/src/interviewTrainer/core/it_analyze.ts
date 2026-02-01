@@ -593,6 +593,23 @@ function it_alignAnswerToSegments(
   }
   const joined = normalizedSegments.join("");
 
+  const collectPositions = (needle: string, limit: number = 6): number[] => {
+    if (!needle) {
+      return [];
+    }
+    const positions: number[] = [];
+    let pos = 0;
+    while (positions.length < limit) {
+      const idx = joined.indexOf(needle, pos);
+      if (idx === -1) {
+        break;
+      }
+      positions.push(idx);
+      pos = idx + 1;
+    }
+    return positions;
+  };
+
   const findSegmentIndex = (pos: number): number => {
     for (let i = 0; i < normalizedSegments.length; i += 1) {
       const start = offsets[i];
@@ -615,27 +632,121 @@ function it_alignAnswerToSegments(
 
   let startPos = joined.indexOf(normalizedTarget);
   let matchLen = normalizedTarget.length;
-  if (startPos === -1) {
-    const prefix = normalizedTarget.slice(0, Math.min(32, normalizedTarget.length));
-    const suffix = normalizedTarget.slice(-Math.min(32, normalizedTarget.length));
-    const prefixPos = prefix ? joined.indexOf(prefix) : -1;
-    const suffixPos = suffix ? joined.lastIndexOf(suffix) : -1;
-    if (prefixPos === -1 && suffixPos === -1) {
-      return null;
+  if (startPos !== -1) {
+    return locateRange(startPos, matchLen);
+  }
+
+  const anchorLengths = [48, 36, 24, 16];
+  for (const anchorLen of anchorLengths) {
+    if (normalizedTarget.length < anchorLen) {
+      continue;
     }
-    if (prefixPos !== -1 && suffixPos !== -1 && suffixPos >= prefixPos) {
-      startPos = prefixPos;
-      matchLen = suffixPos - prefixPos + suffix.length;
-    } else if (prefixPos !== -1) {
-      startPos = prefixPos;
-      matchLen = prefix.length;
-    } else {
-      startPos = Math.max(0, suffixPos);
-      matchLen = suffix.length;
+    const half = Math.floor(anchorLen / 2);
+    const anchorPositions = [
+      0,
+      Math.max(0, Math.floor(normalizedTarget.length * 0.33) - half),
+      Math.max(0, Math.floor(normalizedTarget.length * 0.66) - half),
+      Math.max(0, normalizedTarget.length - anchorLen),
+    ];
+    const anchors = Array.from(
+      new Set(
+        anchorPositions
+          .map((pos) => normalizedTarget.slice(pos, pos + anchorLen))
+          .filter(Boolean),
+      ),
+    );
+    const matches = anchors
+      .map((anchor) => ({
+        anchor,
+        len: anchor.length,
+        positions: collectPositions(anchor, 6),
+      }))
+      .filter((entry) => entry.positions.length > 0);
+    if (!matches.length) {
+      continue;
+    }
+    if (matches.length === 1) {
+      startPos = matches[0].positions[0];
+      matchLen = matches[0].len;
+      return locateRange(startPos, matchLen);
+    }
+    const limitedMatches = matches.slice(0, 4);
+    let bestSpanStart: number | null = null;
+    let bestSpanEnd: number | null = null;
+    const dfs = (
+      idx: number,
+      minPos: number,
+      maxEnd: number,
+    ): void => {
+      if (idx >= limitedMatches.length) {
+        if (minPos === Number.POSITIVE_INFINITY) {
+          return;
+        }
+        if (
+          bestSpanStart === null ||
+          bestSpanEnd === null ||
+          maxEnd - minPos < bestSpanEnd - bestSpanStart
+        ) {
+          bestSpanStart = minPos;
+          bestSpanEnd = maxEnd;
+        }
+        return;
+      }
+      const entry = limitedMatches[idx];
+      entry.positions.forEach((pos) => {
+        dfs(
+          idx + 1,
+          Math.min(minPos, pos),
+          Math.max(maxEnd, pos + entry.len),
+        );
+      });
+    };
+    dfs(0, Number.POSITIVE_INFINITY, 0);
+    if (bestSpanStart !== null && bestSpanEnd !== null) {
+      return locateRange(
+        bestSpanStart,
+        Math.max(1, bestSpanEnd - bestSpanStart),
+      );
     }
   }
 
-  return locateRange(startPos, matchLen);
+  const charSet = new Set(normalizedTarget.split(""));
+  const scores = normalizedSegments.map((text) => {
+    if (!text) {
+      return 0;
+    }
+    let hit = 0;
+    for (const ch of text) {
+      if (charSet.has(ch)) {
+        hit += 1;
+      }
+    }
+    return hit / Math.max(1, text.length);
+  });
+  let bestIdx = -1;
+  let bestScore = 0;
+  scores.forEach((score, idx) => {
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = idx;
+    }
+  });
+  if (bestIdx === -1 || bestScore < 0.08) {
+    return null;
+  }
+  const threshold = Math.max(0.05, bestScore * 0.5);
+  let startIdx = bestIdx;
+  let endIdx = bestIdx;
+  while (startIdx > 0 && scores[startIdx - 1] >= threshold) {
+    startIdx -= 1;
+  }
+  while (endIdx < scores.length - 1 && scores[endIdx + 1] >= threshold) {
+    endIdx += 1;
+  }
+  return {
+    startSec: speechSegments[startIdx].startSec,
+    endSec: speechSegments[endIdx].endSec,
+  };
 }
 
 function it_collectAnswersFromSegments(
@@ -1438,7 +1549,7 @@ export async function it_runAnalysis(
   if (multiQuestion) {
     if (audioSegments && llmConfig) {
       llmTimingAttempted = true;
-      reportProgress("segment", 25, "多题分段 25% · LLM 识别回答", "running");
+      reportProgress("segment", 25, "多题分段 25% · 正在分段", "running");
       const splitAnswers = await it_splitAnswersWithLlm(
         llmConfig,
         questionList,
@@ -1447,7 +1558,7 @@ export async function it_runAnalysis(
       reportProgress(
         "segment",
         45,
-        splitAnswers ? "多题分段 45% · LLM 对齐分段" : "多题分段 45% · LLM 粗分段",
+        splitAnswers ? "多题分段 45% · 正在本地对齐" : "多题分段 45% · 正在本地对齐",
         "running",
       );
       if (splitAnswers) {
@@ -1478,7 +1589,7 @@ export async function it_runAnalysis(
           questionTimings = alignedTimings;
         }
         if (missingAlignment) {
-          reportProgress("segment", 65, "多题分段 65% · LLM 细分段", "running");
+          reportProgress("segment", 65, "多题分段 65% · 正在远程对齐", "running");
           const assigned = await it_assignSegmentsWithLlm(
             llmConfig,
             questionList,
@@ -1500,7 +1611,7 @@ export async function it_runAnalysis(
         }
       }
       if (!questionTimings.length) {
-        reportProgress("segment", 80, "多题分段 80% · LLM 兜底分段", "running");
+        reportProgress("segment", 80, "多题分段 80% · 正在远程兜底", "running");
         const assigned = await it_assignSegmentsWithLlm(
           llmConfig,
           questionList,
