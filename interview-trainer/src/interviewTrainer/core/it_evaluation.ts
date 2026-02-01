@@ -694,7 +694,7 @@ export async function it_evaluateAnswer(
         Number(item?.estimatedTimeMin ?? item?.estimated_time_min) ||
         timePlan[idx] ||
         3;
-      const outlineOriginal = it_toStringArray(
+      const outlineOriginalRaw = it_toStringArray(
         item?.outlineOriginal ??
           item?.outline_original ??
           item?.outlineUser ??
@@ -704,7 +704,7 @@ export async function it_evaluateAnswer(
           item?.originalOutline ??
           item?.original_outline,
       );
-      const outlineRevised = it_toStringArray(
+      const outlineRevisedRaw = it_toStringArray(
         item?.outlineRevised ??
           item?.outline_revised ??
           item?.outlineDemo ??
@@ -717,12 +717,8 @@ export async function it_evaluateAnswer(
         original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
         revised: String(item?.revised || ""),
         estimatedTimeMin: estimated,
-        outlineOriginal: it_isOutlineKeywordLike(outlineOriginal)
-          ? outlineOriginal
-          : undefined,
-        outlineRevised: it_isOutlineKeywordLike(outlineRevised)
-          ? outlineRevised
-          : undefined,
+        outlineOriginal: outlineOriginalRaw.length ? outlineOriginalRaw : undefined,
+        outlineRevised: outlineRevisedRaw.length ? outlineRevisedRaw : undefined,
       };
     });
 
