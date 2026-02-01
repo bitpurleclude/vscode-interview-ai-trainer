@@ -86,6 +86,100 @@ function it_toStringArray(value: unknown): string[] {
   return [];
 }
 
+function it_isOutlineKeywordLike(items?: string[]): boolean {
+  if (!Array.isArray(items) || items.length < 3 || items.length > 6) {
+    return false;
+  }
+  for (const item of items) {
+    const trimmed = String(item || "").trim();
+    if (!trimmed) {
+      return false;
+    }
+    if (/[。！？；，、]/.test(trimmed)) {
+      return false;
+    }
+    const segments = trimmed
+      .split("->")
+      .map((seg) => seg.trim())
+      .filter(Boolean);
+    if (!segments.length) {
+      return false;
+    }
+    if (segments.some((seg) => seg.length > 12)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function it_generateOutlines(
+  config: ItEvaluationConfig,
+  items: Array<{ question: string; original: string; revised: string }>,
+): Promise<Array<{ outlineOriginal?: string[]; outlineRevised?: string[] }> | null> {
+  if (!items.length) {
+    return null;
+  }
+  const systemPrompt = [
+    "你是答题提纲生成器，只输出 JSON。",
+    "每题输出 outlineOriginal/outlineRevised，为关键词式提纲数组。",
+    "每条<=12字，禁止完整句与标点，使用“->”表示层级，结构类似脑图。",
+    "每题3-6条。",
+  ].join("\n");
+  const userPrompt = [
+    "请根据以下题目与回答生成提纲：",
+    items
+      .map((item, idx) =>
+        [
+          `${idx + 1}. 题目: ${item.question}`,
+          `原回答: ${item.original || "（空）"}`,
+          `示范: ${item.revised || "（空）"}`,
+        ].join("\n"),
+      )
+      .join("\n\n"),
+    "",
+    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": [...], \"outlineRevised\": [...] } ] }",
+  ].join("\n");
+  try {
+    const content = await it_callLlmChat(
+      {
+        provider: config.provider,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        temperature: config.temperature,
+        topP: config.topP,
+        timeoutSec: config.timeoutSec,
+        maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
+      },
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    );
+    const parsed = it_extractJsonPayload(content);
+    const outlineList = Array.isArray(parsed?.outlines)
+      ? parsed.outlines
+      : Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.items)
+          ? parsed.items
+          : [];
+    if (!Array.isArray(outlineList) || !outlineList.length) {
+      return null;
+    }
+    return outlineList.map((entry: any) => ({
+      outlineOriginal: it_toStringArray(
+        entry?.outlineOriginal ?? entry?.outline_original ?? entry?.outlineUser,
+      ),
+      outlineRevised: it_toStringArray(
+        entry?.outlineRevised ?? entry?.outline_revised ?? entry?.outlineDemo,
+      ),
+    }));
+  } catch {
+    return null;
+  }
+}
+
 function it_pickRevisedAnswers(payload: any): any[] {
   if (!payload) {
     return [];
@@ -623,10 +717,44 @@ export async function it_evaluateAnswer(
         original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
         revised: String(item?.revised || ""),
         estimatedTimeMin: estimated,
-        outlineOriginal: outlineOriginal.length ? outlineOriginal : undefined,
-        outlineRevised: outlineRevised.length ? outlineRevised : undefined,
+        outlineOriginal: it_isOutlineKeywordLike(outlineOriginal)
+          ? outlineOriginal
+          : undefined,
+        outlineRevised: it_isOutlineKeywordLike(outlineRevised)
+          ? outlineRevised
+          : undefined,
       };
     });
+
+    const needOutlineFix = revisedAnswers.some(
+      (item) =>
+        !it_isOutlineKeywordLike(item.outlineOriginal) ||
+        !it_isOutlineKeywordLike(item.outlineRevised),
+    );
+    if (needOutlineFix && config.apiKey) {
+      const regenerated = await it_generateOutlines(
+        config,
+        revisedAnswers.map((item) => ({
+          question: item.question,
+          original: item.original,
+          revised: item.revised,
+        })),
+      );
+      if (regenerated && regenerated.length) {
+        regenerated.forEach((entry, idx) => {
+          const original = it_isOutlineKeywordLike(entry.outlineOriginal)
+            ? entry.outlineOriginal
+            : undefined;
+          const revised = it_isOutlineKeywordLike(entry.outlineRevised)
+            ? entry.outlineRevised
+            : undefined;
+          if (revisedAnswers[idx]) {
+            revisedAnswers[idx].outlineOriginal = original ?? revisedAnswers[idx].outlineOriginal;
+            revisedAnswers[idx].outlineRevised = revised ?? revisedAnswers[idx].outlineRevised;
+          }
+        });
+      }
+    }
     return {
       topicTitle: parsed.topicTitle || question || "未命名",
       topicSummary: parsed.topicSummary || "",
