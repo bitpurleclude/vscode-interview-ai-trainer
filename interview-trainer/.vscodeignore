@@ -1,5 +1,7 @@
 webview/**
 scripts/**
 src/**
+node_modules/**
+build/**
 **/*.map
 **/*.ts

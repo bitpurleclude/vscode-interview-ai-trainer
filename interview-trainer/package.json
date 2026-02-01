@@ -4,6 +4,11 @@
   "description": "面试训练录音、转写与评价助手",
   "version": "0.1.0",
   "publisher": "interview-trainer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitpurleclude/vscode-interview-ai-trainer.git"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -105,7 +110,7 @@
   },
   "scripts": {
     "build:webview": "node scripts/build-webview.js",
-    "build:extension": "tsc -p tsconfig.json",
+    "build:extension": "tsc -p tsconfig.json --noEmit && node scripts/build-extension.js",
     "build": "npm run build:webview && npm run build:extension",
     "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix"
   },
