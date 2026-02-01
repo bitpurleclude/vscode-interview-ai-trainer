@@ -60,6 +60,7 @@ const IT_STATUS_INIT: ItState = {
   },
   steps: [
     { id: "init", status: "success", progress: 100 },
+    { id: "question", status: "pending", progress: 0 },
     { id: "recording", status: "pending", progress: 0 },
     { id: "acoustic", status: "pending", progress: 0 },
     { id: "asr", status: "pending", progress: 0 },
@@ -71,7 +72,8 @@ const IT_STATUS_INIT: ItState = {
 };
 
 const IT_PROGRESS_WEIGHTS: Partial<Record<ItWorkflowStep, number>> = {
-  asr: 0.45,
+  question: 0.05,
+  asr: 0.4,
   acoustic: 0.15,
   notes: 0.1,
   evaluation: 0.2,

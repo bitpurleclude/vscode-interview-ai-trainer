@@ -14,6 +14,7 @@ type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
 
 const STEP_LABELS: Record<string, string> = {
   init: "初始化",
+  question: "题目解析",
   recording: "录音中",
   acoustic: "声学分析",
   asr: "语音转写",
@@ -170,6 +171,7 @@ const DEFAULT_STATE: ItState = {
   },
   steps: [
     { id: "init", status: "success", progress: 100 },
+    { id: "question", status: "pending", progress: 0 },
     { id: "recording", status: "pending", progress: 0 },
     { id: "acoustic", status: "pending", progress: 0 },
     { id: "asr", status: "pending", progress: 0 },
@@ -557,7 +559,7 @@ const InterviewTrainer: React.FC = () => {
     return itState.steps.some(
       (step) =>
         step.status === "running" &&
-        ["acoustic", "asr", "notes", "evaluation"].includes(step.id),
+        ["question", "acoustic", "asr", "notes", "evaluation"].includes(step.id),
     );
   }, [itState]);
 
@@ -929,19 +931,13 @@ const InterviewTrainer: React.FC = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      const result = await parseQuestionsFromText(text, {
-        fallbackPrompt: text.trim(),
-      });
-      if (!result.recognized) {
-        setQuestionText(text.trim());
-        setQuestionList("");
-      }
+      setQuestionText(text.trim());
+      setQuestionList("");
+      setQuestionParsed(false);
       setQuestionError(false);
       setItState((prev) => ({
         ...prev,
-        statusMessage: result.recognized
-          ? `已导入题干：${file.name}，已识别${result.questionList.length}题`
-          : `已导入题干：${file.name}，未识别到题目，请手动拆分`,
+        statusMessage: `已导入题干：${file.name}（未解析，开始分析时识别）`,
       }));
     } catch (err) {
       setItState((prev) => ({
@@ -982,31 +978,8 @@ const InterviewTrainer: React.FC = () => {
       ...prev,
       statusMessage: "已发起分析请求，处理中...",
     }));
-    let finalQuestionText = questionText.trim();
-    let finalQuestionList = parsedQuestionList;
-    if (!questionParsed) {
-      const merged = buildQuestionParseInput();
-      const result = await parseQuestionsFromText(merged, {
-        silent: true,
-        fallbackPrompt: finalQuestionText,
-      });
-      finalQuestionText = result.questionText.trim();
-      finalQuestionList = result.questionList;
-    }
-    if (!finalQuestionList.length) {
-      setQuestionError(true);
-      setItState((prev) => ({
-        ...prev,
-        statusMessage: "未识别到题目，请检查题干格式或手动拆分。",
-        lastError: {
-          type: "question",
-          reason: "题目识别失败",
-          solution: "请在题干中包含“第N题/第N问”，或手动将题目逐行填写。",
-        },
-      }));
-      setIsProcessing(false);
-      return;
-    }
+    const finalQuestionText = questionText.trim();
+    const finalQuestionList = parsedQuestionList;
     const payload: ItAnalyzeRequest = {
       audio: audioPayload,
       questionText: finalQuestionText || undefined,
@@ -1702,7 +1675,7 @@ const InterviewTrainer: React.FC = () => {
                   onChange={handleQuestionListChange}
                 />
                 <div className="it-question__hint">
-                  题干或小题列表为必填，支持直接粘贴完整材料并自动识别第N题。
+                  题干或小题列表为必填；开始分析时自动识别第N题，也可手动点击“识别题目”。
                 </div>
                 <div className="it-question__status">
                   <span
@@ -1715,7 +1688,13 @@ const InterviewTrainer: React.FC = () => {
                     }`}
                   >
                     题干状态：
-                    {questionParsing ? "识别中" : questionParsed ? "已识别" : "未识别"}
+                    {questionParsing
+                      ? "识别中"
+                      : questionParsed
+                        ? "已识别"
+                        : hasQuestion
+                          ? "待解析"
+                          : "未填写"}
                   </span>
                   <button
                     className="it-button it-button--secondary it-button--compact"

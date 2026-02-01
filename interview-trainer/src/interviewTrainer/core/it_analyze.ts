@@ -37,6 +37,7 @@ import {
 import { it_formatSeconds, it_hashText, it_normalizeText } from "../utils/it_text";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
 import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "./it_report";
+import { it_parseQuestions } from "./it_questionParser";
 
 interface ItAnalyzeDeps {
   context: vscode.ExtensionContext;
@@ -1232,12 +1233,53 @@ export async function it_runAnalysis(
   const env = deps.apiConfig.active?.environment || "prod";
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
   const llmConfig = it_getLlmConfig(envConfig);
-  const questionText = request.questionText?.trim() || "";
-  const questionList = (request.questionList ?? []).filter((q) => q.trim());
+  let questionText = request.questionText?.trim() || "";
+  let questionList = (request.questionList ?? []).filter((q) => q.trim());
   if (!questionText && !questionList.length) {
     throw new Error("请先填写题干或导入题干文件。");
   }
   ensureNotAborted();
+
+  const parseStart = Date.now();
+  let parsePromise: Promise<void> | null = null;
+  if (questionList.length) {
+    reportProgress(
+      "question",
+      100,
+      `题目已提供 · ${questionList.length}题 · 本地`,
+      "success",
+    );
+  } else {
+    reportProgress("question", 5, "题目解析 5% · 本地", "running");
+    parsePromise = (async () => {
+      const parsed = await it_parseQuestions(questionText, llmConfig);
+      const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
+      const sourceLabel = parsed.source === "llm" ? "API" : "本地";
+      if (parsed.material) {
+        questionText = parsed.material;
+      }
+      if (parsed.questions.length) {
+        questionList = parsed.questions;
+      }
+      if (questionList.length) {
+        reportProgress(
+          "question",
+          100,
+          `题目解析 100% · ${questionList.length}题 · ${elapsed}s · ${sourceLabel}`,
+          "success",
+        );
+      } else {
+        reportProgress(
+          "question",
+          100,
+          `题目解析完成 · 未识别题目 · ${elapsed}s · ${sourceLabel}`,
+          "error",
+        );
+      }
+    })().catch(() => {
+      reportProgress("question", 100, "题目解析失败，使用原题干", "error");
+    });
+  }
 
   const workspaceCfg = deps.skillConfig.workspace ?? {};
   const retrievalCfg = deps.skillConfig.retrieval ?? {};
@@ -1346,6 +1388,11 @@ export async function it_runAnalysis(
     if (detailedTranscript) {
       deps.onPartial?.({ detailedTranscript });
     }
+  }
+
+  if (parsePromise) {
+    await parsePromise;
+    ensureNotAborted();
   }
 
   let questionTimings: ItQuestionTiming[] = [];
