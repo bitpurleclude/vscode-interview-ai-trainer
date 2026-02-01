@@ -39,6 +39,11 @@ import { it_pcm16ToWavBuffer } from "../utils/it_wav";
 import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "./it_report";
 import { it_parseQuestions } from "./it_questionParser";
 
+function it_normalizeWorkspaceKey(root: string): string {
+  const resolved = path.resolve(String(root || ""));
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
 interface ItAnalyzeDeps {
   context: vscode.ExtensionContext;
   apiConfig: ItApiConfig;
@@ -1598,13 +1603,14 @@ export async function it_runAnalysis(
     const notesTopKRubrics = Number(retrievalCfg.top_k_rubrics ?? notesTopK);
     const notesTopKExamples = Number(retrievalCfg.top_k_examples ?? notesTopK);
     const notesMinScore = Number(retrievalCfg.min_score ?? 0.2);
+    const workspaceKey = it_normalizeWorkspaceKey(deps.workspaceRoot);
     const notesCacheDir = cacheRoot
-      ? path.join(cacheRoot, "embedding_cache", it_hashText(deps.workspaceRoot))
+      ? path.join(cacheRoot, "embedding_cache", it_hashText(workspaceKey))
       : undefined;
     const queryCacheSize = Number(retrievalCfg.query_cache_size ?? 200);
     const maxConcurrency = Number(retrievalCfg.max_concurrency ?? 3);
     const queryCacheKey = it_hashText(
-      `${deps.workspaceRoot}:${sourceCount}:${corpus.length}`,
+      `${workspaceKey}:${sourceCount}:${corpus.length}`,
     );
     let retrievalAnswers = questionAnswers;
     if (

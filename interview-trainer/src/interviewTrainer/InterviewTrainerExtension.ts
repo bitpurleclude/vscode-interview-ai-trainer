@@ -175,12 +175,15 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const cacheRoot = this.context.globalStorageUri?.fsPath || "";
     const workspaceRoot =
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
+    const workspaceKey = workspaceRoot
+      ? this.normalizeWorkspaceKey(workspaceRoot)
+      : "";
     const corpusCacheDir = cacheRoot ? path.join(cacheRoot, "corpus_cache") : "";
     const embeddingCacheDir = cacheRoot
       ? path.join(
           cacheRoot,
           "embedding_cache",
-          workspaceRoot ? it_hashText(workspaceRoot) : "workspace",
+          workspaceKey ? it_hashText(workspaceKey) : "workspace",
         )
       : "";
     const corpusCacheMb = Number(
@@ -569,7 +572,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const cacheDir = path.join(
       cacheRoot,
       "embedding_cache",
-      it_hashText(workspaceRoot),
+      it_hashText(this.normalizeWorkspaceKey(workspaceRoot)),
     );
 
     this.embeddingWarmupRunning = true;
@@ -732,6 +735,11 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       }
     }
     return "";
+  }
+
+  private normalizeWorkspaceKey(root: string): string {
+    const resolved = path.resolve(String(root || ""));
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
   }
 
   private registerHandlers(): void {
@@ -1035,7 +1043,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const cacheDir = path.join(
         cacheRoot,
         "embedding_cache",
-        it_hashText(workspaceRoot),
+        it_hashText(this.normalizeWorkspaceKey(workspaceRoot)),
       );
       try {
         await fs.promises.access(cacheDir);
