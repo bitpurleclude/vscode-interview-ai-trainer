@@ -340,6 +340,7 @@ const InterviewTrainer: React.FC = () => {
     topKKnowledge: 5,
     topKRubrics: 5,
     topKExamples: 5,
+    embeddingMaxConcurrency: 1,
     minScore: 0.2,
     vector: {
       provider: "volc_doubao",
@@ -463,6 +464,7 @@ const InterviewTrainer: React.FC = () => {
       topKKnowledge: Number(retrieval.topKKnowledge ?? retrieval.topK ?? 5),
       topKRubrics: Number(retrieval.topKRubrics ?? retrieval.topK ?? 5),
       topKExamples: Number(retrieval.topKExamples ?? retrieval.topK ?? 5),
+      embeddingMaxConcurrency: Number(retrieval.embeddingMaxConcurrency ?? 1),
       minScore: Number(retrieval.minScore ?? 0.2),
       vector: {
         provider: embeddingProvider,
@@ -1350,6 +1352,7 @@ const InterviewTrainer: React.FC = () => {
       | "topKKnowledge"
       | "topKRubrics"
       | "topKExamples"
+      | "embeddingMaxConcurrency"
       | "minScore",
     value: any,
   ) => {
@@ -1380,6 +1383,7 @@ const InterviewTrainer: React.FC = () => {
           topKKnowledge: Number(retrievalForm.topKKnowledge),
           topKRubrics: Number(retrievalForm.topKRubrics),
           topKExamples: Number(retrievalForm.topKExamples),
+          embeddingMaxConcurrency: Number(retrievalForm.embeddingMaxConcurrency),
           minScore: Number(retrievalForm.minScore),
           embeddingProvider: retrievalForm.vector.provider,
           vector: {
@@ -2889,6 +2893,21 @@ const InterviewTrainer: React.FC = () => {
                   disabled={uiLocked || retrievalForm.mode !== "vector"}
                   onChange={(event) =>
                     handleRetrievalVectorChange("queryMaxChars", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>学习并行</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.embeddingMaxConcurrency}
+                  disabled={uiLocked || retrievalForm.mode !== "vector"}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange(
+                      "embeddingMaxConcurrency",
+                      Number(event.target.value),
+                    )
                   }
                 />
               </div>

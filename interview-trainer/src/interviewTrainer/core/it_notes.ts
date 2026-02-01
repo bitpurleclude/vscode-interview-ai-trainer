@@ -43,6 +43,7 @@ export interface ItEmbeddingWarmupOptions {
   cacheDir?: string;
   onProgress?: (done: number, total: number) => void;
   signal?: { aborted: boolean };
+  maxConcurrency?: number;
 }
 
 let cachedCorpus:
@@ -995,15 +996,43 @@ export async function it_prepareEmbeddingCache(
   options.onProgress?.(0, total);
 
   const batchSize = Math.max(1, vectorCfg.batchSize || IT_DEFAULT_BATCH_SIZE);
+  const maxConcurrency = Number.isFinite(options.maxConcurrency)
+    ? Math.max(1, Math.floor(Number(options.maxConcurrency)))
+    : 1;
+  const batches: Array<Array<{ key: string; text: string }>> = [];
+  for (let i = 0; i < missing.length; i += batchSize) {
+    batches.push(missing.slice(i, i + batchSize));
+  }
+  const runWithLimit = async <T>(
+    list: T[],
+    limit: number,
+    task: (item: T) => Promise<void>,
+  ): Promise<void> => {
+    if (!list.length) {
+      return;
+    }
+    let cursor = 0;
+    const workers = new Array(Math.min(limit, list.length)).fill(0).map(async () => {
+      while (cursor < list.length) {
+        if (options.signal?.aborted) {
+          aborted = true;
+          return;
+        }
+        const index = cursor;
+        cursor += 1;
+        await task(list[index]);
+      }
+    });
+    await Promise.all(workers);
+  };
   let created = 0;
   let done = 0;
   let aborted = false;
-  for (let i = 0; i < missing.length; i += batchSize) {
+  await runWithLimit(batches, maxConcurrency, async (batch) => {
     if (options.signal?.aborted) {
       aborted = true;
-      break;
+      return;
     }
-    const batch = missing.slice(i, i + batchSize);
     const embeddings = await it_embedTexts(
       vectorCfg,
       batch.map((entry) => entry.text),
@@ -1018,7 +1047,7 @@ export async function it_prepareEmbeddingCache(
     });
     done += batch.length;
     options.onProgress?.(done, total);
-  }
+  });
 
   const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
   let hasStale = false;

@@ -188,6 +188,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     );
     const queryCacheSize = Number(retrieval.query_cache_size ?? 200);
     const maxConcurrency = Number(retrieval.max_concurrency ?? 3);
+    const embeddingMaxConcurrency = Number(
+      retrieval.embedding_max_concurrency ?? retrieval.embeddingMaxConcurrency ?? 1,
+    );
     const vectorDefaults = {
       provider: "volc_doubao",
       base_url: "https://ark.cn-beijing.volces.com",
@@ -247,6 +250,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         topKKnowledge: Number(retrieval.top_k_knowledge ?? retrieval.top_k ?? 5),
         topKRubrics: Number(retrieval.top_k_rubrics ?? retrieval.top_k ?? 5),
         topKExamples: Number(retrieval.top_k_examples ?? retrieval.top_k ?? 5),
+        embeddingMaxConcurrency,
         minScore: Number(retrieval.min_score ?? 0.2),
         embeddingProvider:
           retrieval.embedding_provider || vector.provider || vectorDefaults.provider,
@@ -469,6 +473,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       return;
     }
     const retrievalCfg = this.configBundle.skill.retrieval ?? {};
+    const warmupConcurrency = Number(
+      retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency ?? 1,
+    );
     const cacheRoot = this.context.globalStorageUri?.fsPath;
     const corpusCacheMb = Number(
       retrievalCfg.corpus_cache_mb ?? retrievalCfg.corpus_cache_max_mb ?? 25,
@@ -577,6 +584,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const result = await it_prepareEmbeddingCache(corpus, resolvedVector, {
         cacheDir,
         signal: this.embeddingWarmupAbort,
+        maxConcurrency: warmupConcurrency,
         onProgress: (done, total) => {
           const progress = total ? Math.round((done / total) * 100) : 100;
           const message = total
@@ -852,6 +860,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           top_k_knowledge: Number(incoming.topKKnowledge ?? current.top_k_knowledge ?? current.top_k ?? 5),
           top_k_rubrics: Number(incoming.topKRubrics ?? current.top_k_rubrics ?? current.top_k ?? 5),
           top_k_examples: Number(incoming.topKExamples ?? current.top_k_examples ?? current.top_k ?? 5),
+          embedding_max_concurrency: Number(
+            incoming.embeddingMaxConcurrency ?? current.embedding_max_concurrency ?? 1,
+          ),
           min_score: Number(incoming.minScore ?? current.min_score ?? 0.2),
           embedding_provider:
             incoming.embeddingProvider ||

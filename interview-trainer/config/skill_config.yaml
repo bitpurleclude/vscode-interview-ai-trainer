@@ -26,6 +26,7 @@ retrieval:
   top_k_knowledge: 5
   top_k_rubrics: 5
   top_k_examples: 5
+  embedding_max_concurrency: 1
   min_score: 0.2
   max_concurrency: 3
   query_cache_size: 200
