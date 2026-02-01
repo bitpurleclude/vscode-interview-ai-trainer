@@ -87,6 +87,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   private state: ItState = { ...IT_STATUS_INIT };
   private configSnapshot: ItConfigSnapshot;
   private configBundle: ReturnType<typeof it_loadConfigBundle>;
+  private traceLogsEnabled = false;
   private recordingChild: import("child_process").ChildProcess | null = null;
   private recordingTempDir: string | null = null;
   private recordingStartAt: number | null = null;
@@ -139,6 +140,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   private logCorpusTrace(message: string, detail?: Record<string, unknown>): void {
+    if (!this.traceLogsEnabled) {
+      return;
+    }
     const stamp = new Date().toISOString();
     if (detail && Object.keys(detail).length) {
       this.outputChannel.appendLine(
@@ -589,6 +593,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         cacheDir,
         signal: this.embeddingWarmupAbort,
         maxConcurrency: warmupConcurrency,
+        onTrace: (message, detail) => this.logCorpusTrace(message, detail),
         onProgress: (done, total) => {
           const progress = total ? Math.round((done / total) * 100) : 100;
           const message = total
@@ -748,6 +753,14 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const snapshot = await this.refreshConfigSnapshot();
       this.scheduleEmbeddingWarmup("config");
       return snapshot;
+    });
+    this.webviewProtocol.on("it/enableTraceLogs", () => {
+      this.traceLogsEnabled = true;
+      this.outputChannel.show(true);
+      this.outputChannel.appendLine(
+        `[${new Date().toISOString()}] 已开启笔记学习日志输出`,
+      );
+      return { enabled: true };
     });
     this.webviewProtocol.on("it/listHistory", async (msg) => {
       const workspaceRoot = this.requireWorkspaceRoot();

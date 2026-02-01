@@ -364,6 +364,7 @@ const InterviewTrainer: React.FC = () => {
   );
   const [clearingCorpusCache, setClearingCorpusCache] = useState(false);
   const [corpusCacheMessage, setCorpusCacheMessage] = useState<string | null>(null);
+  const [traceLogEnabled, setTraceLogEnabled] = useState(false);
   const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
   const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
     null,
@@ -1495,6 +1496,16 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setClearingEmbeddingCache(false);
+  };
+  const handleEnableTraceLogs = async () => {
+    try {
+      const resp = await request("it/enableTraceLogs", {});
+      if (resp?.status === "success") {
+        setTraceLogEnabled(true);
+      }
+    } catch {
+      // ignore
+    }
   };
   const handleClearCorpusCache = async () => {
     setClearingCorpusCache(true);
@@ -2959,6 +2970,13 @@ const InterviewTrainer: React.FC = () => {
                 >
                   {clearingCorpusCache ? "清理中..." : "清理语料索引缓存"}
                 </button>
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || traceLogEnabled}
+                  onClick={handleEnableTraceLogs}
+                >
+                  {traceLogEnabled ? "日志已开启" : "开启日志输出"}
+                </button>
               </div>
               {retrievalSaveMessage && (
                 <div className="it-settings__hint">{retrievalSaveMessage}</div>
@@ -2991,6 +3009,9 @@ const InterviewTrainer: React.FC = () => {
               )}
               <div className="it-settings__hint">
                 索引与向量缓存会落盘保存，目录变更后会自动重新索引。
+              </div>
+              <div className="it-settings__hint">
+                需要排查笔记学习时，点击“开启日志输出”后会在输出面板显示相关日志。
               </div>
               {retrievalCacheInfo && (
                 <>

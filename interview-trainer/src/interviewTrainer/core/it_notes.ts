@@ -1,4 +1,4 @@
-import fs from "fs";
+﻿import fs from "fs";
 import path from "path";
 import { it_callEmbedding, ItEmbeddingConfig } from "../api/it_embedding";
 import { it_hashText } from "../utils/it_text";
@@ -42,6 +42,7 @@ export interface ItEmbeddingWarmupResult {
 export interface ItEmbeddingWarmupOptions {
   cacheDir?: string;
   onProgress?: (done: number, total: number) => void;
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void;
   signal?: { aborted: boolean };
   maxConcurrency?: number;
 }
@@ -1067,12 +1068,17 @@ export async function it_prepareEmbeddingCache(
   }
   const total = missing.length;
   const cached = Math.max(0, corpus.length - total);
-  options.onProgress?.(0, total);
-
   const batchSize = Math.max(1, vectorCfg.batchSize || IT_DEFAULT_BATCH_SIZE);
   const maxConcurrency = Number.isFinite(options.maxConcurrency)
     ? Math.max(1, Math.floor(Number(options.maxConcurrency)))
     : 1;
+  options.onProgress?.(0, total);
+  options.onTrace?.("向量预计算任务", {
+    total,
+    cached,
+    batchSize,
+    maxConcurrency,
+  });
   const batches: Array<Array<{ key: string; text: string }>> = [];
   for (let i = 0; i < missing.length; i += batchSize) {
     batches.push(missing.slice(i, i + batchSize));
@@ -1122,6 +1128,11 @@ export async function it_prepareEmbeddingCache(
     done += batch.length;
     options.onProgress?.(done, total);
   });
+  if (aborted) {
+    options.onTrace?.("向量预计算已中止", { done, total, created });
+  } else {
+    options.onTrace?.("向量预计算完成", { done, total, created, cached });
+  }
 
   const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
   let hasStale = false;
