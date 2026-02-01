@@ -233,10 +233,11 @@ const STRICT_SYSTEM_PROMPT = [
   "若提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与参考思路（每项至少2条）。",
   "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
   "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
-  "outlineOriginal/outlineRevised 为要点数组（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-  "提纲必须是关键词式（避免完整长句），使用“->”表示层级，至少两级。",
+  "outlineOriginal/outlineRevised 为要点数组或 Markdown 列表文本（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
+  "提纲必须是关键词式（避免完整长句），使用“->”表示层级，或用 Markdown 列表缩进（推荐），至少两级。",
   "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
   "每条<=20字。",
+  "系统会自动解析 Markdown 列表缩进。",
 ].join("\n");
 const DEFAULT_DEMO_PROMPT = [
   "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），内容过长需压缩到对应时长。",
