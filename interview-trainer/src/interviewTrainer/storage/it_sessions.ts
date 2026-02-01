@@ -59,30 +59,87 @@ async function it_writeJsonAsync(filePath: string, payload: any): Promise<void> 
   await fs.promises.writeFile(filePath, JSON.stringify(payload, null, 2), "utf-8");
 }
 
+function it_normalizeForMatch(text: string): string {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[\s.,;:!?，。？！；：、"'“”‘’()（）【】\[\]{}<>《》\-_/\\]+/g, "");
+}
+
+function it_buildBigrams(text: string): Map<string, number> {
+  const map = new Map<string, number>();
+  for (let i = 0; i < text.length - 1; i += 1) {
+    const token = text.slice(i, i + 2);
+    map.set(token, (map.get(token) ?? 0) + 1);
+  }
+  return map;
+}
+
 function it_similarityRatio(a: string, b: string): number {
-  if (!a || !b) {
+  const left = it_normalizeForMatch(a);
+  const right = it_normalizeForMatch(b);
+  if (!left || !right) {
     return 0;
   }
-  const shorter = a.length <= b.length ? a : b;
-  const longer = a.length > b.length ? a : b;
-  let hits = 0;
-  for (let i = 0; i < shorter.length; i += 1) {
-    if (shorter[i] === longer[i]) {
-      hits += 1;
+  if (left === right) {
+    return 1;
+  }
+  if (left.length < 2 || right.length < 2) {
+    return left === right ? 1 : 0;
+  }
+  const leftMap = it_buildBigrams(left);
+  const rightMap = it_buildBigrams(right);
+  let matches = 0;
+  let total = 0;
+  leftMap.forEach((count) => {
+    total += count;
+  });
+  rightMap.forEach((count, key) => {
+    total += count;
+    const hit = leftMap.get(key);
+    if (hit) {
+      matches += Math.min(hit, count);
+    }
+  });
+  return total ? (2 * matches) / total : 0;
+}
+
+export function it_buildQuestionFingerprint(
+  questionText: string,
+  questionList?: string[],
+): string {
+  const parts: string[] = [];
+  const normalizedText = it_normalizeForMatch(questionText);
+  if (normalizedText) {
+    parts.push(normalizedText);
+  }
+  if (questionList && questionList.length) {
+    const normalizedList = questionList
+      .map((item) => it_normalizeForMatch(item))
+      .filter(Boolean);
+    if (normalizedList.length) {
+      parts.push(normalizedList.join("|"));
     }
   }
-  return hits / longer.length;
+  return parts.join("|");
 }
 
 export function it_findExistingTopicDir(
   sessionsRoot: string,
   candidateTitle: string,
   candidateText: string,
+  candidateQuestions: string[] | undefined,
   cfg: ItSessionsConfig,
 ): string | null {
   const threshold = cfg.similarityThreshold;
-  const candidateBase = candidateTitle || candidateText;
-  const candidateHash = it_hashText(it_normalizeText(candidateBase));
+  const candidateBase =
+    candidateText || (candidateQuestions?.length ? candidateQuestions.join(" ") : "") || candidateTitle;
+  const candidateFingerprint = it_buildQuestionFingerprint(
+    candidateText,
+    candidateQuestions,
+  );
+  const candidateHash = it_hashText(
+    candidateFingerprint || it_normalizeText(candidateBase || candidateTitle),
+  );
   let bestMatch: string | null = null;
   let bestScore = 0;
 
@@ -108,9 +165,13 @@ export function it_findExistingTopicDir(
     if (meta.questionHash && meta.questionHash === candidateHash) {
       return path.dirname(metaPath);
     }
+    const metaQuestions = Array.isArray(meta.questionList)
+      ? meta.questionList.join(" ")
+      : "";
+    const metaBase = meta.questionText || metaQuestions || meta.topicTitle || "";
     const score = Math.max(
-      it_similarityRatio(candidateBase || "", meta.topicTitle || ""),
-      it_similarityRatio(candidateBase || "", (meta.questionText || "").slice(0, 64)),
+      it_similarityRatio(candidateBase || "", metaBase),
+      it_similarityRatio(candidateTitle || "", meta.topicTitle || ""),
     );
     if (score >= threshold && score > bestScore) {
       bestScore = score;
@@ -124,11 +185,19 @@ export async function it_findExistingTopicDirAsync(
   sessionsRoot: string,
   candidateTitle: string,
   candidateText: string,
+  candidateQuestions: string[] | undefined,
   cfg: ItSessionsConfig,
 ): Promise<string | null> {
   const threshold = cfg.similarityThreshold;
-  const candidateBase = candidateTitle || candidateText;
-  const candidateHash = it_hashText(it_normalizeText(candidateBase));
+  const candidateBase =
+    candidateText || (candidateQuestions?.length ? candidateQuestions.join(" ") : "") || candidateTitle;
+  const candidateFingerprint = it_buildQuestionFingerprint(
+    candidateText,
+    candidateQuestions,
+  );
+  const candidateHash = it_hashText(
+    candidateFingerprint || it_normalizeText(candidateBase || candidateTitle),
+  );
   let bestMatch: string | null = null;
   let bestScore = 0;
 
@@ -166,9 +235,13 @@ export async function it_findExistingTopicDirAsync(
     if (meta.questionHash && meta.questionHash === candidateHash) {
       return path.dirname(metaPath);
     }
+    const metaQuestions = Array.isArray(meta.questionList)
+      ? meta.questionList.join(" ")
+      : "";
+    const metaBase = meta.questionText || metaQuestions || meta.topicTitle || "";
     const score = Math.max(
-      it_similarityRatio(candidateBase || "", meta.topicTitle || ""),
-      it_similarityRatio(candidateBase || "", (meta.questionText || "").slice(0, 64)),
+      it_similarityRatio(candidateBase || "", metaBase),
+      it_similarityRatio(candidateTitle || "", meta.topicTitle || ""),
     );
     if (score >= threshold && score > bestScore) {
       bestScore = score;
@@ -182,10 +255,17 @@ export function it_resolveTopicDir(
   workspaceRoot: string,
   topicTitle: string,
   questionText: string,
+  questionList: string[],
   cfg: ItSessionsConfig,
 ): string {
   const sessionsRoot = it_ensureDir(path.join(workspaceRoot, cfg.sessionsDir));
-  const existing = it_findExistingTopicDir(sessionsRoot, topicTitle, questionText, cfg);
+  const existing = it_findExistingTopicDir(
+    sessionsRoot,
+    topicTitle,
+    questionText,
+    questionList,
+    cfg,
+  );
   if (existing) {
     return existing;
   }
@@ -200,6 +280,7 @@ export async function it_resolveTopicDirAsync(
   workspaceRoot: string,
   topicTitle: string,
   questionText: string,
+  questionList: string[],
   cfg: ItSessionsConfig,
 ): Promise<string> {
   const sessionsRoot = await it_ensureDirAsync(path.join(workspaceRoot, cfg.sessionsDir));
@@ -207,6 +288,7 @@ export async function it_resolveTopicDirAsync(
     sessionsRoot,
     topicTitle,
     questionText,
+    questionList,
     cfg,
   );
   if (existing) {

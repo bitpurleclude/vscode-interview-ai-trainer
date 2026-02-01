@@ -22,6 +22,7 @@ import { it_evaluateAnswer } from "./it_evaluation";
 import { ItCorpusItem, it_buildCorpusAsync, it_retrieveNotesMulti } from "./it_notes";
 import {
   it_appendAttemptDataAsync,
+  it_buildQuestionFingerprint,
   it_nextAttemptIndexAsync,
   it_readTopicMetaAsync,
   it_reportPathForTopicAsync,
@@ -1161,7 +1162,8 @@ async function it_persistAnalysis(params: {
   await it_appendAttemptDataAsync(topicDir, attemptData);
 
   const meta = await it_readTopicMetaAsync(topicDir);
-  const normalized = it_normalizeText(questionText || topicTitle);
+  const fingerprint = it_buildQuestionFingerprint(questionText, questionList);
+  const normalized = fingerprint || it_normalizeText(questionText || topicTitle);
   const now = new Date().toISOString();
   await it_writeTopicMetaAsync(topicDir, {
     topicTitle: meta.topicTitle || topicTitle,
@@ -1584,11 +1586,12 @@ export async function it_runAnalysis(
     deps.workspaceRoot,
     topicTitle,
     questionText,
+    questionList,
     {
-    sessionsDir: deps.skillConfig.sessions_dir || "sessions",
-    allowUnicode: deps.skillConfig.filenames?.allow_unicode ?? true,
-    maxSlugLen: deps.skillConfig.filenames?.max_slug_len ?? 16,
-    similarityThreshold: Number(deps.skillConfig.topics?.similarity_threshold ?? 0.72),
+      sessionsDir: deps.skillConfig.sessions_dir || "sessions",
+      allowUnicode: deps.skillConfig.filenames?.allow_unicode ?? true,
+      maxSlugLen: deps.skillConfig.filenames?.max_slug_len ?? 16,
+      similarityThreshold: Number(deps.skillConfig.topics?.similarity_threshold ?? 0.72),
     centerSubdir: deps.skillConfig.topics?.center_subdir || "",
     },
   );

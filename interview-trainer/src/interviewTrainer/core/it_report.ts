@@ -8,6 +8,17 @@ export interface ItReportConfig {
   attemptNote?: string;
 }
 
+function it_indentLines(text: string, prefix: string): string {
+  const raw = String(text || "").replace(/\r\n/g, "\n");
+  if (!raw.trim()) {
+    return `${prefix}（空）`;
+  }
+  return raw
+    .split("\n")
+    .map((line) => `${prefix}${line}`)
+    .join("\n");
+}
+
 export function it_renderReport(
   topicTitle: string,
   questionText: string | undefined,
@@ -102,10 +113,12 @@ export function it_renderReport(
     response.evaluation.revisedAnswers.forEach((item, idx) => {
       lines.push(`${idx + 1}. ${item.question}\n`);
       if (item.estimatedTimeMin !== undefined) {
-        lines.push(`- 建议用时: ${item.estimatedTimeMin}分钟\n`);
+        lines.push(`   - 建议用时: ${item.estimatedTimeMin}分钟\n`);
       }
-      lines.push(`- 原回答: ${item.original}\n`);
-      lines.push(`- 示范: ${item.revised}\n`);
+      lines.push("   - 原回答:\n");
+      lines.push(`${it_indentLines(item.original, "     ")}\n`);
+      lines.push("   - 示范:\n");
+      lines.push(`${it_indentLines(item.revised, "     ")}\n`);
     });
     lines.push("\n");
   }
