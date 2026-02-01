@@ -67,6 +67,8 @@ const IT_DEFAULT_QUERY_CACHE_SIZE = 200;
 
 const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
 const cachedQueries: Map<string, ItNoteHit[]> = new Map();
+const cachedQueryEmbeddings: Map<string, number[]> = new Map();
+const cachedQueryEmbeddingPromises: Map<string, Promise<number[]>> = new Map();
 
 export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
   if (cacheKey) {
@@ -75,6 +77,8 @@ export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
   }
   cachedEmbeddings.clear();
   cachedQueries.clear();
+  cachedQueryEmbeddings.clear();
+  cachedQueryEmbeddingPromises.clear();
   cachedCorpus = undefined;
 }
 
@@ -135,6 +139,31 @@ function it_setCachedQuery(
   const firstKey = cachedQueries.keys().next().value;
   if (firstKey) {
     cachedQueries.delete(firstKey);
+  }
+}
+
+function it_getCachedQueryEmbedding(key: string): number[] | undefined {
+  const cached = cachedQueryEmbeddings.get(key);
+  if (!cached) {
+    return undefined;
+  }
+  cachedQueryEmbeddings.delete(key);
+  cachedQueryEmbeddings.set(key, cached);
+  return cached;
+}
+
+function it_setCachedQueryEmbedding(
+  key: string,
+  value: number[],
+  maxSize: number,
+): void {
+  cachedQueryEmbeddings.set(key, value);
+  if (cachedQueryEmbeddings.size <= maxSize) {
+    return;
+  }
+  const firstKey = cachedQueryEmbeddings.keys().next().value;
+  if (firstKey) {
+    cachedQueryEmbeddings.delete(firstKey);
   }
 }
 
@@ -1132,7 +1161,30 @@ export async function it_retrieveNotes(
     return [];
   }
 
-  const queryEmbedding = (await it_embedTexts(vectorCfg, [trimmedQuery]))[0];
+  const embeddingCacheKey = it_hashText(
+    `${it_buildEmbeddingCacheKey(vectorCfg)}|${trimmedQuery}`,
+  );
+  let queryEmbedding = it_getCachedQueryEmbedding(embeddingCacheKey);
+  if (!queryEmbedding) {
+    let pending = cachedQueryEmbeddingPromises.get(embeddingCacheKey);
+    if (!pending) {
+      pending = (async () => {
+        const vectors = await it_embedTexts(vectorCfg, [trimmedQuery]);
+        return vectors[0] || [];
+      })();
+      cachedQueryEmbeddingPromises.set(embeddingCacheKey, pending);
+    }
+    try {
+      queryEmbedding = await pending;
+    } finally {
+      if (cachedQueryEmbeddingPromises.get(embeddingCacheKey) === pending) {
+        cachedQueryEmbeddingPromises.delete(embeddingCacheKey);
+      }
+    }
+    if (queryEmbedding && queryEmbedding.length && maxCacheSize > 0) {
+      it_setCachedQueryEmbedding(embeddingCacheKey, queryEmbedding, maxCacheSize);
+    }
+  }
   if (!queryEmbedding || !queryEmbedding.length) {
     return [];
   }
