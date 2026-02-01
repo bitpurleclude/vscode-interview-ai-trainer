@@ -25,6 +25,54 @@ interface ItOutlineNode {
   children: ItOutlineNode[];
 }
 
+function it_extractOutlinePaths(items: string[]): string[][] {
+  const paths: string[][] = [];
+  let currentLevel1: string | null = null;
+  let currentLevel2: string | null = null;
+  const level1Pattern = /^([一二三四五六七八九十]+|\d+)[、.]/;
+  const level2Pattern = /^[（(]([一二三四五六七八九十]+|\d+)[）)]/;
+
+  items.forEach((item) => {
+    const raw = String(item || "").trim();
+    if (!raw) {
+      return;
+    }
+    if (raw.includes("->")) {
+      const parts = raw
+        .split("->")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      if (parts.length) {
+        currentLevel1 = parts[0] || currentLevel1;
+        currentLevel2 = parts.length > 1 ? parts[1] : null;
+        paths.push(parts);
+      }
+      return;
+    }
+    if (level1Pattern.test(raw)) {
+      currentLevel1 = raw;
+      currentLevel2 = null;
+      paths.push([raw]);
+      return;
+    }
+    if (level2Pattern.test(raw) && currentLevel1) {
+      currentLevel2 = raw;
+      paths.push([currentLevel1, raw]);
+      return;
+    }
+    if (currentLevel1) {
+      if (currentLevel2) {
+        paths.push([currentLevel1, currentLevel2, raw]);
+      } else {
+        paths.push([currentLevel1, raw]);
+      }
+      return;
+    }
+    paths.push([raw]);
+  });
+  return paths;
+}
+
 function it_buildOutlineTree(items: string[]): ItOutlineNode[] {
   const roots: ItOutlineNode[] = [];
   const findOrCreate = (list: ItOutlineNode[], text: string): ItOutlineNode => {
@@ -36,14 +84,8 @@ function it_buildOutlineTree(items: string[]): ItOutlineNode[] {
     list.push(node);
     return node;
   };
-  items.forEach((item) => {
-    const parts = String(item || "")
-      .split("->")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (!parts.length) {
-      return;
-    }
+  const paths = it_extractOutlinePaths(items);
+  paths.forEach((parts) => {
     let current = roots;
     parts.forEach((part) => {
       const node = findOrCreate(current, part);

@@ -1351,6 +1351,9 @@ export async function it_runAnalysis(
   const transcript = await it_transcribeAudio(request, asrCfg, reportProgress);
   ensureNotAborted();
   deps.onPartial?.({ transcript });
+  if (retrievalEnabled) {
+    reportProgress("notes", 50, "语料就绪，等待检索准备", "running");
+  }
 
   reportProgress("acoustic", 20, "声学分析 20% · 本地", "running");
   const acoustic =
