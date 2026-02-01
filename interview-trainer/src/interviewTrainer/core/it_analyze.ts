@@ -53,6 +53,7 @@ interface ItAnalyzeDeps {
     questionTimingNote?: string;
     evaluation?: ItEvaluation;
   }) => void;
+  onCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
   corpusDirty?: boolean;
   corpusDirtyFiles?: string[];
   abortSignal?: { aborted: boolean };
@@ -1264,6 +1265,7 @@ export async function it_runAnalysis(
         maxCacheBytes: corpusCacheBytes,
         skipMtimeCheck,
         dirtyFiles: deps.corpusDirtyFiles,
+        onTrace: deps.onCorpusTrace,
       },
     ).then((corpus) => {
       const scanElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);

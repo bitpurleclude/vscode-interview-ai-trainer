@@ -534,9 +534,33 @@ async function it_applyDirtyFilesToCorpus(
   base: { corpus: ItCorpusItem[]; dirMtimes: Record<string, number> },
   entries: Array<[string, string]>,
   dirtyFiles: string[],
-): Promise<{ corpus: ItCorpusItem[]; dirMtimes: Record<string, number> } | undefined> {
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+): Promise<
+  | {
+      corpus: ItCorpusItem[];
+      dirMtimes: Record<string, number>;
+      stats: {
+        dirtyFiles: number;
+        appliedFiles: number;
+        ignoredFiles: number;
+        removedChunks: number;
+        addedChunks: number;
+      };
+    }
+  | null
+> {
   if (!dirtyFiles.length) {
-    return { corpus: base.corpus, dirMtimes: base.dirMtimes };
+    return {
+      corpus: base.corpus,
+      dirMtimes: base.dirMtimes,
+      stats: {
+        dirtyFiles: 0,
+        appliedFiles: 0,
+        ignoredFiles: 0,
+        removedChunks: 0,
+        addedChunks: 0,
+      },
+    };
   }
   const roots = entries
     .map(([kind, dirPath]) => {
@@ -562,15 +586,28 @@ async function it_applyDirtyFilesToCorpus(
   });
 
   if (!dirtyMap.size) {
-    return { corpus: base.corpus, dirMtimes: base.dirMtimes };
+    return {
+      corpus: base.corpus,
+      dirMtimes: base.dirMtimes,
+      stats: {
+        dirtyFiles: 0,
+        appliedFiles: 0,
+        ignoredFiles: 0,
+        removedChunks: 0,
+        addedChunks: 0,
+      },
+    };
   }
 
   const dirtySet = new Set(dirtyMap.keys());
   const corpus = base.corpus.filter(
     (item) => !dirtySet.has(it_normalizePath(item.source)),
   );
+  const removedChunks = Math.max(0, base.corpus.length - corpus.length);
   const additions: ItCorpusItem[] = [];
   const dirMtimes = { ...(base.dirMtimes || {}) };
+  let appliedFiles = 0;
+  let ignoredFiles = 0;
 
   for (const [filePath, kind] of dirtyMap) {
     let stat: fs.Stats;
@@ -580,21 +617,30 @@ async function it_applyDirtyFilesToCorpus(
       continue;
     }
     if (stat.isDirectory()) {
-      return undefined;
+      onTrace?.("语料增量更新跳过：包含目录变更，改为全量扫描", { path: filePath });
+      return null;
     }
     if (!stat.isFile()) {
+      ignoredFiles += 1;
       continue;
     }
     const ext = path.extname(filePath).toLowerCase();
     if (!IT_ALLOWED_EXTS.includes(ext)) {
+      ignoredFiles += 1;
       continue;
     }
     if (stat.size > IT_MAX_FILE_SIZE) {
+      ignoredFiles += 1;
       continue;
     }
     const text = await it_readTextAsync(filePath);
+    let addedChunks = 0;
     for (const chunk of it_splitText(text, IT_MAX_CHUNK_LEN)) {
       additions.push({ kind, source: filePath, text: chunk });
+      addedChunks += 1;
+    }
+    if (addedChunks > 0) {
+      appliedFiles += 1;
     }
     const mtime = stat.mtimeMs || 0;
     if (mtime) {
@@ -606,7 +652,17 @@ async function it_applyDirtyFilesToCorpus(
     corpus.push(...additions);
   }
 
-  return { corpus, dirMtimes };
+  return {
+    corpus,
+    dirMtimes,
+    stats: {
+      dirtyFiles: dirtyMap.size,
+      appliedFiles,
+      ignoredFiles,
+      removedChunks,
+      addedChunks: additions.length,
+    },
+  };
 }
 
 export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
@@ -681,8 +737,10 @@ export async function it_buildCorpusAsync(
     maxCacheBytes?: number;
     skipMtimeCheck?: boolean;
     dirtyFiles?: string[];
+    onTrace?: (message: string, detail?: Record<string, unknown>) => void;
   } = {},
 ): Promise<ItCorpusItem[]> {
+  const startedAt = Date.now();
   const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
   const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
   const maxCacheBytes = Number.isFinite(options.maxCacheBytes)
@@ -699,12 +757,26 @@ export async function it_buildCorpusAsync(
       )
     : [];
   const hasDirtyFiles = dirtyFiles.length > 0;
+  const logTrace = (message: string, detail?: Record<string, unknown>): void => {
+    options.onTrace?.(message, detail);
+  };
+
+  logTrace("语料扫描开始", {
+    kinds: entries.map(([kind]) => kind),
+    skipMtimeCheck: Boolean(options.skipMtimeCheck),
+    dirtyFiles: dirtyFiles.length,
+    cacheEnabled: Boolean(cachePath),
+  });
 
   const loadCachedCorpus = async (): Promise<
-    { dirMtimes: Record<string, number>; corpus: ItCorpusItem[] } | undefined
+    { dirMtimes: Record<string, number>; corpus: ItCorpusItem[]; source: string } | undefined
   > => {
     if (cachedCorpus && cachedCorpus.key === key) {
-      return { dirMtimes: cachedCorpus.dirMtimes, corpus: cachedCorpus.corpus };
+      return {
+        dirMtimes: cachedCorpus.dirMtimes,
+        corpus: cachedCorpus.corpus,
+        source: "memory",
+      };
     }
     if (!cachePath) {
       return undefined;
@@ -725,6 +797,7 @@ export async function it_buildCorpusAsync(
         return {
           dirMtimes: parsed.dirMtimes || {},
           corpus: parsed.corpus as ItCorpusItem[],
+          source: "disk",
         };
       }
     } catch {
@@ -734,11 +807,30 @@ export async function it_buildCorpusAsync(
   };
 
   if (hasDirtyFiles) {
+    logTrace("语料增量更新尝试", { dirtyFiles: dirtyFiles.length });
     const base = await loadCachedCorpus();
     if (base) {
-      const updated = await it_applyDirtyFilesToCorpus(base, entries, dirtyFiles);
+      logTrace("语料缓存命中（用于增量）", {
+        source: base.source,
+        items: base.corpus.length,
+      });
+      const updated = await it_applyDirtyFilesToCorpus(
+        base,
+        entries,
+        dirtyFiles,
+        logTrace,
+      );
       if (updated) {
-        cachedCorpus = { key, dirMtimes: updated.dirMtimes, corpus: updated.corpus };
+        cachedCorpus = {
+          key,
+          dirMtimes: updated.dirMtimes,
+          corpus: updated.corpus,
+        };
+        logTrace("语料增量更新完成", {
+          ...updated.stats,
+          totalChunks: updated.corpus.length,
+          elapsedSec: Number(((Date.now() - startedAt) / 1000).toFixed(2)),
+        });
         if (cachePath && cachedCorpus.corpus.length) {
           try {
             await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
@@ -757,11 +849,13 @@ export async function it_buildCorpusAsync(
         }
         return cachedCorpus.corpus;
       }
+      logTrace("语料增量更新失败，改为全量扫描");
     }
   }
 
   if (options.skipMtimeCheck && !hasDirtyFiles) {
     if (cachedCorpus && cachedCorpus.key === key) {
+      logTrace("语料缓存命中（内存）", { items: cachedCorpus.corpus.length });
       return cachedCorpus.corpus;
     }
     if (cachePath) {
@@ -779,6 +873,7 @@ export async function it_buildCorpusAsync(
             dirMtimes: parsed.dirMtimes || {},
             corpus: parsed.corpus as ItCorpusItem[],
           };
+          logTrace("语料缓存命中（磁盘）", { items: cachedCorpus.corpus.length });
           return cachedCorpus.corpus;
         }
       } catch {
@@ -796,6 +891,7 @@ export async function it_buildCorpusAsync(
       ([kind]) => cachedCorpus?.dirMtimes[kind] === dirMtimes[kind],
     );
     if (unchanged) {
+      logTrace("语料缓存命中（目录未变）", { items: cachedCorpus.corpus.length });
       return cachedCorpus.corpus;
     }
   }
@@ -818,6 +914,9 @@ export async function it_buildCorpusAsync(
             dirMtimes,
             corpus: parsed.corpus as ItCorpusItem[],
           };
+          logTrace("语料缓存命中（磁盘校验）", {
+            items: cachedCorpus.corpus.length,
+          });
           return cachedCorpus.corpus;
         }
       }
@@ -826,11 +925,17 @@ export async function it_buildCorpusAsync(
     }
   }
 
+  logTrace("语料全量扫描开始");
   const corpus: ItCorpusItem[] = [];
   for (const [kind, dirPath] of entries) {
     await it_collectCorpusAsync(kind, dirPath, corpus);
   }
   cachedCorpus = { key, dirMtimes, corpus };
+  logTrace("语料全量扫描完成", {
+    chunks: corpus.length,
+    sources: new Set(corpus.map((item) => item.source)).size,
+    elapsedSec: Number(((Date.now() - startedAt) / 1000).toFixed(2)),
+  });
   if (cachePath && corpus.length) {
     try {
       await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });

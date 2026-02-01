@@ -134,6 +134,17 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.outputChannel.show(true);
   }
 
+  private logCorpusTrace(message: string, detail?: Record<string, unknown>): void {
+    const stamp = new Date().toISOString();
+    if (detail && Object.keys(detail).length) {
+      this.outputChannel.appendLine(
+        `[${stamp}] ${message} ${JSON.stringify(detail)}`,
+      );
+    } else {
+      this.outputChannel.appendLine(`[${stamp}] ${message}`);
+    }
+  }
+
   private requireWorkspaceRoot(): string {
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length) {
@@ -481,6 +492,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       maxCacheBytes: corpusCacheBytes,
       skipMtimeCheck,
       dirtyFiles: Array.from(this.corpusDirtyFiles),
+      onTrace: (message, detail) => this.logCorpusTrace(message, detail),
     });
     this.corpusDirty = false;
     this.corpusDirtyFiles.clear();
@@ -1946,6 +1958,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           },
           corpusDirty: this.corpusDirty,
           corpusDirtyFiles: Array.from(this.corpusDirtyFiles),
+          onCorpusTrace: (message, detail) => this.logCorpusTrace(message, detail),
           abortSignal: this.analysisAbort ?? undefined,
         },
         request,
