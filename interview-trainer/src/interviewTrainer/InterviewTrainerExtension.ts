@@ -230,6 +230,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         devPid: Number(asrConfig.dev_pid ?? 1537),
         mockText: asrConfig.mock_text || "",
         maxChunkSec: Number(asrConfig.max_chunk_sec ?? 50),
+        maxConcurrency: Number(asrConfig.max_concurrency ?? asrConfig.maxConcurrency ?? 1),
         timeoutSec: Number(asrConfig.timeout_sec ?? 120),
         maxRetries: Number(asrConfig.max_retries ?? 1),
       },
@@ -1226,6 +1227,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         language: asrForm.language ?? envConfig.asr?.language ?? "zh",
         dev_pid: Number(asrForm.devPid ?? envConfig.asr?.dev_pid ?? 1537),
         max_chunk_sec: Number(asrForm.maxChunkSec ?? envConfig.asr?.max_chunk_sec ?? 50),
+        max_concurrency: Number(
+          asrForm.maxConcurrency ?? envConfig.asr?.max_concurrency ?? 1,
+        ),
         timeout_sec: Number(asrForm.timeoutSec ?? envConfig.asr?.timeout_sec ?? 120),
         max_retries: Number(asrForm.maxRetries ?? envConfig.asr?.max_retries ?? 1),
       };

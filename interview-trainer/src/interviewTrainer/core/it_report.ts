@@ -127,23 +127,23 @@ export async function it_updateReferenceNotesFileAsync(
   }
 
   const mergedUsage = it_mergeUnique(
-    it_parseSection(existing, "寮曠敤绗旇"),
+    it_parseSection(existing, "引用笔记"),
     noteUsage,
   );
   const mergedSuggestions = it_mergeUnique(
-    it_parseSection(existing, "鍙敤绱犳潗/鍙弬鑰冩€濊矾"),
+    it_parseSection(existing, "可用素材/可参考思路"),
     noteSuggestions,
   );
   const updatedAt = new Date().toISOString();
   const lines: string[] = [];
-  lines.push("# 鍙傝€冪礌鏉愪笌绗旇\n\n");
-  lines.push(`鏇存柊鏃堕棿: ${updatedAt}\n\n`);
-  lines.push("## 寮曠敤绗旇\n\n");
+  lines.push("# 参考素材与笔记\n\n");
+  lines.push(`更新时间: ${updatedAt}\n\n`);
+  lines.push("## 引用笔记\n\n");
   mergedUsage.forEach((item) => {
     lines.push(`- ${item}\n`);
   });
   lines.push("\n");
-  lines.push("## 鍙敤绱犳潗/鍙弬鑰冩€濊矾\n\n");
+  lines.push("## 可用素材/可参考思路\n\n");
   mergedSuggestions.forEach((item) => {
     lines.push(`- ${item}\n`);
   });
@@ -168,10 +168,10 @@ export function it_renderReport(
   lines.push(`Total duration: ${it_formatSeconds(response.acoustic.durationSec)}\n\n`);
 
   if (questionText) {
-    lines.push(`棰樺共: ${questionText}\n\n`);
+    lines.push(`题干: ${questionText}\n\n`);
   }
   if (questionList && questionList.length) {
-    lines.push("灏忛鍒楄〃:\n");
+    lines.push("小题列表:\n");
     questionList.forEach((item, idx) => {
       lines.push(`${idx + 1}. ${item}\n`);
     });
@@ -182,40 +182,40 @@ export function it_renderReport(
     lines.push(`> ${config.attemptNote}\n\n`);
   }
 
-  lines.push("### 杞啓鏂囨湰\n\n");
+  lines.push("### 转写文本\n\n");
   lines.push(`${response.transcript}\n\n`);
 
-  lines.push("### 澹板鍒嗘瀽\n\n");
-  lines.push("| 鎸囨爣 | 鏁板€?|\n| --- | --- |\n");
-  lines.push(`| 鏃堕暱 | ${response.acoustic.durationSec.toFixed(2)}s |\n`);
-  lines.push(`| 璇€?| ${response.acoustic.speechRateWpm ?? "-"} |\n`);
-  lines.push(`| 鍋滈】娆℃暟 | ${response.acoustic.pauseCount} |\n`);
-  lines.push(`| 骞冲潎鍋滈】 | ${response.acoustic.pauseAvgSec.toFixed(2)}s |\n`);
-  lines.push(`| 鏈€闀垮仠椤?| ${response.acoustic.pauseMaxSec.toFixed(2)}s |\n`);
-  lines.push(`| RMS鍧囧€?| ${response.acoustic.rmsDbMean.toFixed(2)}dB |\n`);
-  lines.push(`| RMS娉㈠姩 | ${response.acoustic.rmsDbStd.toFixed(2)}dB |\n`);
+  lines.push("### 声学分析\n\n");
+  lines.push("| 指标 | 数值 |\n| --- | --- |\n");
+  lines.push(`| 时长 | ${response.acoustic.durationSec.toFixed(2)}s |\n`);
+  lines.push(`| 语速 | ${response.acoustic.speechRateWpm ?? "-"} |\n`);
+  lines.push(`| 停顿次数 | ${response.acoustic.pauseCount} |\n`);
+  lines.push(`| 平均停顿 | ${response.acoustic.pauseAvgSec.toFixed(2)}s |\n`);
+  lines.push(`| 最长停顿 | ${response.acoustic.pauseMaxSec.toFixed(2)}s |\n`);
+  lines.push(`| RMS均值 | ${response.acoustic.rmsDbMean.toFixed(2)}dB |\n`);
+  lines.push(`| RMS波动 | ${response.acoustic.rmsDbStd.toFixed(2)}dB |\n`);
   lines.push(`| SNR | ${response.acoustic.snrDb ?? "-"} |\n\n`);
 
-  lines.push("### 闈㈣瘯璇勪环\n\n");
-  lines.push(`- 鎬荤粨: ${response.evaluation.topicSummary}\n`);
-  lines.push("- 缁村害璇勫垎:\n");
+  lines.push("### 面试评价\n\n");
+  lines.push(`- 总结: ${response.evaluation.topicSummary}\n`);
+  lines.push("- 维度评分:\n");
   Object.entries(response.evaluation.scores || {}).forEach(([key, value]) => {
     lines.push(`  - ${key}: ${value}\n`);
   });
-  lines.push(`- 鎬诲垎: ${response.evaluation.overallScore}\n`);
-  lines.push(`- 浼樼偣:\n`);
+  lines.push(`- 总分: ${response.evaluation.overallScore}\n`);
+  lines.push(`- 优点:\n`);
   response.evaluation.strengths.forEach((item) => {
     lines.push(`  - ${item}\n`);
   });
-  lines.push(`- 闂:\n`);
+  lines.push(`- 问题:\n`);
   response.evaluation.issues.forEach((item) => {
     lines.push(`  - ${item}\n`);
   });
-  lines.push(`- 鏀硅繘寤鸿:\n`);
+  lines.push(`- 改进建议:\n`);
   response.evaluation.improvements.forEach((item) => {
     lines.push(`  - ${item}\n`);
   });
-  lines.push(`- 缁冧範閲嶇偣:\n`);
+  lines.push(`- 练习重点:\n`);
   response.evaluation.nextFocus.forEach((item) => {
     lines.push(`  - ${item}\n`);
   });
@@ -226,41 +226,41 @@ export function it_renderReport(
     (response.evaluation.noteSuggestions &&
       response.evaluation.noteSuggestions.length)
   ) {
-    lines.push("### 鍙傝€冪礌鏉愪笌绗旇\n\n");
-    lines.push("宸叉眹鎬昏嚦 reference_notes.md锛堝悓棰樺叡浜紝閬垮厤閲嶅锛夈€俓n\n");
+    lines.push("### 参考素材与笔记\n\n");
+    lines.push("已汇总至 reference_notes.md（同题共享，避免重复）。\n\n");
   }
 
   if (response.evaluation.revisedAnswers?.length) {
-    lines.push("### 绀鸿寖鎬т慨鏀筡n\n");
+    lines.push("### 示范性修改\n\n");
     response.evaluation.revisedAnswers.forEach((item, idx) => {
       lines.push(`${idx + 1}. ${item.question}\n`);
       if (item.estimatedTimeMin !== undefined) {
-        lines.push(`   - 寤鸿鐢ㄦ椂: ${item.estimatedTimeMin}鍒嗛挓\n`);
+        lines.push(`   - 建议用时: ${item.estimatedTimeMin}分钟\n`);
       }
-      lines.push("   - 鍘熷洖绛?\n");
+      lines.push("   - 原回答:\n");
       lines.push(`${it_indentLines(item.original, "     ")}\n`);
-      lines.push("   - 绛旈鎻愮翰锛堜綘鐨勫洖绛旓級:\n");
+      lines.push("   - 答题提纲（你的回答）:\n");
       lines.push(`${it_renderOutline(item.outlineOriginal ?? [], "     ")}\n`);
-      lines.push("   - 绀鸿寖:\n");
+      lines.push("   - 示范:\n");
       lines.push(`${it_indentLines(item.revised, "     ")}\n`);
-      lines.push("   - 绛旈鎻愮翰锛堢ず鑼冿級:\n");
+      lines.push("   - 答题提纲（示范）:\n");
       lines.push(`${it_renderOutline(item.outlineRevised ?? [], "     ")}\n`);
     });
     lines.push("\n");
   }
 
   if (response.questionTimings && response.questionTimings.length) {
-    lines.push("### 棰樼洰鐢ㄦ椂\n\n");
+    lines.push("### 题目用时\n\n");
     response.questionTimings.forEach((item, idx) => {
-      const note = item.note ? `锛?{item.note}` : "";
+      const note = item.note ? `（${item.note}）` : "";
       const start = it_formatSeconds(item.startSec);
       const end = it_formatSeconds(item.endSec);
       const duration = it_formatSeconds(item.durationSec);
-      lines.push(`${idx + 1}. ${item.question} - [${start}-${end}] 鐢ㄦ椂 ${duration}${note}\n`);
+      lines.push(`${idx + 1}. ${item.question} - [${start}-${end}] 用时 ${duration}${note}\n`);
     });
     lines.push("\n");
   } else if (response.questionTimingNote) {
-    lines.push("### ????\n\n");
+    lines.push("### 题目用时\n\n");
     lines.push(`${response.questionTimingNote}\n\n`);
   }
 
@@ -280,11 +280,11 @@ export function it_appendReport(
     const header: string[] = [];
     header.push(`# ${topicTitle}\n\n`);
     if (questionText) {
-      header.push("棰樺共姝ｆ枃:\n");
+      header.push("题干正文:\n");
       header.push(`${questionText}\n\n`);
     }
     if (questionList && questionList.length) {
-      header.push("灏忛鍒楄〃:\n");
+      header.push("小题列表:\n");
       questionList.forEach((item, idx) => {
         header.push(`${idx + 1}. ${item}\n`);
       });
@@ -321,11 +321,11 @@ export async function it_appendReportAsync(
     const header: string[] = [];
     header.push(`# ${topicTitle}\n\n`);
     if (questionText) {
-      header.push("棰樺共姝ｆ枃:\n");
+      header.push("题干正文:\n");
       header.push(`${questionText}\n\n`);
     }
     if (questionList && questionList.length) {
-      header.push("灏忛鍒楄〃:\n");
+      header.push("小题列表:\n");
       questionList.forEach((item, idx) => {
         header.push(`${idx + 1}. ${item}\n`);
       });
@@ -344,5 +344,6 @@ export async function it_appendReportAsync(
   );
   await fs.promises.appendFile(reportPath, content, "utf-8");
 }
+
 
 

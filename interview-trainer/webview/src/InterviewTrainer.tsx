@@ -252,6 +252,7 @@ const InterviewTrainer: React.FC = () => {
       devPid: 1537,
       mockText: "",
       maxChunkSec: 50,
+      maxConcurrency: 1,
       timeoutSec: 120,
       maxRetries: 1,
     },
@@ -326,6 +327,7 @@ const InterviewTrainer: React.FC = () => {
         devPid: 1537,
         mockText: "",
         maxChunkSec: 50,
+        maxConcurrency: 1,
         timeoutSec: 120,
         maxRetries: 1,
       };
@@ -354,6 +356,11 @@ const InterviewTrainer: React.FC = () => {
           devPid: Number(asrProfile?.dev_pid ?? asrProfile?.devPid ?? asrDefaults.devPid),
           mockText: asrProfile?.mock_text || asrProfile?.mockText || asrDefaults.mockText,
           maxChunkSec: Number(asrProfile?.max_chunk_sec ?? asrProfile?.maxChunkSec ?? asrDefaults.maxChunkSec),
+          maxConcurrency: Number(
+            asrProfile?.max_concurrency ??
+              asrProfile?.maxConcurrency ??
+              asrDefaults.maxConcurrency,
+          ),
           timeoutSec: Number(asrProfile?.timeout_sec ?? asrProfile?.timeoutSec ?? asrDefaults.timeoutSec),
           maxRetries: Number(asrProfile?.max_retries ?? asrProfile?.maxRetries ?? asrDefaults.maxRetries),
         },
@@ -472,6 +479,7 @@ const InterviewTrainer: React.FC = () => {
             devPid: 1537,
             mockText: "",
             maxChunkSec: 50,
+            maxConcurrency: 1,
             timeoutSec: 120,
             maxRetries: 1,
           },
@@ -1127,6 +1135,7 @@ const InterviewTrainer: React.FC = () => {
           devPid: 1537,
           mockText: "",
           maxChunkSec: 50,
+          maxConcurrency: 1,
           timeoutSec: 120,
           maxRetries: 1,
         };
@@ -1146,6 +1155,12 @@ const InterviewTrainer: React.FC = () => {
             mockText: nextProfile.mock_text || nextProfile.mockText || prev.asr.mockText || defaults.mockText,
             maxChunkSec: Number(
               nextProfile.max_chunk_sec ?? nextProfile.maxChunkSec ?? prev.asr.maxChunkSec ?? defaults.maxChunkSec,
+            ),
+            maxConcurrency: Number(
+              nextProfile.max_concurrency ??
+                nextProfile.maxConcurrency ??
+                prev.asr.maxConcurrency ??
+                defaults.maxConcurrency,
             ),
             timeoutSec: Number(
               nextProfile.timeout_sec ?? nextProfile.timeoutSec ?? prev.asr.timeoutSec ?? defaults.timeoutSec,
@@ -1193,6 +1208,7 @@ const InterviewTrainer: React.FC = () => {
         devPid: Number(apiForm.asr.devPid),
         mockText: apiForm.asr.mockText,
         maxChunkSec: Number(apiForm.asr.maxChunkSec),
+        maxConcurrency: Number(apiForm.asr.maxConcurrency),
         timeoutSec: Number(apiForm.asr.timeoutSec),
         maxRetries: Number(apiForm.asr.maxRetries),
       },
@@ -1220,6 +1236,7 @@ const InterviewTrainer: React.FC = () => {
           dev_pid: Number(apiForm.asr.devPid),
           mock_text: apiForm.asr.mockText,
           max_chunk_sec: Number(apiForm.asr.maxChunkSec),
+          max_concurrency: Number(apiForm.asr.maxConcurrency),
           timeout_sec: Number(apiForm.asr.timeoutSec),
           max_retries: Number(apiForm.asr.maxRetries),
         },
@@ -2435,6 +2452,23 @@ const InterviewTrainer: React.FC = () => {
                             }
                           />
                         </div>
+                        <div className="it-input-pair">
+                          <div>并发</div>
+                          <input
+                            className="it-input"
+                            type="number"
+                            value={apiForm.asr.maxConcurrency}
+                            onChange={(event) =>
+                              handleApiFieldChange(
+                                "asr",
+                                "maxConcurrency",
+                                Number(event.target.value),
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="it-input-row it-input-row--pairs">
                         <div className="it-input-pair">
                           <div>超时(s)</div>
                           <input

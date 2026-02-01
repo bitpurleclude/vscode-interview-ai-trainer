@@ -960,16 +960,37 @@ async function it_transcribePcmWithChunks(
   base64: string,
   sampleRate: number,
   maxChunkSec: number,
+  maxConcurrency: number,
   onProgress?: (processed: number, total: number) => void,
 ): Promise<string> {
   let chunkSec = Math.max(5, Math.floor(maxChunkSec || 50));
   let lastError: unknown = undefined;
+  const resolvedConcurrency = Number.isFinite(maxConcurrency)
+    ? Math.max(1, Math.floor(maxConcurrency))
+    : 1;
+  const runWithLimit = async <T, R>(
+    list: T[],
+    limit: number,
+    task: (item: T, index: number) => Promise<R>,
+  ): Promise<R[]> => {
+    const results: R[] = new Array(list.length);
+    let cursor = 0;
+    const workers = new Array(Math.min(limit, list.length)).fill(0).map(async () => {
+      while (cursor < list.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await task(list[index], index);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  };
   for (;;) {
     const chunks = it_splitPcmBase64(base64, sampleRate, chunkSec);
-    const parts: string[] = [];
+    const parts: string[] = new Array(chunks.length);
+    let done = 0;
     try {
-      for (let idx = 0; idx < chunks.length; idx += 1) {
-        const chunk = chunks[idx];
+      await runWithLimit(chunks, resolvedConcurrency, async (chunk, idx) => {
         const part = await it_callBaiduAsr(asrConfig, {
           format: "pcm",
           rate: sampleRate,
@@ -978,9 +999,11 @@ async function it_transcribePcmWithChunks(
           speech: chunk.speech,
           len: chunk.len,
         });
-        parts.push(part);
-        onProgress?.(idx + 1, chunks.length);
-      }
+        parts[idx] = part;
+        done += 1;
+        onProgress?.(done, chunks.length);
+        return part;
+      });
       return parts.join(" ").replace(/\s+/g, " ").trim();
     } catch (err) {
       lastError = err;
@@ -1076,6 +1099,7 @@ async function it_transcribeAudio(
     maxRetries: Number(asrCfg.max_retries || 1),
   };
   const maxChunkSec = Number(asrCfg.max_chunk_sec || 50);
+  const maxConcurrency = Number(asrCfg.max_concurrency ?? asrCfg.maxConcurrency ?? 1);
   let transcript = "";
   if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
     transcript = await it_transcribePcmWithChunks(
@@ -1083,6 +1107,7 @@ async function it_transcribeAudio(
       request.audio.base64,
       request.audio.sampleRate,
       maxChunkSec,
+      maxConcurrency,
       (done, total) => {
         const percent = total ? Math.round((done / total) * 100) : 0;
         reportProgress(
@@ -1501,7 +1526,7 @@ export async function it_runAnalysis(
         reportProgress(
           "notes",
           70,
-          `${retrievalLabel}检索 70% · 本地`,
+          `${retrievalLabel}检索 70% · 本地 · 并行x${maxConcurrency}`,
           "running",
         );
         const questionsForNotes = questionList.length
@@ -1513,7 +1538,23 @@ export async function it_runAnalysis(
           retrievalAnswers && retrievalAnswers.length === questionsForNotes.length
             ? retrievalAnswers
             : questionsForNotes.map((question) => ({ question, answer: "" }));
+        const totalTasks = questionsForNotes.length || 1;
+        let doneTasks = 0;
+        const bumpNotesProgress = () => {
+          if (!totalTasks) {
+            return;
+          }
+          doneTasks = Math.min(totalTasks, doneTasks + 1);
+          const percent = 70 + Math.round((doneTasks / totalTasks) * 25);
+          reportProgress(
+            "notes",
+            Math.min(95, percent),
+            `${retrievalLabel}检索 ${Math.min(95, percent)}% · 本地 · ${doneTasks}/${totalTasks}`,
+            "running",
+          );
+        };
         if (questionsForNotes.length) {
+          notesByQuestion = new Array(questionsForNotes.length);
           const noteTasks = questionsForNotes.map((question, idx) => {
             const answer = resolvedAnswers[idx]?.answer || "";
             const queries = it_buildRetrievalQueries({
@@ -1528,9 +1569,9 @@ export async function it_runAnalysis(
               topK: notesTopK,
               minScore: notesMinScore,
               cacheDir: notesCacheDir,
-            cacheKey: queryCacheKey,
-            queryCacheSize,
-            maxConcurrency,
+              cacheKey: queryCacheKey,
+              queryCacheSize,
+              maxConcurrency,
               vector: {
                 provider: resolvedVector.provider || "",
                 apiKey: resolvedVector.api_key || "",
@@ -1541,9 +1582,14 @@ export async function it_runAnalysis(
                 batchSize: Number(resolvedVector.batch_size ?? 16),
                 queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
               },
-            });
+            })
+              .then((result) => {
+                notesByQuestion[idx] = result;
+                return result;
+              })
+              .finally(bumpNotesProgress);
           });
-          notesByQuestion = await Promise.all(noteTasks);
+          await Promise.all(noteTasks);
           notes = it_mergeNoteHits(notesByQuestion, notesTopK);
         } else {
           const fallbackQuery = transcript.trim()
@@ -1555,9 +1601,9 @@ export async function it_runAnalysis(
                 topK: notesTopK,
                 minScore: notesMinScore,
                 cacheDir: notesCacheDir,
-            cacheKey: queryCacheKey,
-            queryCacheSize,
-            maxConcurrency,
+                cacheKey: queryCacheKey,
+                queryCacheSize,
+                maxConcurrency,
                 vector: {
                   provider: resolvedVector.provider || "",
                   apiKey: resolvedVector.api_key || "",
@@ -1570,6 +1616,7 @@ export async function it_runAnalysis(
                 },
               })
             : [];
+          bumpNotesProgress();
         }
       } catch (err) {
         notesError = err instanceof Error ? err.message : String(err);

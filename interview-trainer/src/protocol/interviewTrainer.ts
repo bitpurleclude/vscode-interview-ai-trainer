@@ -182,6 +182,7 @@ export interface ItConfigSnapshot {
     devPid: number;
     mockText: string;
     maxChunkSec: number;
+    maxConcurrency: number;
     timeoutSec: number;
     maxRetries: number;
   };
