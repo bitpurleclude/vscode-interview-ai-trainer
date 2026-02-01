@@ -153,6 +153,25 @@ async function it_readTextAsync(filePath: string): Promise<string> {
   }
 }
 
+function it_normalizePath(filePath: string): string {
+  const resolved = path.resolve(String(filePath || ""));
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function it_isWithinRoot(filePath: string, root: string): boolean {
+  if (!root) {
+    return false;
+  }
+  if (filePath === root) {
+    return true;
+  }
+  const rel = path.relative(root, filePath);
+  if (!rel) {
+    return true;
+  }
+  return !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
 function it_splitByParagraphs(text: string, maxLen: number): string[] {
   const parts = text
     .split(/\n\s*\n/)
@@ -511,6 +530,85 @@ async function it_collectCorpusAsync(
   }
 }
 
+async function it_applyDirtyFilesToCorpus(
+  base: { corpus: ItCorpusItem[]; dirMtimes: Record<string, number> },
+  entries: Array<[string, string]>,
+  dirtyFiles: string[],
+): Promise<{ corpus: ItCorpusItem[]; dirMtimes: Record<string, number> } | undefined> {
+  if (!dirtyFiles.length) {
+    return { corpus: base.corpus, dirMtimes: base.dirMtimes };
+  }
+  const roots = entries
+    .map(([kind, dirPath]) => {
+      const raw = String(dirPath || "").trim();
+      if (!raw) {
+        return undefined;
+      }
+      return { kind, root: it_normalizePath(raw) };
+    })
+    .filter(Boolean) as Array<{ kind: string; root: string }>;
+  roots.sort((a, b) => b.root.length - a.root.length);
+
+  const dirtyMap = new Map<string, string>();
+  dirtyFiles.forEach((value) => {
+    const filePath = it_normalizePath(value);
+    if (!filePath) {
+      return;
+    }
+    const match = roots.find((entry) => it_isWithinRoot(filePath, entry.root));
+    if (match) {
+      dirtyMap.set(filePath, match.kind);
+    }
+  });
+
+  if (!dirtyMap.size) {
+    return { corpus: base.corpus, dirMtimes: base.dirMtimes };
+  }
+
+  const dirtySet = new Set(dirtyMap.keys());
+  const corpus = base.corpus.filter(
+    (item) => !dirtySet.has(it_normalizePath(item.source)),
+  );
+  const additions: ItCorpusItem[] = [];
+  const dirMtimes = { ...(base.dirMtimes || {}) };
+
+  for (const [filePath, kind] of dirtyMap) {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.stat(filePath);
+    } catch {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      return undefined;
+    }
+    if (!stat.isFile()) {
+      continue;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    if (!IT_ALLOWED_EXTS.includes(ext)) {
+      continue;
+    }
+    if (stat.size > IT_MAX_FILE_SIZE) {
+      continue;
+    }
+    const text = await it_readTextAsync(filePath);
+    for (const chunk of it_splitText(text, IT_MAX_CHUNK_LEN)) {
+      additions.push({ kind, source: filePath, text: chunk });
+    }
+    const mtime = stat.mtimeMs || 0;
+    if (mtime) {
+      dirMtimes[kind] = Math.max(dirMtimes[kind] || 0, mtime);
+    }
+  }
+
+  if (additions.length) {
+    corpus.push(...additions);
+  }
+
+  return { corpus, dirMtimes };
+}
+
 export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
   const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
   const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
@@ -578,7 +676,12 @@ export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
 
 export async function it_buildCorpusAsync(
   inputs: Record<string, string>,
-  options: { cacheDir?: string; maxCacheBytes?: number; skipMtimeCheck?: boolean } = {},
+  options: {
+    cacheDir?: string;
+    maxCacheBytes?: number;
+    skipMtimeCheck?: boolean;
+    dirtyFiles?: string[];
+  } = {},
 ): Promise<ItCorpusItem[]> {
   const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));
   const key = entries.map(([kind, dirPath]) => `${kind}:${dirPath}`).join("|");
@@ -586,7 +689,78 @@ export async function it_buildCorpusAsync(
     ? Math.max(0, Number(options.maxCacheBytes))
     : IT_MAX_CORPUS_CACHE_BYTES;
   const cachePath = options.cacheDir ? it_getCorpusCachePath(options.cacheDir, key) : "";
-  if (options.skipMtimeCheck) {
+  const dirtyFiles = Array.isArray(options.dirtyFiles)
+    ? Array.from(
+        new Set(
+          options.dirtyFiles
+            .filter(Boolean)
+            .map((value) => it_normalizePath(value)),
+        ),
+      )
+    : [];
+  const hasDirtyFiles = dirtyFiles.length > 0;
+
+  const loadCachedCorpus = async (): Promise<
+    { dirMtimes: Record<string, number>; corpus: ItCorpusItem[] } | undefined
+  > => {
+    if (cachedCorpus && cachedCorpus.key === key) {
+      return { dirMtimes: cachedCorpus.dirMtimes, corpus: cachedCorpus.corpus };
+    }
+    if (!cachePath) {
+      return undefined;
+    }
+    try {
+      const stat = await fs.promises.stat(cachePath);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > maxCacheBytes) {
+        return undefined;
+      }
+      const raw = await fs.promises.readFile(cachePath, "utf-8");
+      const parsed = JSON.parse(raw || "{}");
+      if (
+        parsed &&
+        parsed.version === IT_CORPUS_CACHE_VERSION &&
+        parsed.key === key &&
+        parsed.corpus
+      ) {
+        return {
+          dirMtimes: parsed.dirMtimes || {},
+          corpus: parsed.corpus as ItCorpusItem[],
+        };
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  };
+
+  if (hasDirtyFiles) {
+    const base = await loadCachedCorpus();
+    if (base) {
+      const updated = await it_applyDirtyFilesToCorpus(base, entries, dirtyFiles);
+      if (updated) {
+        cachedCorpus = { key, dirMtimes: updated.dirMtimes, corpus: updated.corpus };
+        if (cachePath && cachedCorpus.corpus.length) {
+          try {
+            await fs.promises.mkdir(path.dirname(cachePath), { recursive: true });
+            const payload = JSON.stringify({
+              version: IT_CORPUS_CACHE_VERSION,
+              key,
+              dirMtimes: updated.dirMtimes,
+              corpus: updated.corpus,
+            });
+            if (Buffer.byteLength(payload, "utf-8") <= maxCacheBytes) {
+              await fs.promises.writeFile(cachePath, payload, "utf-8");
+            }
+          } catch {
+            // ignore cache write errors
+          }
+        }
+        return cachedCorpus.corpus;
+      }
+    }
+  }
+
+  if (options.skipMtimeCheck && !hasDirtyFiles) {
     if (cachedCorpus && cachedCorpus.key === key) {
       return cachedCorpus.corpus;
     }
@@ -617,7 +791,7 @@ export async function it_buildCorpusAsync(
   for (const [kind, dirPath] of entries) {
     dirMtimes[kind] = await it_getDirMtimeAsync(dirPath);
   }
-  if (cachedCorpus && cachedCorpus.key === key) {
+  if (!hasDirtyFiles && cachedCorpus && cachedCorpus.key === key) {
     const unchanged = entries.every(
       ([kind]) => cachedCorpus?.dirMtimes[kind] === dirMtimes[kind],
     );
@@ -625,7 +799,7 @@ export async function it_buildCorpusAsync(
       return cachedCorpus.corpus;
     }
   }
-  if (cachePath) {
+  if (!hasDirtyFiles && cachePath) {
     try {
       const stat = await fs.promises.stat(cachePath);
       if (stat.isFile() && stat.size > 0 && stat.size <= maxCacheBytes) {

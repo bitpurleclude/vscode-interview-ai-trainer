@@ -54,6 +54,7 @@ interface ItAnalyzeDeps {
     evaluation?: ItEvaluation;
   }) => void;
   corpusDirty?: boolean;
+  corpusDirtyFiles?: string[];
   abortSignal?: { aborted: boolean };
 }
 
@@ -1260,6 +1261,7 @@ export async function it_runAnalysis(
         cacheDir: cacheRoot,
         maxCacheBytes: corpusCacheBytes,
         skipMtimeCheck,
+        dirtyFiles: deps.corpusDirtyFiles,
       },
     ).then((corpus) => {
       const scanElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);

@@ -99,6 +99,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   private embeddingWarmupRunning = false;
   private analysisAbort: { aborted: boolean } | null = null;
   private corpusDirty = true;
+  private corpusDirtyFiles = new Set<string>();
   private corpusWatchers: vscode.FileSystemWatcher[] = [];
 
   constructor(
@@ -275,8 +276,11 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         dirs.examplesDir,
       ].filter((value) => Boolean(value))),
     );
-    const markDirty = () => {
+    const markDirty = (uri?: vscode.Uri) => {
       this.corpusDirty = true;
+      if (uri?.fsPath) {
+        this.corpusDirtyFiles.add(path.resolve(uri.fsPath));
+      }
     };
     targets.forEach((dir) => {
       const normalized = String(dir || "").replace(/\\/g, "/");
@@ -285,13 +289,14 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         path.join(normalized, "**/*"),
       );
       const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-      watcher.onDidCreate(markDirty);
-      watcher.onDidChange(markDirty);
-      watcher.onDidDelete(markDirty);
+      watcher.onDidCreate((uri) => markDirty(uri));
+      watcher.onDidChange((uri) => markDirty(uri));
+      watcher.onDidDelete((uri) => markDirty(uri));
       this.context.subscriptions.push(watcher);
       this.corpusWatchers.push(watcher);
     });
     this.corpusDirty = true;
+    this.corpusDirtyFiles.clear();
   }
 
   private async refreshConfigSnapshot(): Promise<ItConfigSnapshot> {
@@ -475,8 +480,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       cacheDir: cacheRoot,
       maxCacheBytes: corpusCacheBytes,
       skipMtimeCheck,
+      dirtyFiles: Array.from(this.corpusDirtyFiles),
     });
     this.corpusDirty = false;
+    this.corpusDirtyFiles.clear();
     if (!corpus.length) {
       this.updateEmbeddingWarmup({
         status: "success",
@@ -1938,12 +1945,14 @@ export class InterviewTrainerExtension implements vscode.Disposable {
             });
           },
           corpusDirty: this.corpusDirty,
+          corpusDirtyFiles: Array.from(this.corpusDirtyFiles),
           abortSignal: this.analysisAbort ?? undefined,
         },
         request,
       );
 
       this.corpusDirty = false;
+      this.corpusDirtyFiles.clear();
 
       this.updateState({
         statusMessage: "分析完成，可保存与复盘",
