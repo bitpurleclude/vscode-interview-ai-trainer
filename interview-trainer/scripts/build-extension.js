@@ -18,6 +18,6 @@ esbuild
     format: "cjs",
     sourcemap: false,
     logLevel: "info",
-    external: ["vscode"],
+    external: ["vscode", "ffmpeg-static"],
   })
   .catch(() => process.exit(1));

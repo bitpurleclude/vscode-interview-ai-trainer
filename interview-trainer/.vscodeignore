@@ -2,6 +2,7 @@ webview/**
 scripts/**
 src/**
 node_modules/**
+!node_modules/ffmpeg-static/**
 build/**
 **/*.map
 **/*.ts
