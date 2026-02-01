@@ -1,4 +1,4 @@
-﻿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import { ItAnalyzeResponse, ItEvaluation } from "../../protocol/interviewTrainer";
 import { it_formatSeconds } from "../utils/it_text";
