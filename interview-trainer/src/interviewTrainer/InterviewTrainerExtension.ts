@@ -250,6 +250,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         topKKnowledge: Number(retrieval.top_k_knowledge ?? retrieval.top_k ?? 5),
         topKRubrics: Number(retrieval.top_k_rubrics ?? retrieval.top_k ?? 5),
         topKExamples: Number(retrieval.top_k_examples ?? retrieval.top_k ?? 5),
+        maxConcurrency,
         embeddingMaxConcurrency,
         minScore: Number(retrieval.min_score ?? 0.2),
         embeddingProvider:
@@ -860,6 +861,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           top_k_knowledge: Number(incoming.topKKnowledge ?? current.top_k_knowledge ?? current.top_k ?? 5),
           top_k_rubrics: Number(incoming.topKRubrics ?? current.top_k_rubrics ?? current.top_k ?? 5),
           top_k_examples: Number(incoming.topKExamples ?? current.top_k_examples ?? current.top_k ?? 5),
+          max_concurrency: Number(incoming.maxConcurrency ?? current.max_concurrency ?? 3),
           embedding_max_concurrency: Number(
             incoming.embeddingMaxConcurrency ?? current.embedding_max_concurrency ?? 1,
           ),

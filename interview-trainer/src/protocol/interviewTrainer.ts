@@ -199,6 +199,7 @@ export interface ItConfigSnapshot {
     topKKnowledge?: number;
     topKRubrics?: number;
     topKExamples?: number;
+    maxConcurrency?: number;
     embeddingMaxConcurrency?: number;
     minScore: number;
     embeddingProvider?: string;

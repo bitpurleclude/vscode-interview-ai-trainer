@@ -340,6 +340,7 @@ const InterviewTrainer: React.FC = () => {
     topKKnowledge: 5,
     topKRubrics: 5,
     topKExamples: 5,
+    maxConcurrency: 3,
     embeddingMaxConcurrency: 1,
     minScore: 0.2,
     vector: {
@@ -464,6 +465,7 @@ const InterviewTrainer: React.FC = () => {
       topKKnowledge: Number(retrieval.topKKnowledge ?? retrieval.topK ?? 5),
       topKRubrics: Number(retrieval.topKRubrics ?? retrieval.topK ?? 5),
       topKExamples: Number(retrieval.topKExamples ?? retrieval.topK ?? 5),
+      maxConcurrency: Number(retrieval.maxConcurrency ?? 3),
       embeddingMaxConcurrency: Number(retrieval.embeddingMaxConcurrency ?? 1),
       minScore: Number(retrieval.minScore ?? 0.2),
       vector: {
@@ -1352,6 +1354,7 @@ const InterviewTrainer: React.FC = () => {
       | "topKKnowledge"
       | "topKRubrics"
       | "topKExamples"
+      | "maxConcurrency"
       | "embeddingMaxConcurrency"
       | "minScore",
     value: any,
@@ -1383,6 +1386,7 @@ const InterviewTrainer: React.FC = () => {
           topKKnowledge: Number(retrievalForm.topKKnowledge),
           topKRubrics: Number(retrievalForm.topKRubrics),
           topKExamples: Number(retrievalForm.topKExamples),
+          maxConcurrency: Number(retrievalForm.maxConcurrency),
           embeddingMaxConcurrency: Number(retrievalForm.embeddingMaxConcurrency),
           minScore: Number(retrievalForm.minScore),
           embeddingProvider: retrievalForm.vector.provider,
@@ -2754,6 +2758,21 @@ const InterviewTrainer: React.FC = () => {
                   disabled={uiLocked}
                   onChange={(event) =>
                     handleRetrievalFieldChange("minScore", Number(event.target.value))
+                  }
+                />
+              </div>
+              <div className="it-input-row">
+                <div style={{ minWidth: 80 }}>检索并行</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  value={retrievalForm.maxConcurrency}
+                  disabled={uiLocked}
+                  onChange={(event) =>
+                    handleRetrievalFieldChange(
+                      "maxConcurrency",
+                      Number(event.target.value),
+                    )
                   }
                 />
               </div>
