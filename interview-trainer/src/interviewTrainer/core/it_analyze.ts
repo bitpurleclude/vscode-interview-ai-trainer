@@ -36,7 +36,7 @@ import {
 } from "../utils/it_audio";
 import { it_formatSeconds, it_hashText, it_normalizeText } from "../utils/it_text";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
-import { it_appendReportAsync } from "./it_report";
+import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "./it_report";
 
 interface ItAnalyzeDeps {
   context: vscode.ExtensionContext;
@@ -1144,6 +1144,7 @@ async function it_persistAnalysis(params: {
       attemptNote: "评分仅供参考，请结合标准文件自评。",
     },
   );
+  await it_updateReferenceNotesFileAsync(topicDir, response.evaluation);
   reportProgress("report", 100, "结果生成 100% · 本地", "success");
 
   reportProgress("write", 40, "写入文件 40% · 本地", "running");

@@ -1,5 +1,6 @@
 import fs from "fs";
-import { ItAnalyzeResponse } from "../../protocol/interviewTrainer";
+import path from "path";
+import { ItAnalyzeResponse, ItEvaluation } from "../../protocol/interviewTrainer";
 import { it_formatSeconds } from "../utils/it_text";
 
 export interface ItReportConfig {
@@ -17,6 +18,106 @@ function it_indentLines(text: string, prefix: string): string {
     .split("\n")
     .map((line) => `${prefix}${line}`)
     .join("\n");
+}
+
+function it_buildOutlineItems(text: string, maxItems: number = 6): string[] {
+  const raw = String(text || "").replace(/\r\n/g, "\n");
+  if (!raw.trim()) {
+    return [];
+  }
+  const parts = raw
+    .split(/[\n\r]+|[。！？!?；;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const items: string[] = [];
+  for (const part of parts) {
+    if (items.length >= maxItems) {
+      break;
+    }
+    items.push(part);
+  }
+  return items;
+}
+
+function it_renderOutline(items: string[], prefix: string): string {
+  if (!items.length) {
+    return `${prefix}- （空）\n`;
+  }
+  return items.map((item) => `${prefix}- ${item}\n`).join("");
+}
+
+function it_parseSection(content: string, title: string): string[] {
+  const lines = content.split(/\r?\n/);
+  const items: string[] = [];
+  let inSection = false;
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      inSection = line.trim() === `## ${title}`;
+      continue;
+    }
+    if (inSection && line.trim().startsWith("- ")) {
+      items.push(line.trim().slice(2).trim());
+    }
+  }
+  return items;
+}
+
+function it_mergeUnique(existing: string[], incoming: string[]): string[] {
+  const seen = new Set(existing);
+  const merged = [...existing];
+  incoming.forEach((item) => {
+    if (!item) {
+      return;
+    }
+    if (seen.has(item)) {
+      return;
+    }
+    seen.add(item);
+    merged.push(item);
+  });
+  return merged;
+}
+
+export async function it_updateReferenceNotesFileAsync(
+  topicDir: string,
+  evaluation: ItEvaluation,
+): Promise<void> {
+  const noteUsage = evaluation.noteUsage ?? [];
+  const noteSuggestions = evaluation.noteSuggestions ?? [];
+  if (!noteUsage.length && !noteSuggestions.length) {
+    return;
+  }
+  const filePath = path.join(topicDir, "reference_notes.md");
+  let existing = "";
+  try {
+    existing = await fs.promises.readFile(filePath, "utf-8");
+  } catch {
+    existing = "";
+  }
+
+  const mergedUsage = it_mergeUnique(
+    it_parseSection(existing, "引用笔记"),
+    noteUsage,
+  );
+  const mergedSuggestions = it_mergeUnique(
+    it_parseSection(existing, "可用素材/可参考思路"),
+    noteSuggestions,
+  );
+  const updatedAt = new Date().toISOString();
+  const lines: string[] = [];
+  lines.push("# 参考素材与笔记\n\n");
+  lines.push(`更新时间: ${updatedAt}\n\n`);
+  lines.push("## 引用笔记\n\n");
+  mergedUsage.forEach((item) => {
+    lines.push(`- ${item}\n`);
+  });
+  lines.push("\n");
+  lines.push("## 可用素材/可参考思路\n\n");
+  mergedSuggestions.forEach((item) => {
+    lines.push(`- ${item}\n`);
+  });
+  lines.push("\n");
+  await fs.promises.writeFile(filePath, lines.join(""), "utf-8");
 }
 
 export function it_renderReport(
@@ -89,23 +190,13 @@ export function it_renderReport(
   });
   lines.push("\n");
 
-  if (response.evaluation.noteUsage && response.evaluation.noteUsage.length) {
-    lines.push("### 笔记引用\n\n");
-    response.evaluation.noteUsage.forEach((item) => {
-      lines.push(`- ${item}\n`);
-    });
-    lines.push("\n");
-  }
-
   if (
-    response.evaluation.noteSuggestions &&
-    response.evaluation.noteSuggestions.length
+    (response.evaluation.noteUsage && response.evaluation.noteUsage.length) ||
+    (response.evaluation.noteSuggestions &&
+      response.evaluation.noteSuggestions.length)
   ) {
-    lines.push("### 可用素材/可参考思路\n\n");
-    response.evaluation.noteSuggestions.forEach((item) => {
-      lines.push(`- ${item}\n`);
-    });
-    lines.push("\n");
+    lines.push("### 参考素材与笔记\n\n");
+    lines.push("已汇总至 reference_notes.md（同题共享，避免重复）。\n\n");
   }
 
   if (response.evaluation.revisedAnswers?.length) {
@@ -117,9 +208,17 @@ export function it_renderReport(
       }
       lines.push("   - 原回答:\n");
       lines.push(`${it_indentLines(item.original, "     ")}\n`);
+      lines.push("   - 答题提纲（你的回答）:\n");
+      lines.push(`${it_renderOutline(it_buildOutlineItems(item.original), "     ")}\n`);
       lines.push("   - 示范:\n");
       lines.push(`${it_indentLines(item.revised, "     ")}\n`);
+      lines.push("   - 答题提纲（示范）:\n");
+      lines.push(`${it_renderOutline(it_buildOutlineItems(item.revised), "     ")}\n`);
     });
+    lines.push("\n");
+  } else if (response.transcript) {
+    lines.push("### 答题提纲\n\n");
+    lines.push(it_renderOutline(it_buildOutlineItems(response.transcript), "- "));
     lines.push("\n");
   }
 
