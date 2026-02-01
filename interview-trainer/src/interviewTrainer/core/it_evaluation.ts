@@ -87,7 +87,7 @@ function it_toStringArray(value: unknown): string[] {
 }
 
 function it_isOutlineKeywordLike(items?: string[]): boolean {
-  if (!Array.isArray(items) || items.length < 3 || items.length > 6) {
+  if (!Array.isArray(items) || items.length < 4 || items.length > 24) {
     return false;
   }
   for (const item of items) {
@@ -95,7 +95,7 @@ function it_isOutlineKeywordLike(items?: string[]): boolean {
     if (!trimmed) {
       return false;
     }
-    if (/[。！？；，、]/.test(trimmed)) {
+    if (/[。！？]/.test(trimmed)) {
       return false;
     }
     const segments = trimmed
@@ -105,7 +105,7 @@ function it_isOutlineKeywordLike(items?: string[]): boolean {
     if (!segments.length) {
       return false;
     }
-    if (segments.some((seg) => seg.length > 12)) {
+    if (segments.some((seg) => seg.length > 24)) {
       return false;
     }
   }
@@ -122,8 +122,10 @@ async function it_generateOutlines(
   const systemPrompt = [
     "你是答题提纲生成器，只输出 JSON。",
     "每题输出 outlineOriginal/outlineRevised，为关键词式提纲数组。",
-    "每条<=12字，禁止完整句与标点，使用“->”表示层级，结构类似脑图。",
-    "每题3-6条。",
+    "使用“->”表示层级，必须包含多层结构（至少两级）。",
+    "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
+    "每条<=20字，尽量用关键词短语，避免完整长句。",
+    "每题8-18条。",
   ].join("\n");
   const userPrompt = [
     "请根据以下题目与回答生成提纲：",
@@ -539,8 +541,10 @@ export async function it_evaluateAnswer(
       "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
-      "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
-      "提纲必须是关键词式（禁止完整句），每条<=12字；用“->”表示层级关系，结构类似脑图。",
+      "outlineOriginal/outlineRevised 为要点数组（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
+      "提纲必须是关键词式（避免完整长句），使用“->”表示层级，至少两级。",
+      "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
+      "每条<=20字。",
       "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
     ].join("\n");
   const demoPrompt = customDemoPrompt?.trim();
@@ -575,8 +579,10 @@ export async function it_evaluateAnswer(
           .join("\n")}`
       : "本次评审回答: 无",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
-    "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
-    "提纲必须是关键词式（禁止完整句），每条<=12字；用“->”表示层级关系，结构类似脑图。",
+    "outlineOriginal/outlineRevised 为要点数组（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
+    "提纲必须是关键词式（避免完整长句），使用“->”表示层级，至少两级。",
+    "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
+    "每条<=20字。",
   ];
 
   if (demoPrompt) {
