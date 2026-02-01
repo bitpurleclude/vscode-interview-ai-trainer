@@ -19,7 +19,12 @@ import { it_callVolcAsr } from "../api/it_volc_asr";
 import { ItApiConfig } from "../api/it_apiConfig";
 import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
-import { ItCorpusItem, it_buildCorpusAsync, it_retrieveNotesMulti } from "./it_notes";
+import {
+  ItCorpusItem,
+  it_buildCorpusAsync,
+  it_createRetrievalMetrics,
+  it_retrieveNotesMulti,
+} from "./it_notes";
 import {
   it_appendAttemptDataAsync,
   it_buildQuestionFingerprint,
@@ -1323,7 +1328,7 @@ export async function it_runAnalysis(
     reportProgress(
       "notes",
       5,
-      `${retrievalLabel}语料扫描 5% · 本地${skipMtimeCheck ? "（复用缓存）" : ""}`,
+      `${retrievalLabel}语料扫描 5%${skipMtimeCheck ? "（复用缓存）" : ""}`,
       "running",
     );
     corpusPromise = it_buildCorpusAsync(
@@ -1359,7 +1364,7 @@ export async function it_runAnalysis(
       reportProgress(
         "notes",
         30,
-        `语料就绪 30%：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s · 本地`,
+        `语料就绪 30%：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s`,
         "running",
       );
       return { corpus, sourceCount, scanElapsedSec };
@@ -1548,7 +1553,7 @@ export async function it_runAnalysis(
   let notes: ItAnalyzeResponse["notes"] = [];
   let notesByQuestion: ItNoteHit[][] = [];
   if (!retrievalEnabled) {
-    reportProgress("notes", 100, "笔记检索 已关闭 · 本地", "success");
+    reportProgress("notes", 100, "笔记检索 已关闭", "success");
   } else {
     let corpus: ItCorpusItem[] = [];
     let sourceCount = 0;
@@ -1564,7 +1569,7 @@ export async function it_runAnalysis(
         reportProgress(
           "notes",
           40,
-          `笔记加载 40%：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s · 本地`,
+          `笔记加载 40%：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s`,
           "running",
         );
       } catch (err) {
@@ -1640,6 +1645,28 @@ export async function it_runAnalysis(
       rubrics: notesTopKRubrics,
       examples: notesTopKExamples,
     };
+    let notesPhase = "生成查询向量";
+    let notesPercent = 70;
+    let notesTasksTotal = 1;
+    let notesTasksDone = 0;
+    const concurrencyHint = maxConcurrency > 1 ? ` · 并行x${maxConcurrency}` : "";
+    const updateNotesProgress = (percent: number) => {
+      notesPercent = percent;
+      const taskHint = notesTasksTotal ? ` · ${notesTasksDone}/${notesTasksTotal}` : "";
+      reportProgress(
+        "notes",
+        percent,
+        `${retrievalLabel}检索 ${percent}%${concurrencyHint}${taskHint} · ${notesPhase}`,
+        "running",
+      );
+    };
+    const setNotesPhase = (phase: string) => {
+      if (!phase || phase === notesPhase) {
+        return;
+      }
+      notesPhase = phase;
+      updateNotesProgress(notesPercent);
+    };
     const retrieveByKind = async (
       kind: keyof typeof corpusByKind,
       queryList: string[],
@@ -1649,6 +1676,9 @@ export async function it_runAnalysis(
       if (!filtered.length || topK <= 0) {
         return [];
       }
+      const label = kindLabels[kind] || kind;
+      const metrics = it_createRetrievalMetrics();
+      const startedAt = Date.now();
       const hits = await it_retrieveNotesMulti(queryList, filtered, {
         mode: retrievalMode === "keyword" ? "keyword" : "vector",
         topK,
@@ -1657,6 +1687,8 @@ export async function it_runAnalysis(
         cacheKey: `${queryCacheKey}:${kind}`,
         queryCacheSize,
         maxConcurrency,
+        metrics,
+        onPhase: setNotesPhase,
         vector: {
           provider: resolvedVector.provider || "",
           apiKey: resolvedVector.api_key || "",
@@ -1668,7 +1700,16 @@ export async function it_runAnalysis(
           queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
         },
       });
-      const label = kindLabels[kind] || kind;
+      const elapsedMs = Date.now() - startedAt;
+      deps.onCorpusTrace?.("检索统计", {
+        语料: label,
+        query数: metrics.queryCount,
+        query向量缓存命中: metrics.queryEmbeddingHit,
+        query向量缓存缺失: metrics.queryEmbeddingMiss,
+        语料补算待处理: metrics.embeddingMissing,
+        语料补算新增: metrics.embeddingCreated,
+        耗时ms: elapsedMs,
+      });
       return hits.map((hit) => ({
         ...hit,
         source: `[${label}] ${hit.source}`,
@@ -1677,12 +1718,6 @@ export async function it_runAnalysis(
 
     if (!notesError) {
       try {
-        reportProgress(
-          "notes",
-          70,
-          `${retrievalLabel}检索 70% · 本地 · 并行x${maxConcurrency}`,
-          "running",
-        );
         const questionsForNotes = questionList.length
           ? questionList
           : questionText
@@ -1692,20 +1727,17 @@ export async function it_runAnalysis(
           retrievalAnswers && retrievalAnswers.length === questionsForNotes.length
             ? retrievalAnswers
             : questionsForNotes.map((question) => ({ question, answer: "" }));
-        const totalTasks = questionsForNotes.length || 1;
-        let doneTasks = 0;
+        notesTasksTotal = questionsForNotes.length || 1;
+        notesTasksDone = 0;
+        notesPhase = "生成查询向量";
+        updateNotesProgress(70);
         const bumpNotesProgress = () => {
-          if (!totalTasks) {
+          if (!notesTasksTotal) {
             return;
           }
-          doneTasks = Math.min(totalTasks, doneTasks + 1);
-          const percent = 70 + Math.round((doneTasks / totalTasks) * 25);
-          reportProgress(
-            "notes",
-            Math.min(95, percent),
-            `${retrievalLabel}检索 ${Math.min(95, percent)}% · 本地 · ${doneTasks}/${totalTasks}`,
-            "running",
-          );
+          notesTasksDone = Math.min(notesTasksTotal, notesTasksDone + 1);
+          const percent = 70 + Math.round((notesTasksDone / notesTasksTotal) * 25);
+          updateNotesProgress(Math.min(95, percent));
         };
         if (questionsForNotes.length) {
           notesByQuestion = new Array(questionsForNotes.length);
@@ -1760,7 +1792,7 @@ export async function it_runAnalysis(
       sourceCount > 200 ? "文件较多，建议精简 inputs 目录" : undefined;
     const notesMessage = notesError
       ? `${notesErrorStage === "load" ? "笔记加载失败" : "向量检索失败"}：${notesError}`
-      : `${retrievalLabel}检索 100%：${sourceCount}份 · ${corpus.length}段 · 命中 ${notes.length} 条 · ${notesElapsedSec}s · 本地${
+      : `${retrievalLabel}检索 100%：${sourceCount}份 · ${corpus.length}段 · 命中 ${notes.length} 条 · ${notesElapsedSec}s${
           slowHint ? `，${slowHint}` : ""
         }`;
     reportProgress("notes", 100, notesMessage, notesError ? "error" : "success");

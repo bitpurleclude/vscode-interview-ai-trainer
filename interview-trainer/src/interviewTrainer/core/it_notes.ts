@@ -29,6 +29,18 @@ export interface ItRetrievalOptions {
   cacheKey?: string;
   maxConcurrency?: number;
   queryCacheSize?: number;
+  metrics?: ItRetrievalMetrics;
+  onPhase?: (phase: string) => void;
+}
+
+export interface ItRetrievalMetrics {
+  queryCount: number;
+  queryEmbeddingHit: number;
+  queryEmbeddingMiss: number;
+  embeddingMissing: number;
+  embeddingCreated: number;
+  ensureKeys: Set<string>;
+  phaseKeys: Set<string>;
 }
 
 export interface ItEmbeddingWarmupResult {
@@ -70,7 +82,25 @@ const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
 const cachedQueries: Map<string, ItNoteHit[]> = new Map();
 const cachedQueryEmbeddings: Map<string, number[]> = new Map();
 const cachedQueryEmbeddingPromises: Map<string, Promise<number[]>> = new Map();
-const cachedEmbeddingEnsurePromises: Map<string, Promise<void>> = new Map();
+const cachedEmbeddingEnsurePromises: Map<string, Promise<ItEmbeddingEnsureResult>> =
+  new Map();
+
+interface ItEmbeddingEnsureResult {
+  created: number;
+  totalMissing: number;
+}
+
+export function it_createRetrievalMetrics(): ItRetrievalMetrics {
+  return {
+    queryCount: 0,
+    queryEmbeddingHit: 0,
+    queryEmbeddingMiss: 0,
+    embeddingMissing: 0,
+    embeddingCreated: 0,
+    ensureKeys: new Set(),
+    phaseKeys: new Set(),
+  };
+}
 
 export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
   if (cacheKey) {
@@ -176,12 +206,12 @@ async function it_ensureEmbeddingCacheOnce(
   corpus: ItCorpusItem[],
   cache: Map<string, number[]>,
   cachePath?: string,
-): Promise<void> {
+): Promise<ItEmbeddingEnsureResult> {
   let pending = cachedEmbeddingEnsurePromises.get(ensureKey);
   if (!pending) {
     pending = (async () => {
       const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
-      const created = await it_ensureEmbeddings(vectorCfg, corpus, cache);
+      const result = await it_ensureEmbeddings(vectorCfg, corpus, cache);
       let hasStale = false;
       for (const key of cache.keys()) {
         if (!validKeys.has(key)) {
@@ -189,18 +219,19 @@ async function it_ensureEmbeddingCacheOnce(
           hasStale = true;
         }
       }
-      if (cachePath && (created > 0 || hasStale)) {
+      if (cachePath && (result.created > 0 || hasStale)) {
         try {
           it_saveEmbeddingCache(cachePath, it_buildEmbeddingCacheKey(vectorCfg), cache);
         } catch {
           // ignore cache write failure
         }
       }
+      return result;
     })();
     cachedEmbeddingEnsurePromises.set(ensureKey, pending);
   }
   try {
-    await pending;
+    return await pending;
   } finally {
     if (cachedEmbeddingEnsurePromises.get(ensureKey) === pending) {
       cachedEmbeddingEnsurePromises.delete(ensureKey);
@@ -358,6 +389,20 @@ function it_normalizeEmbeddingBaseUrl(url: string): string {
   return String(url || "").trim().replace(/\/+$/, "");
 }
 
+function it_reportPhaseOnce(options: ItRetrievalOptions, phase: string): void {
+  if (!options.onPhase) {
+    return;
+  }
+  const metrics = options.metrics;
+  if (metrics) {
+    if (metrics.phaseKeys.has(phase)) {
+      return;
+    }
+    metrics.phaseKeys.add(phase);
+  }
+  options.onPhase(phase);
+}
+
 function it_buildEmbeddingCacheKey(cfg: ItVectorSearchConfig): string {
   return `${cfg.provider}|${it_normalizeEmbeddingBaseUrl(cfg.baseUrl)}|${cfg.model}`;
 }
@@ -453,7 +498,7 @@ async function it_ensureEmbeddings(
   cfg: ItVectorSearchConfig,
   corpus: ItCorpusItem[],
   cache: Map<string, number[]>,
-): Promise<number> {
+): Promise<ItEmbeddingEnsureResult> {
   const batchSize = Math.max(1, cfg.batchSize || IT_DEFAULT_BATCH_SIZE);
   const missing: Array<{ key: string; text: string }> = [];
   for (const item of corpus) {
@@ -486,7 +531,7 @@ async function it_ensureEmbeddings(
       created += 1;
     });
   }
-  return created;
+  return { created, totalMissing: missing.length };
 }
 
 function it_getDirMtime(dirPath: string): number {
@@ -1174,6 +1219,7 @@ export async function it_retrieveNotes(
   const minScore = Number.isFinite(options.minScore) ? options.minScore : 0;
   const mode = options.mode || "vector";
   if (mode === "keyword") {
+    it_reportPhaseOnce(options, "关键词匹配");
     const queryTokens = it_tokenize(query);
     const scored = corpus
       .map((item) => {
@@ -1217,10 +1263,19 @@ export async function it_retrieveNotes(
     return [];
   }
 
+  it_reportPhaseOnce(options, "生成查询向量");
   const embeddingCacheKey = it_hashText(
     `${it_buildEmbeddingCacheKey(vectorCfg)}|${trimmedQuery}`,
   );
   let queryEmbedding = it_getCachedQueryEmbedding(embeddingCacheKey);
+  const metrics = options.metrics;
+  if (metrics) {
+    if (queryEmbedding) {
+      metrics.queryEmbeddingHit += 1;
+    } else {
+      metrics.queryEmbeddingMiss += 1;
+    }
+  }
   if (!queryEmbedding) {
     let pending = cachedQueryEmbeddingPromises.get(embeddingCacheKey);
     if (!pending) {
@@ -1257,14 +1312,21 @@ export async function it_retrieveNotes(
   const ensureKey = it_hashText(
     `${cacheKey}|${options.cacheKey || ""}|${corpus.length}`,
   );
-  await it_ensureEmbeddingCacheOnce(
+  it_reportPhaseOnce(options, "语料向量补算");
+  const ensureResult = await it_ensureEmbeddingCacheOnce(
     ensureKey,
     vectorCfg,
     corpus,
     cache,
     cachePath,
   );
+  if (metrics && !metrics.ensureKeys.has(ensureKey)) {
+    metrics.ensureKeys.add(ensureKey);
+    metrics.embeddingMissing += ensureResult.totalMissing;
+    metrics.embeddingCreated += ensureResult.created;
+  }
 
+  it_reportPhaseOnce(options, "相似度计算");
   const scored = corpus
     .map((item) => {
       const embedding = cache.get(it_getItemKey(item));
@@ -1360,6 +1422,9 @@ export async function it_retrieveNotesMulti(
   const maxConcurrency = Number.isFinite(options.maxConcurrency)
     ? Math.max(1, Number(options.maxConcurrency))
     : 3;
+  const metrics = options.metrics ?? it_createRetrievalMetrics();
+  options.metrics = metrics;
+  metrics.queryCount = limited.length;
 
   const runWithLimit = async <T, R>(
     list: T[],
