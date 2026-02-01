@@ -446,6 +446,7 @@ export async function it_evaluateAnswer(
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
       "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
+      "提纲必须是关键词式（禁止完整句），每条<=12字；用“->”表示层级关系，结构类似脑图。",
       "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
     ].join("\n");
   const demoPrompt = customDemoPrompt?.trim();
@@ -481,6 +482,7 @@ export async function it_evaluateAnswer(
       : "本次评审回答: 无",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
     "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
+    "提纲必须是关键词式（禁止完整句），每条<=12字；用“->”表示层级关系，结构类似脑图。",
   ];
 
   if (demoPrompt) {

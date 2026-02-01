@@ -141,6 +141,7 @@ const STRICT_SYSTEM_PROMPT = [
   "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
   "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
   "outlineOriginal/outlineRevised 为要点数组（每题3-6条），分别对应本题“原回答提纲”与“示范提纲”。",
+  "提纲必须是关键词式（禁止完整句），每条<=12字；用“->”表示层级关系，结构类似脑图。",
 ].join("\n");
 const DEFAULT_DEMO_PROMPT = [
   "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），内容过长需压缩到对应时长。",
