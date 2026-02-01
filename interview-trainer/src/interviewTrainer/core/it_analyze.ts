@@ -1270,6 +1270,12 @@ export async function it_runAnalysis(
     ).then((corpus) => {
       const scanElapsedSec = ((Date.now() - notesStart) / 1000).toFixed(1);
       const sourceCount = new Set(corpus.map((item) => item.source)).size;
+      reportProgress(
+        "notes",
+        30,
+        `语料就绪 30%：${sourceCount}份 · ${corpus.length}段 · ${scanElapsedSec}s · 本地`,
+        "running",
+      );
       return { corpus, sourceCount, scanElapsedSec };
     });
   }
