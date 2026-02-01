@@ -69,6 +69,7 @@ const cachedEmbeddings: Map<string, Map<string, number[]>> = new Map();
 const cachedQueries: Map<string, ItNoteHit[]> = new Map();
 const cachedQueryEmbeddings: Map<string, number[]> = new Map();
 const cachedQueryEmbeddingPromises: Map<string, Promise<number[]>> = new Map();
+const cachedEmbeddingEnsurePromises: Map<string, Promise<void>> = new Map();
 
 export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
   if (cacheKey) {
@@ -79,6 +80,7 @@ export function it_clearEmbeddingMemoryCache(cacheKey?: string): void {
   cachedQueries.clear();
   cachedQueryEmbeddings.clear();
   cachedQueryEmbeddingPromises.clear();
+  cachedEmbeddingEnsurePromises.clear();
   cachedCorpus = undefined;
 }
 
@@ -164,6 +166,44 @@ function it_setCachedQueryEmbedding(
   const firstKey = cachedQueryEmbeddings.keys().next().value;
   if (firstKey) {
     cachedQueryEmbeddings.delete(firstKey);
+  }
+}
+
+async function it_ensureEmbeddingCacheOnce(
+  ensureKey: string,
+  vectorCfg: ItVectorSearchConfig,
+  corpus: ItCorpusItem[],
+  cache: Map<string, number[]>,
+  cachePath?: string,
+): Promise<void> {
+  let pending = cachedEmbeddingEnsurePromises.get(ensureKey);
+  if (!pending) {
+    pending = (async () => {
+      const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
+      const created = await it_ensureEmbeddings(vectorCfg, corpus, cache);
+      let hasStale = false;
+      for (const key of cache.keys()) {
+        if (!validKeys.has(key)) {
+          cache.delete(key);
+          hasStale = true;
+        }
+      }
+      if (cachePath && (created > 0 || hasStale)) {
+        try {
+          it_saveEmbeddingCache(cachePath, it_buildEmbeddingCacheKey(vectorCfg), cache);
+        } catch {
+          // ignore cache write failure
+        }
+      }
+    })();
+    cachedEmbeddingEnsurePromises.set(ensureKey, pending);
+  }
+  try {
+    await pending;
+  } finally {
+    if (cachedEmbeddingEnsurePromises.get(ensureKey) === pending) {
+      cachedEmbeddingEnsurePromises.delete(ensureKey);
+    }
   }
 }
 
@@ -1198,23 +1238,16 @@ export async function it_retrieveNotes(
     cache = cachePath ? it_loadEmbeddingCache(cachePath, cacheKey) : new Map();
     cachedEmbeddings.set(cacheKey, cache);
   }
-
-  const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
-  const created = await it_ensureEmbeddings(vectorCfg, corpus, cache);
-  let hasStale = false;
-  for (const key of cache.keys()) {
-    if (!validKeys.has(key)) {
-      cache.delete(key);
-      hasStale = true;
-    }
-  }
-  if (cachePath && (created > 0 || hasStale)) {
-    try {
-      it_saveEmbeddingCache(cachePath, cacheKey, cache);
-    } catch {
-      // ignore cache write failure
-    }
-  }
+  const ensureKey = it_hashText(
+    `${cacheKey}|${options.cacheKey || ""}|${corpus.length}`,
+  );
+  await it_ensureEmbeddingCacheOnce(
+    ensureKey,
+    vectorCfg,
+    corpus,
+    cache,
+    cachePath,
+  );
 
   const scored = corpus
     .map((item) => {
