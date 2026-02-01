@@ -1,4 +1,4 @@
-import fs from "fs";
+﻿import fs from "fs";
 import path from "path";
 import * as vscode from "vscode";
 import {
@@ -34,6 +34,10 @@ import {
   it_resolveTopicDirAsync,
   it_writeTopicMetaAsync,
 } from "../storage/it_sessions";
+import {
+  it_readQuestionParseCache,
+  it_writeQuestionParseCache,
+} from "../storage/it_questionCache";
 import {
   it_summarizeAudioMetrics,
   it_decodePcm16,
@@ -1368,6 +1372,7 @@ export async function it_runAnalysis(
   const env = deps.apiConfig.active?.environment || "prod";
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
   const llmConfig = it_getLlmConfig(envConfig);
+  const cacheRoot = deps.context.globalStorageUri?.fsPath;
   let questionText = request.questionText?.trim() || "";
   let questionList = (request.questionList ?? []).filter((q) => q.trim());
   if (!questionText && !questionList.length) {
@@ -1377,6 +1382,7 @@ export async function it_runAnalysis(
 
   const parseStart = Date.now();
   let parsePromise: Promise<void> | null = null;
+  const parseInput = questionText;
   if (questionList.length) {
     reportProgress(
       "question",
@@ -1385,35 +1391,69 @@ export async function it_runAnalysis(
       "success",
     );
   } else {
-    reportProgress("question", 5, "题目解析 5% · 本地", "running");
-    parsePromise = (async () => {
-      const parsed = await it_parseQuestions(questionText, llmConfig);
-      const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
-      const sourceLabel = parsed.source === "llm" ? "API" : "本地";
-      if (parsed.material) {
-        questionText = parsed.material;
+    const cached = cacheRoot
+      ? await it_readQuestionParseCache(cacheRoot, parseInput)
+      : null;
+    if (cached && (cached.material || cached.questions.length)) {
+      if (cached.material) {
+        questionText = cached.material;
       }
-      if (parsed.questions.length) {
-        questionList = parsed.questions;
+      if (cached.questions.length) {
+        questionList = cached.questions;
       }
       if (questionList.length) {
         reportProgress(
           "question",
           100,
-          `题目解析 100% · ${questionList.length}题 · ${elapsed}s · ${sourceLabel}`,
+          `题目解析 100% · 缓存 · ${questionList.length}题`,
           "success",
         );
       } else {
         reportProgress(
           "question",
           100,
-          `题目解析完成 · 未识别题目 · ${elapsed}s · ${sourceLabel}`,
+          "题目解析完成 · 缓存未识别题目",
           "error",
         );
       }
-    })().catch(() => {
-      reportProgress("question", 100, "题目解析失败，使用原题干", "error");
-    });
+    } else {
+      reportProgress("question", 5, "题目解析 5% · 本地", "running");
+      parsePromise = (async () => {
+        const parsed = await it_parseQuestions(questionText, llmConfig);
+        const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
+        const sourceLabel = parsed.source === "llm" ? "API" : "本地";
+        if (parsed.material) {
+          questionText = parsed.material;
+        }
+        if (parsed.questions.length) {
+          questionList = parsed.questions;
+        }
+        if (cacheRoot && (parsed.material || parsed.questions.length)) {
+          await it_writeQuestionParseCache(cacheRoot, parseInput, {
+            material: parsed.material || "",
+            questions: parsed.questions || [],
+            source: parsed.source,
+          });
+        }
+        if (questionList.length) {
+          reportProgress(
+            "question",
+            100,
+            `题目解析 100% · ${questionList.length}题 · ${elapsed}s · ${sourceLabel}`,
+            "success",
+          );
+        } else {
+          reportProgress(
+            "question",
+            100,
+            `题目解析完成 · 未识别题目 · ${elapsed}s · ${sourceLabel}`,
+            "error",
+          );
+        }
+      })().catch(() => {
+        reportProgress("question", 100, "题目解析失败，使用原题干", "error");
+      });
+    }
   }
 
   const workspaceCfg = deps.skillConfig.workspace ?? {};
@@ -1421,7 +1461,6 @@ export async function it_runAnalysis(
   const retrievalEnabled = retrievalCfg.enabled !== false;
   const retrievalMode = String(retrievalCfg.mode || "vector");
   const retrievalLabel = retrievalMode === "keyword" ? "词面" : "向量";
-  const cacheRoot = deps.context.globalStorageUri?.fsPath;
   const corpusCacheMb = Number(
     retrievalCfg.corpus_cache_mb ?? retrievalCfg.corpus_cache_max_mb ?? 25,
   );

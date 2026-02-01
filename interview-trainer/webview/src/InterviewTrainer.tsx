@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
+﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
@@ -294,6 +294,7 @@ const InterviewTrainer: React.FC = () => {
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
   const [showNoteUsage, setShowNoteUsage] = useState(false);
   const [showNoteSuggestions, setShowNoteSuggestions] = useState(false);
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [audioPayload, setAudioPayload] =
     useState<ItAnalyzeRequest["audio"] | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -1112,6 +1113,76 @@ const InterviewTrainer: React.FC = () => {
       }
     }
   };
+
+  const handleRegenerateDemoAnswer = useCallback(
+    async (index: number) => {
+      const current = analysisResult?.evaluation?.revisedAnswers?.[index];
+      if (!current) return;
+      setRegeneratingIndex(index);
+      try {
+        const contextQuestions =
+          Array.isArray(analysisResult?.questionList) && analysisResult.questionList.length
+            ? analysisResult.questionList
+            : parsedQuestionList.length
+              ? parsedQuestionList
+              : analysisResult?.questionText?.trim()
+                ? [analysisResult.questionText.trim()]
+                : questionText.trim()
+                  ? [questionText.trim()]
+                  : [];
+        const payload = {
+          question: current.question,
+          answer: current.original || "",
+          questionText: analysisResult?.questionText || questionText.trim(),
+          contextQuestions,
+          notes: analysisResult?.notes ?? itState.draftNotes ?? [],
+          acoustic: analysisResult?.acoustic ?? itState.draftAcoustic,
+          systemPrompt: customPrompt?.trim() || undefined,
+          demoPrompt: demoPrompt?.trim() || undefined,
+        };
+        const response = await request("it/regenerateDemoAnswer", payload, {
+          timeoutMs: 120_000,
+        });
+        if (response?.status === "success" && response.content) {
+          setAnalysisResult((prev) => {
+            if (!prev?.evaluation?.revisedAnswers) return prev;
+            const revisedAnswers = [...prev.evaluation.revisedAnswers];
+            const previous = revisedAnswers[index];
+            const updated = { ...previous, ...response.content };
+            if (!updated.original) {
+              updated.original = previous?.original || "";
+            }
+            revisedAnswers[index] = updated;
+            return {
+              ...prev,
+              evaluation: {
+                ...prev.evaluation,
+                revisedAnswers,
+              },
+            };
+          });
+        } else {
+          setItState((prev) => ({
+            ...prev,
+            statusMessage: response?.error
+              ? `示范重生成失败：${response.error}`
+              : "示范重生成失败",
+          }));
+        }
+      } finally {
+        setRegeneratingIndex((prev) => (prev === index ? null : prev));
+      }
+    },
+    [
+      analysisResult,
+      parsedQuestionList,
+      questionText,
+      customPrompt,
+      demoPrompt,
+      itState.draftNotes,
+      itState.draftAcoustic,
+    ],
+  );
 
   const handleCancelAnalyze = async () => {
     if (!isProcessing) return;
@@ -2065,10 +2136,20 @@ const InterviewTrainer: React.FC = () => {
                             {evaluationPreview.revisedAnswers.map((item, idx) => (
                               <div key={`${idx}-${item.question}`} className="it-revised-item">
                                 <div className="it-revised-item__title">
-                                  {idx + 1}. {item.question}
-                                  {typeof item.estimatedTimeMin === "number"
-                                    ? `（建议${item.estimatedTimeMin}分钟）`
-                                    : ""}
+                                  <span>
+                                    {idx + 1}. {item.question}
+                                    {typeof item.estimatedTimeMin === "number"
+                                      ? `（建议${item.estimatedTimeMin}分钟）`
+                                      : ""}
+                                  </span>
+                                  <button
+                                    className="it-button it-button--compact"
+                                    type="button"
+                                    disabled={uiLocked || isProcessing || regeneratingIndex === idx}
+                                    onClick={() => handleRegenerateDemoAnswer(idx)}
+                                  >
+                                    {regeneratingIndex === idx ? "生成中..." : "重新生成示范"}
+                                  </button>
                                 </div>
                                 <div className="it-revised-item__block">
                                   <span>原回答：</span>

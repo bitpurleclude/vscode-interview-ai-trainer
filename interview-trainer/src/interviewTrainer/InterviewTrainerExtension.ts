@@ -7,8 +7,11 @@ import * as vscode from "vscode";
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
+  ItAcousticMetrics,
   ItConfigSnapshot,
   ItEmbeddingWarmupState,
+  ItNoteHit,
+  ItRevisedAnswer,
   ItState,
   ItStepState,
   ItStepStatus,
@@ -30,12 +33,17 @@ import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_callVolcAsr } from "./api/it_volc_asr";
 import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
+import { it_evaluateAnswer } from "./core/it_evaluation";
 import {
   it_buildCorpusAsync,
   it_prepareEmbeddingCache,
   it_clearEmbeddingMemoryCache,
 } from "./core/it_notes";
 import { it_listHistoryItems } from "./storage/it_history";
+import {
+  it_readQuestionParseCache,
+  it_writeQuestionParseCache,
+} from "./storage/it_questionCache";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_parseQuestions } from "./core/it_questionParser";
 import { it_hashText } from "./utils/it_text";
@@ -839,8 +847,112 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         this.context,
         this.configBundle.api,
       );
+      const cacheRoot = this.context.globalStorageUri?.fsPath;
+      if (cacheRoot && text.trim()) {
+        const cached = await it_readQuestionParseCache(cacheRoot, text);
+        if (cached && (cached.material || cached.questions.length)) {
+          return {
+            material: cached.material,
+            questions: cached.questions,
+            source: cached.source || "cache",
+          };
+        }
+      }
       const llmConfig = this.it_getLlmConfig();
-      return await it_parseQuestions(text, llmConfig);
+      const parsed = await it_parseQuestions(text, llmConfig);
+      if (cacheRoot && (parsed.material || parsed.questions.length)) {
+        await it_writeQuestionParseCache(cacheRoot, text, {
+          material: parsed.material || "",
+          questions: parsed.questions || [],
+          source: parsed.source,
+        });
+      }
+      return parsed;
+    });
+    this.webviewProtocol.on("it/regenerateDemoAnswer", async (msg) => {
+      const payload = msg.data || {};
+      const question = String(payload.question || "").trim();
+      if (!question) {
+        throw new Error("题目为空，无法重新生成示范回答。");
+      }
+      const answer = String(payload.answer || "");
+      const questionText = String(payload.questionText || "");
+      const contextQuestions = Array.isArray(payload.contextQuestions)
+        ? payload.contextQuestions.map((item: any) => String(item)).filter(Boolean)
+        : [];
+      const notes: ItNoteHit[] = Array.isArray(payload.notes)
+        ? payload.notes
+            .map((item: any) => ({
+              score: Number(item?.score ?? 0),
+              source: String(item?.source || ""),
+              snippet: String(item?.snippet || ""),
+            }))
+            .filter((item: ItNoteHit) => item.source || item.snippet)
+        : [];
+      const incomingAcoustic = payload.acoustic as ItAcousticMetrics | undefined;
+      const fallbackDuration = Math.max(10, Math.round(answer.trim().length / 4));
+      const acoustic: ItAcousticMetrics = incomingAcoustic && incomingAcoustic.durationSec
+        ? incomingAcoustic
+        : {
+            durationSec: fallbackDuration,
+            speechDurationSec: Math.max(2, fallbackDuration - 1),
+            speechRateWpm: undefined,
+            pauseCount: 0,
+            pauseAvgSec: 0,
+            pauseMaxSec: 0,
+            rmsDbMean: -20,
+            rmsDbStd: 0,
+            snrDb: undefined,
+          };
+
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
+      this.configBundle.api = await it_applySecretOverrides(
+        this.context,
+        this.configBundle.api,
+      );
+      const env = this.configBundle.api.active?.environment || "prod";
+      const envConfig = this.configBundle.api.environments?.[env] ?? {};
+      const evalProvider = envConfig.llm?.provider || "heuristic";
+      const evalDefaultBase =
+        evalProvider === "volc_doubao"
+          ? "https://ark.cn-beijing.volces.com"
+          : "https://qianfan.baidubce.com/v2";
+      const evalDefaultModel =
+        evalProvider === "volc_doubao"
+          ? "doubao-1-5-pro-32k-250115"
+          : "ernie-4.5-turbo-128k";
+      const evaluationConfig = {
+        provider: evalProvider,
+        model: envConfig.llm?.model || evalDefaultModel,
+        baseUrl: envConfig.llm?.base_url || evalDefaultBase,
+        apiKey: envConfig.llm?.api_key || "",
+        temperature: Number(envConfig.llm?.temperature ?? 0.8),
+        topP: Number(envConfig.llm?.top_p ?? 0.8),
+        timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
+        maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
+        language: this.configBundle.skill.evaluation?.language || "zh-CN",
+        dimensions: this.configBundle.skill.evaluation?.dimensions ?? [],
+      };
+
+      const evaluation = await it_evaluateAnswer(
+        question,
+        answer,
+        acoustic,
+        notes,
+        evaluationConfig,
+        [question],
+        [{ question, answer }],
+        questionText,
+        contextQuestions,
+        payload.systemPrompt,
+        payload.demoPrompt,
+      );
+      const revised: ItRevisedAnswer | undefined = evaluation.revisedAnswers?.[0];
+      if (!revised) {
+        throw new Error("未生成有效示范回答。");
+      }
+      return revised;
     });
     this.webviewProtocol.on("it/setRetrievalEnabled", async (msg) => {
       const enabled = Boolean(msg.data?.enabled);

@@ -509,6 +509,10 @@
 }
 
 .it-revised-item__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-weight: 600;
   margin-bottom: 6px;
 }
