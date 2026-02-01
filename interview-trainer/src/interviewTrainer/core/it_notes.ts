@@ -199,7 +199,7 @@ function it_splitByParagraphs(text: string, maxLen: number): string[] {
 function it_splitText(text: string, maxLen: number): string[] {
   const normalized = (text || "").replace(/\r\n/g, "\n");
   const lines = normalized.split("\n");
-  const headingPattern = /^#{2,3}\s+/;
+  const headingPattern = /^#{1,3}\s+/;
   let hasHeading = false;
   const sections: string[] = [];
   let current: string[] = [];
