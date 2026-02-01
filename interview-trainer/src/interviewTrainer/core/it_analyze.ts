@@ -1689,6 +1689,7 @@ export async function it_runAnalysis(
         maxConcurrency,
         metrics,
         onPhase: setNotesPhase,
+        onTrace: deps.onCorpusTrace,
         vector: {
           provider: resolvedVector.provider || "",
           apiKey: resolvedVector.api_key || "",

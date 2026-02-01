@@ -31,6 +31,7 @@ export interface ItRetrievalOptions {
   queryCacheSize?: number;
   metrics?: ItRetrievalMetrics;
   onPhase?: (phase: string) => void;
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void;
 }
 
 export interface ItRetrievalMetrics {
@@ -84,6 +85,8 @@ const cachedQueryEmbeddings: Map<string, number[]> = new Map();
 const cachedQueryEmbeddingPromises: Map<string, Promise<number[]>> = new Map();
 const cachedEmbeddingEnsurePromises: Map<string, Promise<ItEmbeddingEnsureResult>> =
   new Map();
+const loggedEmbeddingCacheLoads: Set<string> = new Set();
+const loggedEmbeddingCacheWrites: Set<string> = new Set();
 
 interface ItEmbeddingEnsureResult {
   created: number;
@@ -206,6 +209,7 @@ async function it_ensureEmbeddingCacheOnce(
   corpus: ItCorpusItem[],
   cache: Map<string, number[]>,
   cachePath?: string,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<ItEmbeddingEnsureResult> {
   let pending = cachedEmbeddingEnsurePromises.get(ensureKey);
   if (!pending) {
@@ -222,6 +226,13 @@ async function it_ensureEmbeddingCacheOnce(
       if (cachePath && (result.created > 0 || hasStale)) {
         try {
           it_saveEmbeddingCache(cachePath, it_buildEmbeddingCacheKey(vectorCfg), cache);
+          if (!loggedEmbeddingCacheWrites.has(cachePath)) {
+            loggedEmbeddingCacheWrites.add(cachePath);
+            onTrace?.("向量缓存写入", {
+              cachePath,
+              items: cache.size,
+            });
+          }
         } catch {
           // ignore cache write failure
         }
@@ -1098,6 +1109,13 @@ export async function it_prepareEmbeddingCache(
   if (!cache) {
     cache = cachePath ? it_loadEmbeddingCache(cachePath, cacheKey) : new Map();
     cachedEmbeddings.set(cacheKey, cache);
+    if (cachePath && !loggedEmbeddingCacheLoads.has(cachePath)) {
+      loggedEmbeddingCacheLoads.add(cachePath);
+      options.onTrace?.("向量缓存读取", {
+        cachePath,
+        items: cache.size,
+      });
+    }
   }
   const missing: Array<{ key: string; text: string }> = [];
   for (const item of corpus) {
@@ -1190,6 +1208,13 @@ export async function it_prepareEmbeddingCache(
   if (cachePath && (created > 0 || hasStale)) {
     try {
       it_saveEmbeddingCache(cachePath, cacheKey, cache);
+      if (!loggedEmbeddingCacheWrites.has(cachePath)) {
+        loggedEmbeddingCacheWrites.add(cachePath);
+        options.onTrace?.("向量缓存写入", {
+          cachePath,
+          items: cache.size,
+        });
+      }
     } catch {
       // ignore cache write failure
     }
@@ -1308,6 +1333,13 @@ export async function it_retrieveNotes(
   if (!cache) {
     cache = cachePath ? it_loadEmbeddingCache(cachePath, cacheKey) : new Map();
     cachedEmbeddings.set(cacheKey, cache);
+    if (cachePath && !loggedEmbeddingCacheLoads.has(cachePath)) {
+      loggedEmbeddingCacheLoads.add(cachePath);
+      options.onTrace?.("向量缓存读取", {
+        cachePath,
+        items: cache.size,
+      });
+    }
   }
   const ensureKey = it_hashText(
     `${cacheKey}|${options.cacheKey || ""}|${corpus.length}`,
@@ -1319,6 +1351,7 @@ export async function it_retrieveNotes(
     corpus,
     cache,
     cachePath,
+    options.onTrace,
   );
   if (metrics && !metrics.ensureKeys.has(ensureKey)) {
     metrics.ensureKeys.add(ensureKey);
