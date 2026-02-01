@@ -214,14 +214,6 @@ export function it_renderReport(
     lines.push(`${response.questionTimingNote}\n\n`);
   }
 
-  if (response.notes.length) {
-    lines.push("### 检索笔记\n\n");
-    response.notes.forEach((note) => {
-      lines.push(`- (${note.score}) ${note.source} :: ${note.snippet}\n`);
-    });
-    lines.push("\n");
-  }
-
   return lines.join("");
 }
 
