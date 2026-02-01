@@ -826,9 +826,11 @@ function it_mergeEvaluations(params: {
     const planned = timePlan[idx] ?? revised?.estimatedTimeMin ?? 3;
     return {
       question,
-      original: answers[idx]?.answer || "",
+      original: revised?.original || answers[idx]?.answer || "",
       revised: revised?.revised || "",
       estimatedTimeMin: planned,
+      outlineOriginal: revised?.outlineOriginal,
+      outlineRevised: revised?.outlineRevised,
     };
   });
 
