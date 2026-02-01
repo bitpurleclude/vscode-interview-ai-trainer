@@ -18,6 +18,7 @@ const STEP_LABELS: Record<string, string> = {
   recording: "录音中",
   acoustic: "声学分析",
   asr: "语音转写",
+  segment: "多题分段",
   notes: "笔记学习",
   evaluation: "面试评价",
   report: "结果生成",
@@ -217,6 +218,7 @@ const DEFAULT_STATE: ItState = {
     { id: "recording", status: "pending", progress: 0 },
     { id: "acoustic", status: "pending", progress: 0 },
     { id: "asr", status: "pending", progress: 0 },
+    { id: "segment", status: "pending", progress: 0 },
     { id: "notes", status: "pending", progress: 0 },
     { id: "evaluation", status: "pending", progress: 0 },
     { id: "report", status: "pending", progress: 0 },
@@ -1037,6 +1039,18 @@ const InterviewTrainer: React.FC = () => {
       }
       if (response?.status === "success") {
         setAnalysisResult(response.content);
+        const resolvedText = String(response.content?.questionText || "").trim();
+        const resolvedList = Array.isArray(response.content?.questionList)
+          ? response.content.questionList.map((item: any) => String(item)).filter(Boolean)
+          : [];
+        if (resolvedText && resolvedText !== questionText.trim()) {
+          setQuestionText(resolvedText);
+        }
+        if (resolvedList.length) {
+          setQuestionList(resolvedList.join("\n"));
+          setQuestionParsed(true);
+          setQuestionError(false);
+        }
         setActiveTab("evaluation");
       } else if (response?.error && String(response.error).includes("分析已停止")) {
         setItState((prev) => ({

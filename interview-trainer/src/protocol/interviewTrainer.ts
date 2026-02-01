@@ -4,6 +4,7 @@ export type ItWorkflowStep =
   | "recording"
   | "acoustic"
   | "asr"
+  | "segment"
   | "notes"
   | "evaluation"
   | "report"
@@ -138,6 +139,8 @@ export interface ItAnalyzeResponse {
   audioSegments?: ItAudioSegment[];
   questionTimings?: ItQuestionTiming[];
   questionTimingNote?: string;
+  questionText?: string;
+  questionList?: string[];
   reportPath: string;
   topicDir: string;
   audioPath: string;

@@ -64,6 +64,7 @@ const IT_STATUS_INIT: ItState = {
     { id: "recording", status: "pending", progress: 0 },
     { id: "acoustic", status: "pending", progress: 0 },
     { id: "asr", status: "pending", progress: 0 },
+    { id: "segment", status: "pending", progress: 0 },
     { id: "notes", status: "pending", progress: 0 },
     { id: "evaluation", status: "pending", progress: 0 },
     { id: "report", status: "pending", progress: 0 },
@@ -73,8 +74,9 @@ const IT_STATUS_INIT: ItState = {
 
 const IT_PROGRESS_WEIGHTS: Partial<Record<ItWorkflowStep, number>> = {
   question: 0.05,
-  asr: 0.4,
+  asr: 0.35,
   acoustic: 0.15,
+  segment: 0.05,
   notes: 0.1,
   evaluation: 0.2,
   report: 0.05,
@@ -1979,6 +1981,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           [
             "acoustic",
             "asr",
+            "segment",
             "notes",
             "evaluation",
             "report",

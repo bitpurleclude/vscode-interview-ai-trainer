@@ -1398,19 +1398,33 @@ export async function it_runAnalysis(
     ensureNotAborted();
   }
 
+  const multiQuestion = questionList.length > 1;
+  if (multiQuestion) {
+    reportProgress("segment", 5, "多题分段 5% · 准备中", "running");
+  } else {
+    reportProgress("segment", 100, "多题分段 跳过 · 单题", "success");
+  }
+
   let questionTimings: ItQuestionTiming[] = [];
   let questionTimingNote: string | undefined = undefined;
   let questionAnswers: Array<{ question: string; answer: string }> | undefined =
     undefined;
   let llmTimingAttempted = false;
   let llmTimingFailed = false;
-  if (questionList.length > 1) {
+  if (multiQuestion) {
     if (audioSegments && llmConfig) {
       llmTimingAttempted = true;
+      reportProgress("segment", 25, "多题分段 25% · LLM 识别回答", "running");
       const splitAnswers = await it_splitAnswersWithLlm(
         llmConfig,
         questionList,
         transcript,
+      );
+      reportProgress(
+        "segment",
+        45,
+        splitAnswers ? "多题分段 45% · LLM 对齐分段" : "多题分段 45% · LLM 粗分段",
+        "running",
       );
       if (splitAnswers) {
         questionAnswers = splitAnswers;
@@ -1440,6 +1454,7 @@ export async function it_runAnalysis(
           questionTimings = alignedTimings;
         }
         if (missingAlignment) {
+          reportProgress("segment", 65, "多题分段 65% · LLM 细分段", "running");
           const assigned = await it_assignSegmentsWithLlm(
             llmConfig,
             questionList,
@@ -1461,6 +1476,7 @@ export async function it_runAnalysis(
         }
       }
       if (!questionTimings.length) {
+        reportProgress("segment", 80, "多题分段 80% · LLM 兜底分段", "running");
         const assigned = await it_assignSegmentsWithLlm(
           llmConfig,
           questionList,
@@ -1481,6 +1497,7 @@ export async function it_runAnalysis(
     } else {
       llmTimingAttempted = true;
       llmTimingFailed = true;
+      reportProgress("segment", 100, "多题分段 100% · 缺少转写分段或LLM", "error");
     }
   } else if (questionList.length === 1 && !questionAnswers) {
     questionAnswers = [{ question: questionList[0], answer: transcript }];
@@ -1499,6 +1516,14 @@ export async function it_runAnalysis(
       questionTimings: questionTimings.length ? questionTimings : undefined,
       questionTimingNote,
     });
+  }
+  if (multiQuestion && llmTimingAttempted) {
+    reportProgress(
+      "segment",
+      100,
+      llmTimingFailed ? "多题分段 100% · 失败" : "多题分段 100% · LLM",
+      llmTimingFailed ? "error" : "success",
+    );
   }
 
   let notes: ItAnalyzeResponse["notes"] = [];
@@ -1809,6 +1834,8 @@ export async function it_runAnalysis(
     audioSegments,
     questionTimings,
     questionTimingNote,
+    questionText,
+    questionList,
     reportPath,
     topicDir,
     audioPath: storedAudioPath,
