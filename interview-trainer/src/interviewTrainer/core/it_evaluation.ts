@@ -213,11 +213,11 @@ async function it_generateOutlines(
   }
   const systemPrompt = [
     "你是答题提纲生成器，只输出 JSON。",
-    "每题输出 outlineOriginal/outlineRevised，为关键词式提纲（数组或 Markdown 列表文本）。",
-    "必须包含多层结构（至少两级），请使用 Markdown 列表缩进表示层级，禁止使用箭头符号。",
+    "每题输出 outlineOriginal/outlineRevised，为关键词式提纲（必须是 Markdown 列表文本字符串，不得输出数组）。",
+    "必须包含多层结构（至少两级），只能使用 Markdown 列表缩进表示层级，禁止使用箭头符号。",
     "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
     "每条<=20字，尽量用关键词短语，避免完整长句。",
-    "系统会自动解析 Markdown 列表缩进。",
+    "系统会自动解析 Markdown 列表缩进，不需要额外说明。",
     "每题8-18条。",
   ].join("\n");
   const userPrompt = [
@@ -232,7 +232,7 @@ async function it_generateOutlines(
       )
       .join("\n\n"),
     "",
-    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": [...], \"outlineRevised\": [...] } ] }，outlineOriginal/outlineRevised 也可用 Markdown 列表字符串（禁止使用箭头符号）。",
+    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": \"Markdown列表...\", \"outlineRevised\": \"Markdown列表...\" } ] }，outlineOriginal/outlineRevised 必须是 Markdown 列表字符串（禁止使用箭头符号）。",
   ].join("\n");
   try {
     const content = await it_callLlmChat(
@@ -634,11 +634,11 @@ export async function it_evaluateAnswer(
       "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
-      "outlineOriginal/outlineRevised 为要点数组或 Markdown 列表文本（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-      "提纲必须是关键词式（避免完整长句），用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
+      "outlineOriginal/outlineRevised 必须为 Markdown 列表文本字符串（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
+      "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
       "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
       "每条<=20字。",
-      "系统会自动解析 Markdown 列表缩进。",
+      "系统会自动解析 Markdown 列表缩进，不需要额外说明。",
       "如提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与可参考思路（至少2条），格式: source :: 用法/思路。",
     ].join("\n");
   const demoPrompt = customDemoPrompt?.trim();
@@ -673,11 +673,11 @@ export async function it_evaluateAnswer(
           .join("\n")}`
       : "本次评审回答: 无",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
-    "outlineOriginal/outlineRevised 为要点数组或 Markdown 列表文本（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-    "提纲必须是关键词式（避免完整长句），用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
+    "outlineOriginal/outlineRevised 必须为 Markdown 列表文本字符串（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
+    "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
     "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
     "每条<=20字。",
-    "系统会自动解析 Markdown 列表缩进。",
+    "系统会自动解析 Markdown 列表缩进，不需要额外说明。",
   ];
 
   if (demoPrompt) {

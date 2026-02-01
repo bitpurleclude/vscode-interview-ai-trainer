@@ -2,7 +2,7 @@
   "name": "interview-trainer",
   "displayName": "面试训练助手",
   "description": "面试训练录音、转写与评价助手",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "interview-trainer",
   "license": "MIT",
   "repository": {
