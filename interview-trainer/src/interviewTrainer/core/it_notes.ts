@@ -353,8 +353,12 @@ function it_scoreTokens(queryTokens: string[], textTokens: string[]): number {
   return hits / Math.max(1, queryTokens.length);
 }
 
+function it_normalizeEmbeddingBaseUrl(url: string): string {
+  return String(url || "").trim().replace(/\/+$/, "");
+}
+
 function it_buildEmbeddingCacheKey(cfg: ItVectorSearchConfig): string {
-  return `${cfg.provider}|${cfg.baseUrl}|${cfg.model}`;
+  return `${cfg.provider}|${it_normalizeEmbeddingBaseUrl(cfg.baseUrl)}|${cfg.model}`;
 }
 
 function it_getEmbeddingCachePath(cacheDir: string, cacheKey: string): string {
@@ -406,7 +410,8 @@ function it_saveEmbeddingCache(
 }
 
 function it_getItemKey(item: ItCorpusItem): string {
-  return `${item.source}|${it_hashText(item.text)}`;
+  const normalizedSource = it_normalizePath(item.source || "");
+  return `${normalizedSource}|${it_hashText(item.text)}`;
 }
 
 function it_cosineSimilarity(a: number[], b: number[]): number {
