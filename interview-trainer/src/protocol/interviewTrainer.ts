@@ -168,6 +168,8 @@ export interface ItConfigSnapshot {
   prompts: {
     evaluationPrompt: string;
     demoPrompt: string;
+    perQuestionSystemPrompts?: string[];
+    perQuestionDemoPrompts?: string[];
   };
   llm: {
     provider: string;

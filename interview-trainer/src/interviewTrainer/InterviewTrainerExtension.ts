@@ -228,6 +228,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         evaluationPrompt:
           (this.configBundle.skill.prompts?.evaluation_prompt as string) || "",
         demoPrompt: (this.configBundle.skill.prompts?.demo_prompt as string) || "",
+        perQuestionSystemPrompts:
+          (this.configBundle.skill.prompts?.per_question_system_prompts as string[]) || [],
+        perQuestionDemoPrompts:
+          (this.configBundle.skill.prompts?.per_question_demo_prompts as string[]) || [],
       },
       llm: {
         provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
@@ -1460,6 +1464,12 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const payload = msg.data || {};
       const evaluationPrompt = String(payload.evaluationPrompt || "");
       const demoPrompt = String(payload.demoPrompt || "");
+      const perQuestionSystemPrompts = Array.isArray(payload.perQuestionSystemPrompts)
+        ? payload.perQuestionSystemPrompts.map((item: any) => String(item || "")).slice(0, 3)
+        : [];
+      const perQuestionDemoPrompts = Array.isArray(payload.perQuestionDemoPrompts)
+        ? payload.perQuestionDemoPrompts.map((item: any) => String(item || "")).slice(0, 3)
+        : [];
       this.configBundle = it_loadConfigBundle(this.context);
       this.configBundle.skill = {
         ...this.configBundle.skill,
@@ -1467,12 +1477,19 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           ...this.configBundle.skill.prompts,
           evaluation_prompt: evaluationPrompt,
           demo_prompt: demoPrompt,
+          per_question_system_prompts: perQuestionSystemPrompts,
+          per_question_demo_prompts: perQuestionDemoPrompts,
         },
       };
       it_saveSkillConfig(this.context, this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
-      return { evaluationPrompt, demoPrompt };
+      return {
+        evaluationPrompt,
+        demoPrompt,
+        perQuestionSystemPrompts,
+        perQuestionDemoPrompts,
+      };
     });
     this.webviewProtocol.on("it/testLlm", async (msg) => {
       const payload = msg.data || {};

@@ -287,9 +287,11 @@ const InterviewTrainer: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState(STRICT_SYSTEM_PROMPT);
   const [demoPrompt, setDemoPrompt] = useState(DEFAULT_DEMO_PROMPT);
   const [perQuestionSystemPrompts, setPerQuestionSystemPrompts] = useState<string[]>(
-    [],
+    ["", "", ""],
   );
-  const [perQuestionDemoPrompts, setPerQuestionDemoPrompts] = useState<string[]>([]);
+  const [perQuestionDemoPrompts, setPerQuestionDemoPrompts] = useState<string[]>(
+    ["", "", ""],
+  );
   const [analysisResult, setAnalysisResult] = useState<ItAnalyzeResponse | null>(
     null,
   );
@@ -371,9 +373,9 @@ const InterviewTrainer: React.FC = () => {
   const [corpusCacheMessage, setCorpusCacheMessage] = useState<string | null>(null);
   const [traceLogEnabled, setTraceLogEnabled] = useState(false);
   const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
-  const [promptSaveScope, setPromptSaveScope] = useState<"evaluation" | "demo" | null>(
-    null,
-  );
+  const [promptSaveScope, setPromptSaveScope] = useState<
+    "evaluation" | "demo" | "per-question" | null
+  >(null);
   const [showRawOutput, setShowRawOutput] = useState(false);
   const [creatingProvider, setCreatingProvider] = useState(false);
   const [providerCreateMessage, setProviderCreateMessage] = useState<string | null>(null);
@@ -539,6 +541,12 @@ const InterviewTrainer: React.FC = () => {
           resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
         );
         setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
+        setPerQuestionSystemPrompts(
+          resp.content.prompts?.perQuestionSystemPrompts?.slice(0, 3) ?? ["", "", ""],
+        );
+        setPerQuestionDemoPrompts(
+          resp.content.prompts?.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
+        );
       } else {
         // fallback to unlock UI even if后端出错
         const fallbackConfig: ItConfigSnapshot = {
@@ -553,6 +561,8 @@ const InterviewTrainer: React.FC = () => {
           prompts: {
             evaluationPrompt: STRICT_SYSTEM_PROMPT,
             demoPrompt: DEFAULT_DEMO_PROMPT,
+            perQuestionSystemPrompts: ["", "", ""],
+            perQuestionDemoPrompts: ["", "", ""],
           },
           llm: {
             provider: "baidu_qianfan",
@@ -606,6 +616,8 @@ const InterviewTrainer: React.FC = () => {
         setConfig(fallbackConfig);
         setCustomPrompt(STRICT_SYSTEM_PROMPT);
         setDemoPrompt(DEFAULT_DEMO_PROMPT);
+        setPerQuestionSystemPrompts(["", "", ""]);
+        setPerQuestionDemoPrompts(["", "", ""]);
         setItState((prev) => ({
           ...prev,
           statusMessage: "配置加载失败，已使用默认配置",
@@ -627,6 +639,12 @@ const InterviewTrainer: React.FC = () => {
     if (config.prompts) {
       setCustomPrompt(config.prompts.evaluationPrompt ?? STRICT_SYSTEM_PROMPT);
       setDemoPrompt(config.prompts.demoPrompt ?? DEFAULT_DEMO_PROMPT);
+      setPerQuestionSystemPrompts(
+        config.prompts.perQuestionSystemPrompts?.slice(0, 3) ?? ["", "", ""],
+      );
+      setPerQuestionDemoPrompts(
+        config.prompts.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
+      );
     }
   }, [config, applyProfileToForm, applyRetrievalToForm]);
 
@@ -663,25 +681,6 @@ const InterviewTrainer: React.FC = () => {
         .filter(Boolean),
     [questionList],
   );
-  const questionPromptItems = useMemo(
-    () => (parsedQuestionList.length ? parsedQuestionList : []),
-    [parsedQuestionList],
-  );
-  useEffect(() => {
-    const len = questionPromptItems.length;
-    setPerQuestionSystemPrompts((prev) => {
-      if (prev.length === len) return prev;
-      const next = prev.slice(0, len);
-      while (next.length < len) next.push("");
-      return next;
-    });
-    setPerQuestionDemoPrompts((prev) => {
-      if (prev.length === len) return prev;
-      const next = prev.slice(0, len);
-      while (next.length < len) next.push("");
-      return next;
-    });
-  }, [questionPromptItems.length]);
   const buildQuestionParseInput = useCallback(() => {
     const text = questionText.trim();
     const list = questionList.trim();
@@ -1091,8 +1090,12 @@ const InterviewTrainer: React.FC = () => {
     }));
     const finalQuestionText = questionText.trim();
     const finalQuestionList = parsedQuestionList;
-    const normalizedPerQuestionSystem = perQuestionSystemPrompts.map((item) => item.trim());
-    const normalizedPerQuestionDemo = perQuestionDemoPrompts.map((item) => item.trim());
+    const normalizedPerQuestionSystem = perQuestionSystemPrompts
+      .slice(0, 3)
+      .map((item) => item.trim());
+    const normalizedPerQuestionDemo = perQuestionDemoPrompts
+      .slice(0, 3)
+      .map((item) => item.trim());
     const hasPerQuestionSystem = normalizedPerQuestionSystem.some(Boolean);
     const hasPerQuestionDemo = normalizedPerQuestionDemo.some(Boolean);
     const payload: ItAnalyzeRequest = {
@@ -1435,13 +1438,17 @@ const InterviewTrainer: React.FC = () => {
     }
     setSavingApiConfig(false);
   };
-  const handleSavePrompts = async (scope: "evaluation" | "demo") => {
+  const handleSavePrompts = async (
+    scope: "evaluation" | "demo" | "per-question",
+  ) => {
     setPromptSaveMessage(null);
     setPromptSaveScope(scope);
     try {
       await request("it/savePrompts", {
         evaluationPrompt: customPrompt,
         demoPrompt,
+        perQuestionSystemPrompts,
+        perQuestionDemoPrompts,
       });
       setPromptSaveMessage("提示词已保存");
     } catch (err) {
@@ -1938,59 +1945,6 @@ const InterviewTrainer: React.FC = () => {
                   >
                     {questionParsing ? "识别中..." : "识别题目"}
                   </button>
-                </div>
-                <div className="it-question-prompts">
-                  <div className="it-question-prompts__header">总体提示词（本次分析生效）</div>
-                  <div className="it-question-prompts__pair">
-                    <textarea
-                      className="it-textarea it-textarea--prompt"
-                      placeholder="总体评分提示词（可选）"
-                      value={customPrompt}
-                      onChange={(event) => setCustomPrompt(event.target.value)}
-                    />
-                    <textarea
-                      className="it-textarea it-textarea--prompt"
-                      placeholder="总体示范提示词（可选）"
-                      value={demoPrompt}
-                      onChange={(event) => setDemoPrompt(event.target.value)}
-                    />
-                  </div>
-                  {questionPromptItems.length > 0 && (
-                    <>
-                      <div className="it-question-prompts__header">
-                        每题独立提示词（可选）
-                      </div>
-                      {questionPromptItems.map((item, idx) => (
-                        <div key={`${idx}-${item}`} className="it-question-prompts__item">
-                          <div className="it-question-prompts__title">
-                            {idx + 1}. {item}
-                          </div>
-                          <div className="it-question-prompts__pair">
-                            <textarea
-                              className="it-textarea it-textarea--prompt"
-                              placeholder="本题评分提示词（可选）"
-                              value={perQuestionSystemPrompts[idx] || ""}
-                              onChange={(event) => {
-                                const next = [...perQuestionSystemPrompts];
-                                next[idx] = event.target.value;
-                                setPerQuestionSystemPrompts(next);
-                              }}
-                            />
-                            <textarea
-                              className="it-textarea it-textarea--prompt"
-                              placeholder="本题示范提示词（可选）"
-                              value={perQuestionDemoPrompts[idx] || ""}
-                              onChange={(event) => {
-                                const next = [...perQuestionDemoPrompts];
-                                next[idx] = event.target.value;
-                                setPerQuestionDemoPrompts(next);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
                 </div>
                 {typeof notesPreview !== "undefined" && (
                   <div className="it-question__notes">
@@ -2847,6 +2801,56 @@ const InterviewTrainer: React.FC = () => {
                 onChange={(event) => setDemoPrompt(event.target.value)}
               />
               {promptSaveScope === "demo" && promptSaveMessage && (
+                <div className="it-settings__hint">{promptSaveMessage}</div>
+              )}
+            </div>
+
+            <div className="it-settings__section">
+              <div className="it-settings__header">
+                <div>
+                  <div className="it-settings__title">每题独立提示词（最多3题）</div>
+                  <div className="it-settings__desc">持久化保存，逐题覆盖总体提示词</div>
+                </div>
+                <div className="it-settings__actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked}
+                    onClick={() => handleSavePrompts("per-question")}
+                  >
+                    保存提示词
+                  </button>
+                </div>
+              </div>
+              <div className="it-question-prompts">
+                {[0, 1, 2].map((idx) => (
+                  <div key={idx} className="it-question-prompts__item">
+                    <div className="it-question-prompts__title">第 {idx + 1} 题</div>
+                    <div className="it-question-prompts__pair">
+                      <textarea
+                        className="it-textarea it-textarea--prompt"
+                        placeholder="本题评分提示词（可选）"
+                        value={perQuestionSystemPrompts[idx] || ""}
+                        onChange={(event) => {
+                          const next = [...perQuestionSystemPrompts];
+                          next[idx] = event.target.value;
+                          setPerQuestionSystemPrompts(next);
+                        }}
+                      />
+                      <textarea
+                        className="it-textarea it-textarea--prompt"
+                        placeholder="本题示范提示词（可选）"
+                        value={perQuestionDemoPrompts[idx] || ""}
+                        onChange={(event) => {
+                          const next = [...perQuestionDemoPrompts];
+                          next[idx] = event.target.value;
+                          setPerQuestionDemoPrompts(next);
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {promptSaveScope === "per-question" && promptSaveMessage && (
                 <div className="it-settings__hint">{promptSaveMessage}</div>
               )}
             </div>
