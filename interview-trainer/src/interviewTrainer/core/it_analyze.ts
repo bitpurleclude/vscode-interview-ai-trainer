@@ -2018,7 +2018,13 @@ export async function it_runAnalysis(
     envConfig.llm?.provider && envConfig.llm?.provider !== "heuristic" && envConfig.llm?.api_key,
   );
   const evalLabel = evalUsesApi ? "API" : "LLM不可用";
-  reportProgress("evaluation", 10, `面试评价 10% · ${evalLabel}`, "running");
+  const evalModeLabel = evaluationConfig.answerMode === "two-step" ? "两步法" : "单次";
+  reportProgress(
+    "evaluation",
+    5,
+    `面试评价 5% · 准备 · ${evalLabel} · ${evalModeLabel}`,
+    "running",
+  );
 
   const timePlan = [4, 3, 3];
   const evalQuestions = questionList.length
@@ -2042,31 +2048,55 @@ export async function it_runAnalysis(
     ),
   );
 
+  const totalQuestions = evalQuestions.length || 1;
+  let completed = 0;
+  const baseProgress = 15;
+  const spanProgress = 75;
+  reportProgress(
+    "evaluation",
+    baseProgress,
+    `面试评价 ${baseProgress}% · 生成中 · ${evalLabel} · ${evalModeLabel}`,
+    "running",
+  );
   const evaluations = await Promise.all(
     evalQuestions.map((question, idx) =>
-      it_evaluateAnswer(
-        question,
-        evalAnswers[idx]?.answer || "",
-        evalAcoustics[idx],
-        evalNotes[idx] || [],
-        evaluationConfig,
-        [question],
-        [{ question, answer: evalAnswers[idx]?.answer || "" }],
-        questionText,
-        evalQuestions,
-        [
-          request.systemPrompt?.trim(),
-          request.perQuestionSystemPrompts?.[idx]?.trim(),
-        ]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
-        [
-          request.demoPrompt?.trim(),
-          request.perQuestionDemoPrompts?.[idx]?.trim(),
-        ]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
-      ),
+      (async () => {
+        const result = await it_evaluateAnswer(
+          question,
+          evalAnswers[idx]?.answer || "",
+          evalAcoustics[idx],
+          evalNotes[idx] || [],
+          evaluationConfig,
+          [question],
+          [{ question, answer: evalAnswers[idx]?.answer || "" }],
+          questionText,
+          evalQuestions,
+          [
+            request.systemPrompt?.trim(),
+            request.perQuestionSystemPrompts?.[idx]?.trim(),
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined,
+          [
+            request.demoPrompt?.trim(),
+            request.perQuestionDemoPrompts?.[idx]?.trim(),
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined,
+        );
+        completed += 1;
+        const progress = Math.min(
+          95,
+          baseProgress + Math.round((spanProgress * completed) / totalQuestions),
+        );
+        reportProgress(
+          "evaluation",
+          progress,
+          `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
+          "running",
+        );
+        return result;
+      })(),
     ),
   );
 
@@ -2077,6 +2107,7 @@ export async function it_runAnalysis(
     evaluations,
     timePlan,
   });
+  reportProgress("evaluation", 95, "面试评价 95% · 汇总", "running");
   reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
   deps.onPartial?.({ evaluation });
   ensureNotAborted();
