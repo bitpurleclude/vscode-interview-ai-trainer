@@ -5,9 +5,26 @@ export type ItLlmProvider = "baidu_qianfan" | "volc_doubao" | string;
 
 export interface ItLlmConfig extends ItQianfanConfig {
   provider: ItLlmProvider;
+  antiRepeat?: boolean;
 }
 
 export type ItLlmMessage = ItQianfanMessage;
+
+function it_withNonce(messages: ItLlmMessage[]): ItLlmMessage[] {
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const next = messages.map((msg) => ({ ...msg }));
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    if (next[i].role === "user") {
+      next[i] = {
+        ...next[i],
+        content: `${next[i].content}\n\n[nonce:${nonce}]`,
+      };
+      return next;
+    }
+  }
+  next.push({ role: "user", content: `[nonce:${nonce}]` });
+  return next;
+}
 
 async function it_callDoubaoChat(
   cfg: ItLlmConfig,
@@ -59,12 +76,13 @@ export async function it_callLlmChat(
   cfg: ItLlmConfig,
   messages: ItLlmMessage[],
 ): Promise<string> {
+  const resolvedMessages = cfg.antiRepeat ? it_withNonce(messages) : messages;
   const provider = cfg.provider || "baidu_qianfan";
   if (provider === "baidu_qianfan") {
-    return it_callQianfanChat(cfg, messages);
+    return it_callQianfanChat(cfg, resolvedMessages);
   }
   if (provider === "volc_doubao") {
-    return it_callDoubaoChat(cfg, messages);
+    return it_callDoubaoChat(cfg, resolvedMessages);
   }
   throw new Error(`不支持的 LLM 提供方: ${provider}`);
 }

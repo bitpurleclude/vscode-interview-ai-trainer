@@ -362,6 +362,7 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
     topP: Number(llm.top_p ?? 0.8),
     timeoutSec: Number(llm.timeout_sec ?? 60),
     maxRetries: resolvedRetries,
+    antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
   };
 }
 
@@ -2004,6 +2005,7 @@ export async function it_runAnalysis(
     topP: Number(envConfig.llm?.top_p ?? 0.8),
     timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
     maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
+    antiRepeat: Boolean(envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false),
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
   };

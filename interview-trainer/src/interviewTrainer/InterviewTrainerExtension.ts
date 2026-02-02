@@ -246,6 +246,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         topP: Number(llmConfig.top_p ?? 0.8),
         timeoutSec: Number(llmConfig.timeout_sec ?? 60),
         maxRetries: Number(llmConfig.max_retries ?? 1),
+        antiRepeat: Boolean(llmConfig.anti_repeat ?? llmConfig.antiRepeat ?? false),
       },
       asr: {
         provider: asrConfig.provider || apiConfig.active?.asr || "baidu_vop",
@@ -412,6 +413,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       topP: Number(llm.top_p ?? 0.8),
       timeoutSec: Number(llm.timeout_sec ?? 60),
       maxRetries: Number(llm.max_retries ?? 1),
+      antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
     };
   }
 
@@ -1365,6 +1367,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         top_p: Number(llmForm.topP ?? envConfig.llm?.top_p ?? 0.8),
         timeout_sec: Number(llmForm.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
         max_retries: Number(llmForm.maxRetries ?? envConfig.llm?.max_retries ?? 1),
+        anti_repeat: Boolean(
+          llmForm.antiRepeat ?? envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false,
+        ),
       };
       envConfig.llm_provider = envConfig.llm.provider;
       llmProfiles[envConfig.llm.provider] = {
@@ -1513,6 +1518,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         topP: Number(llmForm.topP ?? 0.8),
         timeoutSec: Number(llmForm.timeoutSec ?? 30),
         maxRetries: Number(llmForm.maxRetries ?? 0),
+        antiRepeat: Boolean(llmForm.antiRepeat ?? false),
       };
       if (!cfg.apiKey) {
         throw new Error("缺少 LLM API Key");
@@ -2081,6 +2087,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         this.embeddingWarmupAbort.aborted = true;
       }
       this.analysisAbort = { aborted: false };
+      const runId = request.runId || new Date().toISOString();
       const steps = this.buildRunSteps().map((step) => {
         if (step.id === "recording") {
           return { ...step, status: "success" as ItStepStatus, progress: 100 };
@@ -2091,7 +2098,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         return step;
       });
       this.updateState({
-        statusMessage: "正在处理音频与转写",
+        statusMessage: `Analysis started (runId: ${runId})`,
         steps,
         overallProgress: this.computeOverallProgress(steps),
         lastError: undefined,

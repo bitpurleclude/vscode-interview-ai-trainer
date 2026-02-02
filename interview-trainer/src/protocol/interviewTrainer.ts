@@ -64,6 +64,7 @@ export interface ItAnalyzeRequest {
   demoPrompt?: string;
   perQuestionSystemPrompts?: string[];
   perQuestionDemoPrompts?: string[];
+  runId?: string;
 }
 
 export interface ItAcousticMetrics {
@@ -180,6 +181,7 @@ export interface ItConfigSnapshot {
     topP: number;
     timeoutSec: number;
     maxRetries: number;
+    antiRepeat?: boolean;
   };
   asr: {
     provider: string;

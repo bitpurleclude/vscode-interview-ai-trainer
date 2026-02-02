@@ -340,6 +340,7 @@ const InterviewTrainer: React.FC = () => {
       topP: 0.8,
       timeoutSec: 60,
       maxRetries: 1,
+      antiRepeat: false,
     },
     asr: {
       provider: "baidu_vop",
@@ -451,6 +452,9 @@ const InterviewTrainer: React.FC = () => {
           topP: Number(llmProfile?.top_p ?? llmProfile?.topP ?? 0.8),
           timeoutSec: Number(llmProfile?.timeout_sec ?? llmProfile?.timeoutSec ?? 60),
           maxRetries: Number(llmProfile?.max_retries ?? llmProfile?.maxRetries ?? 1),
+          antiRepeat: Boolean(
+            llmProfile?.anti_repeat ?? llmProfile?.antiRepeat ?? prev.llm.antiRepeat ?? false,
+          ),
         },
         asr: {
           provider: asrProvider,
@@ -1099,9 +1103,10 @@ const InterviewTrainer: React.FC = () => {
     analysisCancelledRef.current = false;
     analysisRunRef.current += 1;
     const currentRun = analysisRunRef.current;
+    const runId = new Date().toISOString();
     setItState((prev) => ({
       ...prev,
-      statusMessage: "已发起分析请求，处理中...",
+      statusMessage: `已发起分析请求（批次：${runId}）`,
     }));
     const finalQuestionText = questionText.trim();
     const finalQuestionList = parsedQuestionList;
@@ -1121,6 +1126,7 @@ const InterviewTrainer: React.FC = () => {
       demoPrompt: demoPrompt?.trim() || undefined,
       perQuestionSystemPrompts: hasPerQuestionSystem ? normalizedPerQuestionSystem : undefined,
       perQuestionDemoPrompts: hasPerQuestionDemo ? normalizedPerQuestionDemo : undefined,
+      runId,
     };
     try {
       const response = await request("it/analyzeAudio", payload, { timeoutMs: 5 * 60 * 1000 });
@@ -1269,7 +1275,7 @@ const InterviewTrainer: React.FC = () => {
   const handleApiFieldChange = (
     scope: "llm" | "asr",
     key: string,
-    value: string | number,
+    value: string | number | boolean,
   ) => {
     setLlmTestMessage(null);
     setAsrTestMessage(null);
@@ -1313,6 +1319,9 @@ const InterviewTrainer: React.FC = () => {
             ),
             maxRetries: Number(
               nextProfile.max_retries ?? nextProfile.maxRetries ?? prev.llm.maxRetries ?? 1,
+            ),
+            antiRepeat: Boolean(
+              nextProfile.anti_repeat ?? nextProfile.antiRepeat ?? prev.llm.antiRepeat ?? false,
             ),
           },
         };
@@ -1394,6 +1403,7 @@ const InterviewTrainer: React.FC = () => {
         topP: Number(apiForm.llm.topP),
         timeoutSec: Number(apiForm.llm.timeoutSec),
         maxRetries: Number(apiForm.llm.maxRetries),
+        antiRepeat: Boolean(apiForm.llm.antiRepeat),
       },
       asr: {
         provider: apiForm.asr.provider,
@@ -1419,6 +1429,7 @@ const InterviewTrainer: React.FC = () => {
           top_p: Number(apiForm.llm.topP),
           timeout_sec: Number(apiForm.llm.timeoutSec),
           max_retries: Number(apiForm.llm.maxRetries),
+          anti_repeat: Boolean(apiForm.llm.antiRepeat),
         },
       },
       asrProfiles: {
@@ -2595,6 +2606,19 @@ const InterviewTrainer: React.FC = () => {
                             handleApiFieldChange("llm", "maxRetries", Number(event.target.value))
                           }
                         />
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>防重复</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(apiForm.llm.antiRepeat)}
+                            onChange={(event) =>
+                              handleApiFieldChange("llm", "antiRepeat", event.target.checked)
+                            }
+                          />
+                          <span>加入随机标记</span>
+                        </label>
                       </div>
                       <div className="it-settings__actions">
                         <button
