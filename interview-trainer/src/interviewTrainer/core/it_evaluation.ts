@@ -219,6 +219,120 @@ function it_countParagraphs(text: string): number {
     .filter(Boolean).length;
 }
 
+function it_extractOutlineHeadings(lines?: string[]): string[] {
+  if (!Array.isArray(lines)) {
+    return [];
+  }
+  const headings: string[] = [];
+  lines.forEach((line) => {
+    if (!line) {
+      return;
+    }
+    if (/^\s+/.test(line)) {
+      return;
+    }
+    const trimmed = String(line).trim();
+    if (!trimmed) {
+      return;
+    }
+    const cleaned = trimmed.replace(/^[-*+]\s+/, "").trim();
+    if (cleaned) {
+      headings.push(cleaned);
+    }
+  });
+  return headings;
+}
+
+async function it_generateRevisedByOutline(
+  config: ItEvaluationConfig,
+  items: Array<{
+    question: string;
+    outlineRevised?: string[];
+    notes?: ItNoteHit[];
+  }>,
+  demoPrompt?: string,
+  materialText?: string,
+  backgroundQuestions?: string[],
+): Promise<string[] | null> {
+  if (!items.length || !config.apiKey) {
+    return null;
+  }
+  const systemPrompt = [
+    "你是中文面试示范回答生成器，只输出 JSON。",
+    "必须先根据提纲组织回答，再输出回答。",
+    "回答必须按给定一级标题分段：每个标题单独一行作为小标题，标题后空一行写正文，段落之间空一行。",
+    "不得更改一级标题文本与顺序，不得输出提纲本身。",
+    "正文需覆盖二级要点，语言正式、逻辑清晰、衔接自然。",
+    "输出 JSON 格式: { \"answers\": [ { \"revised\": \"...\" } ] }",
+  ].join("\n");
+  const material = materialText?.trim() || "";
+  const background = backgroundQuestions && backgroundQuestions.length ? backgroundQuestions : [];
+  const userPrompt = [
+    demoPrompt ? `示范补充要求:\n${demoPrompt}` : "示范补充要求: 无",
+    material ? `材料:\n${material}` : "材料: 无",
+    background.length
+      ? `背景题目列表(仅供参考):\n${background
+          .map((q, idx) => `${idx + 1}. ${q}`)
+          .join("\n")}`
+      : "背景题目列表(仅供参考): 无",
+    items
+      .map((item, idx) => {
+        const outlineLines = item.outlineRevised || [];
+        const headings = it_extractOutlineHeadings(outlineLines);
+        const notes = item.notes || [];
+        return [
+          `第${idx + 1}题题干:\n${item.question || "未提供"}`,
+          headings.length
+            ? `一级标题(必须原样作为分段标题,顺序不可变):\n${headings
+                .map((h) => `- ${h}`)
+                .join("\n")}`
+            : "一级标题: 无",
+          outlineLines.length
+            ? `提纲(含二级):\n${outlineLines.join("\n")}`
+            : "提纲: 无",
+          notes.length
+            ? `检索笔记:\n${notes.map((note) => `- ${note.source} :: ${note.snippet}`).join("\n")}`
+            : "检索笔记: 无",
+        ].join("\n");
+      })
+      .join("\n\n"),
+  ].join("\n\n");
+
+  try {
+    const content = await it_callLlmChat(
+      {
+        provider: config.provider,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        temperature: config.temperature,
+        topP: config.topP,
+        timeoutSec: config.timeoutSec,
+        maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
+        antiRepeat: config.antiRepeat,
+      },
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    );
+    const parsed = it_extractJsonPayload(content);
+    const list = Array.isArray(parsed?.answers)
+      ? parsed.answers
+      : Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.items)
+          ? parsed.items
+          : [];
+    if (!Array.isArray(list) || !list.length) {
+      return null;
+    }
+    return list.map((entry: any) => String(entry?.revised || ""));
+  } catch {
+    return null;
+  }
+}
+
 async function it_generateOutlines(
   config: ItEvaluationConfig,
   items: Array<{ question: string; original: string; revised: string }>,
@@ -260,6 +374,7 @@ async function it_generateOutlines(
         topP: config.topP,
         timeoutSec: config.timeoutSec,
         maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
+        antiRepeat: config.antiRepeat,
       },
       [
         { role: "system", content: systemPrompt },
@@ -650,6 +765,7 @@ export async function it_evaluateAnswer(
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
       "revised 必须分段输出，至少3段，段落之间空一行，段落内容按步骤/要点展开。",
       "输出前自检：revised 至少包含两处空行（\\n\\n）。若未满足，请先调整为多段后再输出。",
+      "先生成 outlineRevised，再按 outlineRevised 的一级标题组织 revised，一级标题必须作为段落标题单独成行。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
       "outlineOriginal/outlineRevised 必须为 Markdown 列表文本字符串（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
       "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，且必须出现二级缩进（两个空格+ -），禁止使用箭头符号与平铺列表。",
@@ -737,6 +853,7 @@ export async function it_evaluateAnswer(
           topP: config.topP,
           timeoutSec: config.timeoutSec,
           maxRetries: resolvedRetries,
+          antiRepeat: config.antiRepeat,
         },
         [
           { role: "system", content: systemPrompt },
@@ -864,6 +981,29 @@ export async function it_evaluateAnswer(
           if (revisedAnswers[idx]) {
             revisedAnswers[idx].outlineOriginal = original ?? revisedAnswers[idx].outlineOriginal;
             revisedAnswers[idx].outlineRevised = revised ?? revisedAnswers[idx].outlineRevised;
+          }
+        });
+      }
+    }
+    const hasRevisedOutline = revisedAnswers.every(
+      (item) => Array.isArray(item.outlineRevised) && item.outlineRevised.length,
+    );
+    if (hasRevisedOutline && config.apiKey) {
+      const regeneratedRevised = await it_generateRevisedByOutline(
+        config,
+        revisedAnswers.map((item) => ({
+          question: item.question,
+          outlineRevised: item.outlineRevised,
+          notes,
+        })),
+        demoPrompt,
+        material,
+        backgroundQuestions,
+      );
+      if (regeneratedRevised && regeneratedRevised.length) {
+        regeneratedRevised.forEach((text, idx) => {
+          if (revisedAnswers[idx] && String(text || "").trim()) {
+            revisedAnswers[idx].revised = String(text || "");
           }
         });
       }
