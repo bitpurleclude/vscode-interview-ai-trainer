@@ -1,4 +1,4 @@
-import {
+﻿import {
   ItAcousticMetrics,
   ItEvaluation,
   ItNoteHit,
@@ -646,43 +646,40 @@ export async function it_evaluateAnswer(
   const backgroundQuestions =
     contextQuestions && contextQuestions.length ? contextQuestions : [];
   const userPromptParts = [
+    demoPrompt ? `示范补充要求:\n${demoPrompt}` : "示范补充要求: 无",
     material ? `材料:\n${material}` : "材料: 无",
     backgroundQuestions.length
       ? `背景题目列表(仅供参考):\n${backgroundQuestions
           .map((q, idx) => `${idx + 1}. ${q}`)
           .join("\n")}`
       : "背景题目列表(仅供参考): 无",
-    `本题题干:\n${question || "未提供"}`,
-    `本题回答:\n${transcript || "未提供"}`,
-    `声学摘要:\n${it_buildSummary(acoustic)}`,
-    notes.length
-      ? `检索笔记:\n${notes
-          .map((note) => `- ${note.source} :: ${note.snippet}`)
-          .join("\n")}`
-      : "检索笔记: 无",
-    `评分维度(每项1-10分): ${dimensions.join("。")}`,
-    "评分输出字段必须使用 overallScore 与 scores（维度:分数），禁止使用“评分/维度评分/维度Scores”等变体。",
     questions.length
       ? `本次评审题目列表:\n${questions
           .map((q, idx) => `${idx + 1}. ${q}`)
           .join("\n")}`
       : "本次评审题目列表: 无",
+    `本题题干:\n${question || "未提供"}`,
+    `本题回答:\n${transcript || "未提供"}`,
     questions.length
       ? `本次评审回答:\n${resolvedAnswers
           .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
           .join("\n")}`
       : "本次评审回答: 无",
+    `声学摘要:\n${it_buildSummary(acoustic)}`,
+    `评分维度(每项1-10分): ${dimensions.join("。")}`,
+    "评分输出字段必须使用 overallScore 与 scores（维度:分数），禁止使用“评分/维度评分/维度Scores”等变体。",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
     "outlineOriginal/outlineRevised 必须为 Markdown 列表文本字符串（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
     "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
     "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
     "每条<=20字。",
     "系统会自动解析 Markdown 列表缩进，不需要额外说明。",
+    notes.length
+      ? `检索笔记:\n${notes
+          .map((note) => `- ${note.source} :: ${note.snippet}`)
+          .join("\n")}`
+      : "检索笔记: 无",
   ];
-
-  if (demoPrompt) {
-    userPromptParts.push(demoPrompt);
-  }
 
   const userPrompt = userPromptParts.join("\n\n");
   const promptText = `System:\n${systemPrompt}\n\nUser:\n${userPrompt}`;

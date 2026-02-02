@@ -1169,9 +1169,12 @@ const InterviewTrainer: React.FC = () => {
           contextQuestions,
           notes: analysisResult?.notes ?? itState.draftNotes ?? [],
           acoustic: analysisResult?.acoustic ?? itState.draftAcoustic,
-          systemPrompt:
-            perQuestionSystemPrompts[index]?.trim() || customPrompt?.trim() || undefined,
-          demoPrompt: perQuestionDemoPrompts[index]?.trim() || demoPrompt?.trim() || undefined,
+          systemPrompt: [customPrompt?.trim(), perQuestionSystemPrompts[index]?.trim()]
+            .filter(Boolean)
+            .join("\n\n"),
+          demoPrompt: [demoPrompt?.trim(), perQuestionDemoPrompts[index]?.trim()]
+            .filter(Boolean)
+            .join("\n\n"),
         };
         const response = await request("it/regenerateDemoAnswer", payload, {
           timeoutMs: 120_000,
