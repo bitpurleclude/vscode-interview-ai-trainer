@@ -9,6 +9,7 @@ export interface ItEvaluationConfig extends ItLlmConfig {
   provider: "baidu_qianfan" | "heuristic" | "volc_doubao";
   language: string;
   dimensions: string[];
+  answerMode?: "single" | "two-step";
 }
 
 const IT_DIMENSION_MAP: Record<string, string> = {
@@ -988,7 +989,8 @@ export async function it_evaluateAnswer(
     const hasRevisedOutline = revisedAnswers.every(
       (item) => Array.isArray(item.outlineRevised) && item.outlineRevised.length,
     );
-    if (hasRevisedOutline && config.apiKey) {
+    const answerMode = config.answerMode || "two-step";
+    if (answerMode === "two-step" && hasRevisedOutline && config.apiKey) {
       const regeneratedRevised = await it_generateRevisedByOutline(
         config,
         revisedAnswers.map((item) => ({

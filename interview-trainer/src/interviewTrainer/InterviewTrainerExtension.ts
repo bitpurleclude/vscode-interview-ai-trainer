@@ -175,6 +175,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const envConfig = apiConfig.environments?.[env] ?? {};
     const llmConfig = envConfig.llm ?? {};
     const asrConfig = envConfig.asr ?? {};
+    const evaluationCfg = this.configBundle.skill.evaluation ?? {};
     const llmProfiles = envConfig.llm_profiles || {};
     const asrProfiles = envConfig.asr_profiles || {};
     const llmDefaultBase =
@@ -232,6 +233,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           (this.configBundle.skill.prompts?.per_question_system_prompts as string[]) || [],
         perQuestionDemoPrompts:
           (this.configBundle.skill.prompts?.per_question_demo_prompts as string[]) || [],
+      },
+      evaluation: {
+        answerMode:
+          evaluationCfg.answer_mode || evaluationCfg.answerMode || "two-step",
       },
       llm: {
         provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
@@ -939,6 +944,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
         language: this.configBundle.skill.evaluation?.language || "zh-CN",
         dimensions: this.configBundle.skill.evaluation?.dimensions ?? [],
+        answerMode:
+          this.configBundle.skill.evaluation?.answer_mode ??
+          this.configBundle.skill.evaluation?.answerMode ??
+          "two-step",
       };
 
       const evaluation = await it_evaluateAnswer(
@@ -1469,6 +1478,11 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const payload = msg.data || {};
       const evaluationPrompt = String(payload.evaluationPrompt || "");
       const demoPrompt = String(payload.demoPrompt || "");
+      const answerModeRaw = String(payload.answerMode || "").trim();
+      const answerMode =
+        answerModeRaw === "single" || answerModeRaw === "two-step"
+          ? answerModeRaw
+          : undefined;
       const perQuestionSystemPrompts = Array.isArray(payload.perQuestionSystemPrompts)
         ? payload.perQuestionSystemPrompts.map((item: any) => String(item || "")).slice(0, 3)
         : [];
@@ -1476,8 +1490,13 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         ? payload.perQuestionDemoPrompts.map((item: any) => String(item || "")).slice(0, 3)
         : [];
       this.configBundle = it_loadConfigBundle(this.context);
+      const currentEvaluation = this.configBundle.skill.evaluation || {};
       this.configBundle.skill = {
         ...this.configBundle.skill,
+        evaluation: {
+          ...currentEvaluation,
+          answer_mode: answerMode ?? currentEvaluation.answer_mode ?? "two-step",
+        },
         prompts: {
           ...this.configBundle.skill.prompts,
           evaluation_prompt: evaluationPrompt,

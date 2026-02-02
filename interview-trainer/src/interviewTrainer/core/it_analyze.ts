@@ -2008,6 +2008,10 @@ export async function it_runAnalysis(
     antiRepeat: Boolean(envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false),
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
+    answerMode:
+      deps.skillConfig.evaluation?.answer_mode ??
+      deps.skillConfig.evaluation?.answerMode ??
+      "two-step",
   };
 
   const evalUsesApi = Boolean(

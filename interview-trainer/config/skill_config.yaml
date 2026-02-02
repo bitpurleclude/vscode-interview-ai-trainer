@@ -11,6 +11,7 @@ filenames:
   max_slug_len: 16
 evaluation:
   language: zh-CN
+  answer_mode: two-step
   dimensions:
     - 内容完整性
     - 逻辑清晰度

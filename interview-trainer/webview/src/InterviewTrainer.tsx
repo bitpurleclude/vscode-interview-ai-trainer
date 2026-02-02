@@ -301,6 +301,7 @@ const InterviewTrainer: React.FC = () => {
   const [questionParsing, setQuestionParsing] = useState(false);
   const [customPrompt, setCustomPrompt] = useState(STRICT_SYSTEM_PROMPT);
   const [demoPrompt, setDemoPrompt] = useState(DEFAULT_DEMO_PROMPT);
+  const [answerMode, setAnswerMode] = useState<"single" | "two-step">("two-step");
   const [perQuestionSystemPrompts, setPerQuestionSystemPrompts] = useState<string[]>(
     ["", "", ""],
   );
@@ -665,6 +666,8 @@ const InterviewTrainer: React.FC = () => {
         config.prompts.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
       );
     }
+    const nextAnswerMode = String(config.evaluation?.answerMode || "two-step");
+    setAnswerMode(nextAnswerMode === "single" ? "single" : "two-step");
   }, [config, applyProfileToForm, applyRetrievalToForm]);
 
   useEffect(() => {
@@ -1478,6 +1481,7 @@ const InterviewTrainer: React.FC = () => {
         demoPrompt,
         perQuestionSystemPrompts,
         perQuestionDemoPrompts,
+        answerMode,
       });
       setPromptSaveMessage("提示词已保存");
     } catch (err) {
@@ -2842,6 +2846,22 @@ const InterviewTrainer: React.FC = () => {
                 value={demoPrompt}
                 onChange={(event) => setDemoPrompt(event.target.value)}
               />
+              <div className="it-input-row">
+                <div style={{ minWidth: 120 }}>示范生成方式</div>
+                <select
+                  className="it-select"
+                  value={answerMode}
+                  onChange={(event) =>
+                    setAnswerMode(event.target.value === "single" ? "single" : "two-step")
+                  }
+                >
+                  <option value="two-step">两步法：先提纲后整篇</option>
+                  <option value="single">单次：提纲+整篇一次输出</option>
+                </select>
+              </div>
+              <div className="it-settings__hint">
+                两步法会额外调用一次 LLM，成本与耗时更高，但更稳定。
+              </div>
               {promptSaveScope === "demo" && promptSaveMessage && (
                 <div className="it-settings__hint">{promptSaveMessage}</div>
               )}
