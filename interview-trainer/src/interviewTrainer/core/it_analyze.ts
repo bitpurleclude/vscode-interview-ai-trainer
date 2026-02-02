@@ -2048,8 +2048,10 @@ export async function it_runAnalysis(
         [{ question, answer: evalAnswers[idx]?.answer || "" }],
         questionText,
         evalQuestions,
-        request.systemPrompt,
-        request.demoPrompt,
+        request.perQuestionSystemPrompts?.[idx]?.trim() ||
+          request.systemPrompt?.trim() ||
+          undefined,
+        request.perQuestionDemoPrompts?.[idx]?.trim() || request.demoPrompt?.trim() || undefined,
       ),
     ),
   );

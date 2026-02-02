@@ -726,6 +726,39 @@
   margin-top: 6px;
 }
 
+.it-question-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.it-question-prompts__header {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.it-question-prompts__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  background: var(--vscode-editorWidget-background);
+}
+
+.it-question-prompts__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.it-question-prompts__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .it-question-timings {
   margin-bottom: 10px;
   padding: 8px;

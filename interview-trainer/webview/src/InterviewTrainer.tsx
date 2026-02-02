@@ -286,6 +286,10 @@ const InterviewTrainer: React.FC = () => {
   const [questionParsing, setQuestionParsing] = useState(false);
   const [customPrompt, setCustomPrompt] = useState(STRICT_SYSTEM_PROMPT);
   const [demoPrompt, setDemoPrompt] = useState(DEFAULT_DEMO_PROMPT);
+  const [perQuestionSystemPrompts, setPerQuestionSystemPrompts] = useState<string[]>(
+    [],
+  );
+  const [perQuestionDemoPrompts, setPerQuestionDemoPrompts] = useState<string[]>([]);
   const [analysisResult, setAnalysisResult] = useState<ItAnalyzeResponse | null>(
     null,
   );
@@ -659,6 +663,25 @@ const InterviewTrainer: React.FC = () => {
         .filter(Boolean),
     [questionList],
   );
+  const questionPromptItems = useMemo(
+    () => (parsedQuestionList.length ? parsedQuestionList : []),
+    [parsedQuestionList],
+  );
+  useEffect(() => {
+    const len = questionPromptItems.length;
+    setPerQuestionSystemPrompts((prev) => {
+      if (prev.length === len) return prev;
+      const next = prev.slice(0, len);
+      while (next.length < len) next.push("");
+      return next;
+    });
+    setPerQuestionDemoPrompts((prev) => {
+      if (prev.length === len) return prev;
+      const next = prev.slice(0, len);
+      while (next.length < len) next.push("");
+      return next;
+    });
+  }, [questionPromptItems.length]);
   const buildQuestionParseInput = useCallback(() => {
     const text = questionText.trim();
     const list = questionList.trim();
@@ -1068,12 +1091,18 @@ const InterviewTrainer: React.FC = () => {
     }));
     const finalQuestionText = questionText.trim();
     const finalQuestionList = parsedQuestionList;
+    const normalizedPerQuestionSystem = perQuestionSystemPrompts.map((item) => item.trim());
+    const normalizedPerQuestionDemo = perQuestionDemoPrompts.map((item) => item.trim());
+    const hasPerQuestionSystem = normalizedPerQuestionSystem.some(Boolean);
+    const hasPerQuestionDemo = normalizedPerQuestionDemo.some(Boolean);
     const payload: ItAnalyzeRequest = {
       audio: audioPayload,
       questionText: finalQuestionText || undefined,
       questionList: finalQuestionList,
       systemPrompt: customPrompt?.trim() || undefined,
       demoPrompt: demoPrompt?.trim() || undefined,
+      perQuestionSystemPrompts: hasPerQuestionSystem ? normalizedPerQuestionSystem : undefined,
+      perQuestionDemoPrompts: hasPerQuestionDemo ? normalizedPerQuestionDemo : undefined,
     };
     try {
       const response = await request("it/analyzeAudio", payload, { timeoutMs: 5 * 60 * 1000 });
@@ -1137,8 +1166,9 @@ const InterviewTrainer: React.FC = () => {
           contextQuestions,
           notes: analysisResult?.notes ?? itState.draftNotes ?? [],
           acoustic: analysisResult?.acoustic ?? itState.draftAcoustic,
-          systemPrompt: customPrompt?.trim() || undefined,
-          demoPrompt: demoPrompt?.trim() || undefined,
+          systemPrompt:
+            perQuestionSystemPrompts[index]?.trim() || customPrompt?.trim() || undefined,
+          demoPrompt: perQuestionDemoPrompts[index]?.trim() || demoPrompt?.trim() || undefined,
         };
         const response = await request("it/regenerateDemoAnswer", payload, {
           timeoutMs: 120_000,
@@ -1179,6 +1209,8 @@ const InterviewTrainer: React.FC = () => {
       questionText,
       customPrompt,
       demoPrompt,
+      perQuestionSystemPrompts,
+      perQuestionDemoPrompts,
       itState.draftNotes,
       itState.draftAcoustic,
     ],
@@ -1906,6 +1938,59 @@ const InterviewTrainer: React.FC = () => {
                   >
                     {questionParsing ? "识别中..." : "识别题目"}
                   </button>
+                </div>
+                <div className="it-question-prompts">
+                  <div className="it-question-prompts__header">总体提示词（本次分析生效）</div>
+                  <div className="it-question-prompts__pair">
+                    <textarea
+                      className="it-textarea it-textarea--prompt"
+                      placeholder="总体评分提示词（可选）"
+                      value={customPrompt}
+                      onChange={(event) => setCustomPrompt(event.target.value)}
+                    />
+                    <textarea
+                      className="it-textarea it-textarea--prompt"
+                      placeholder="总体示范提示词（可选）"
+                      value={demoPrompt}
+                      onChange={(event) => setDemoPrompt(event.target.value)}
+                    />
+                  </div>
+                  {questionPromptItems.length > 0 && (
+                    <>
+                      <div className="it-question-prompts__header">
+                        每题独立提示词（可选）
+                      </div>
+                      {questionPromptItems.map((item, idx) => (
+                        <div key={`${idx}-${item}`} className="it-question-prompts__item">
+                          <div className="it-question-prompts__title">
+                            {idx + 1}. {item}
+                          </div>
+                          <div className="it-question-prompts__pair">
+                            <textarea
+                              className="it-textarea it-textarea--prompt"
+                              placeholder="本题评分提示词（可选）"
+                              value={perQuestionSystemPrompts[idx] || ""}
+                              onChange={(event) => {
+                                const next = [...perQuestionSystemPrompts];
+                                next[idx] = event.target.value;
+                                setPerQuestionSystemPrompts(next);
+                              }}
+                            />
+                            <textarea
+                              className="it-textarea it-textarea--prompt"
+                              placeholder="本题示范提示词（可选）"
+                              value={perQuestionDemoPrompts[idx] || ""}
+                              onChange={(event) => {
+                                const next = [...perQuestionDemoPrompts];
+                                next[idx] = event.target.value;
+                                setPerQuestionDemoPrompts(next);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
                 {typeof notesPreview !== "undefined" && (
                   <div className="it-question__notes">
