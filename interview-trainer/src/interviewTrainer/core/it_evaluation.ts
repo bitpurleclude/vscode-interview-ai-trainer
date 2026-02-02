@@ -204,6 +204,13 @@ function it_isOutlineKeywordLike(items?: string[]): boolean {
   return true;
 }
 
+function it_outlineHasIndent(items?: string[]): boolean {
+  if (!Array.isArray(items) || !items.length) {
+    return false;
+  }
+  return items.some((line) => /^\s{2,}[-*+]/.test(String(line || "")));
+}
+
 async function it_generateOutlines(
   config: ItEvaluationConfig,
   items: Array<{ question: string; original: string; revised: string }>,
@@ -214,7 +221,7 @@ async function it_generateOutlines(
   const systemPrompt = [
     "你是答题提纲生成器，只输出 JSON。",
     "每题输出 outlineOriginal/outlineRevised，为关键词式提纲（必须是 Markdown 列表文本字符串，不得输出数组）。",
-    "必须包含多层结构（至少两级），只能使用 Markdown 列表缩进表示层级，禁止使用箭头符号。",
+    "必须包含多层结构（至少两级），只能使用 Markdown 列表缩进表示层级，且必须出现二级缩进（两个空格+ -），禁止使用箭头符号与平铺列表。",
     "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
     "每条<=20字，尽量用关键词短语，避免完整长句。",
     "系统会自动解析 Markdown 列表缩进，不需要额外说明。",
@@ -232,7 +239,7 @@ async function it_generateOutlines(
       )
       .join("\n\n"),
     "",
-    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": \"Markdown列表...\", \"outlineRevised\": \"Markdown列表...\" } ] }，outlineOriginal/outlineRevised 必须是 Markdown 列表字符串（禁止使用箭头符号）。",
+    "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": \"Markdown列表...\", \"outlineRevised\": \"Markdown列表...\" } ] }，outlineOriginal/outlineRevised 必须是 Markdown 列表字符串（必须包含二级缩进，禁止使用箭头符号）。",
   ].join("\n");
   try {
     const content = await it_callLlmChat(
@@ -633,9 +640,10 @@ export async function it_evaluateAnswer(
       "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
       "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
+      "revised 必须分段输出，至少3段，段落之间空一行，段落内容按步骤/要点展开。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
       "outlineOriginal/outlineRevised 必须为 Markdown 列表文本字符串（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-      "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
+      "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，且必须出现二级缩进（两个空格+ -），禁止使用箭头符号与平铺列表。",
       "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
       "每条<=20字。",
       "系统会自动解析 Markdown 列表缩进，不需要额外说明。",
@@ -823,7 +831,9 @@ export async function it_evaluateAnswer(
     const needOutlineFix = revisedAnswers.some(
       (item) =>
         !it_isOutlineKeywordLike(item.outlineOriginal) ||
-        !it_isOutlineKeywordLike(item.outlineRevised),
+        !it_isOutlineKeywordLike(item.outlineRevised) ||
+        !it_outlineHasIndent(item.outlineOriginal) ||
+        !it_outlineHasIndent(item.outlineRevised),
     );
     if (needOutlineFix && config.apiKey) {
       const regenerated = await it_generateOutlines(

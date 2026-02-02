@@ -152,6 +152,21 @@ function it_renderOutlineTree(nodes: ItOutlineNode[], keyPrefix: string): JSX.El
   );
 }
 
+function it_renderParagraphs(text: string, keyPrefix: string): JSX.Element {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return <span>（空）</span>;
+  }
+  const parts = raw.split(/\r?\n\s*\n/).map((item) => item.trim()).filter(Boolean);
+  return (
+    <div className="it-paragraphs">
+      {parts.map((part, idx) => (
+        <p key={`${keyPrefix}-${idx}`}>{part}</p>
+      ))}
+    </div>
+  );
+}
+
 async function it_decodeToPcm16(
   arrayBuffer: ArrayBuffer,
   targetRate: number,
@@ -2195,7 +2210,7 @@ const InterviewTrainer: React.FC = () => {
                                 </div>
                                 <div className="it-revised-item__block">
                                   <span>原回答：</span>
-                                  <span>{item.original}</span>
+                                  {it_renderParagraphs(item.original, `${idx}-orig`)}
                                 </div>
                                 <div className="it-revised-item__block">
                                   <span>答题提纲（你的回答）：</span>
@@ -2210,7 +2225,7 @@ const InterviewTrainer: React.FC = () => {
                                 </div>
                                 <div className="it-revised-item__block">
                                   <span>示范：</span>
-                                  <span>{item.revised}</span>
+                                  {it_renderParagraphs(item.revised, `${idx}-demo`)}
                                 </div>
                                 <div className="it-revised-item__block">
                                   <span>答题提纲（示范）：</span>

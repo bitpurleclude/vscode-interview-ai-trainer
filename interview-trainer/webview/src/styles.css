@@ -528,6 +528,17 @@
   white-space: nowrap;
 }
 
+.it-paragraphs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.it-paragraphs p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .it-history {
   display: flex;
   flex-direction: column;
