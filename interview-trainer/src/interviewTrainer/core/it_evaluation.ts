@@ -219,13 +219,6 @@ function it_countParagraphs(text: string): number {
     .filter(Boolean).length;
 }
 
-function it_hasParagraphs(text: string, minCount: number = 3): boolean {
-  if (!String(text || "").trim()) {
-    return false;
-  }
-  return it_countParagraphs(text) >= minCount;
-}
-
 async function it_generateOutlines(
   config: ItEvaluationConfig,
   items: Array<{ question: string; original: string; revised: string }>,
@@ -656,6 +649,7 @@ export async function it_evaluateAnswer(
       "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
       "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
       "revised 必须分段输出，至少3段，段落之间空一行，段落内容按步骤/要点展开。",
+      "输出前自检：revised 至少包含两处空行（\\n\\n）。若未满足，请先调整为多段后再输出。",
       "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
       "outlineOriginal/outlineRevised 必须为 Markdown 列表文本字符串（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
       "提纲必须是关键词式（避免完整长句），只能用 Markdown 列表缩进表示层级，至少两级，且必须出现二级缩进（两个空格+ -），禁止使用箭头符号与平铺列表。",
@@ -721,27 +715,16 @@ export async function it_evaluateAnswer(
   const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
   const formatGuard =
     "上次输出未通过 JSON 校验。请仅输出合法 JSON 对象，不要代码块或多余文本。";
-  const paragraphGuard =
-    "上次输出的 revised 未按要求分段（至少3段，段落之间空一行）。请修正并仅输出合法 JSON 对象。";
-  const parseAttempts = 3;
+  const parseAttempts = 2;
   let content = "";
   let parsed: any | null = null;
   let parsedRevised: any[] = [];
   let lastError: string | undefined;
   let finalPromptText = promptText;
-  let needParagraphFix = false;
 
   for (let attempt = 0; attempt < parseAttempts; attempt += 1) {
-    const extraGuards = [];
-    if (attempt > 0) {
-      extraGuards.push(formatGuard);
-    }
-    if (needParagraphFix) {
-      extraGuards.push(paragraphGuard);
-    }
-    const attemptPrompt = extraGuards.length
-      ? `${userPrompt}\n\n${extraGuards.join("\n")}`
-      : userPrompt;
+    const attemptPrompt =
+      attempt === 0 ? userPrompt : `${userPrompt}\n\n${formatGuard}`;
     finalPromptText = `System:\n${systemPrompt}\n\nUser:\n${attemptPrompt}`;
     try {
       content = await it_callLlmChat(
@@ -768,13 +751,6 @@ export async function it_evaluateAnswer(
     if (parsed) {
       parsedRevised = it_pickRevisedAnswers(parsed);
       if (parsedRevised.length) {
-        const paragraphOk = parsedRevised.every((item) =>
-          it_hasParagraphs(item?.revised),
-        );
-        if (!paragraphOk) {
-          needParagraphFix = true;
-          continue;
-        }
         break;
       }
     }
