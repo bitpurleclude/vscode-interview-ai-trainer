@@ -219,77 +219,11 @@ function it_countParagraphs(text: string): number {
     .filter(Boolean).length;
 }
 
-function it_splitSentences(text: string): string[] {
-  const trimmed = String(text || "").trim();
-  if (!trimmed) {
-    return [];
+function it_hasParagraphs(text: string, minCount: number = 3): boolean {
+  if (!String(text || "").trim()) {
+    return false;
   }
-  const matches = trimmed.match(/[^。！？!?]+[。！？!?]?/g);
-  if (!matches) {
-    return [trimmed];
-  }
-  return matches.map((item) => item.trim()).filter(Boolean);
-}
-
-function it_insertParagraphsByKeywords(text: string): string {
-  const keywords = [
-    "首先",
-    "其次",
-    "再次",
-    "然后",
-    "此外",
-    "同时",
-    "再者",
-    "最后",
-    "总之",
-    "综上",
-    "因此",
-    "因而",
-    "其一",
-    "其二",
-    "其三",
-    "一是",
-    "二是",
-    "三是",
-    "四是",
-    "五是",
-  ];
-  const pattern = new RegExp(`([。！？!?])\\s*(?=(${keywords.join("|")}))`, "g");
-  return String(text || "").replace(pattern, "$1\n\n");
-}
-
-function it_ensureParagraphs(text: string): string {
-  const raw = String(text || "").trim();
-  if (!raw) {
-    return "";
-  }
-  if (it_countParagraphs(raw) >= 3) {
-    return raw;
-  }
-  let adjusted = it_insertParagraphsByKeywords(raw);
-  if (it_countParagraphs(adjusted) >= 3) {
-    return adjusted;
-  }
-  if (raw.includes("\n") && !/\n\s*\n/.test(raw)) {
-    const doubled = raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join("\n\n");
-    if (it_countParagraphs(doubled) >= 3) {
-      return doubled;
-    }
-  }
-  const sentences = it_splitSentences(raw);
-  if (sentences.length >= 3) {
-    const groupSize = Math.ceil(sentences.length / 3);
-    const paragraphs: string[] = [];
-    for (let i = 0; i < sentences.length; i += groupSize) {
-      paragraphs.push(sentences.slice(i, i + groupSize).join(""));
-    }
-    return paragraphs.join("\n\n");
-  }
-  return raw;
+  return it_countParagraphs(text) >= minCount;
 }
 
 async function it_generateOutlines(
@@ -787,16 +721,27 @@ export async function it_evaluateAnswer(
   const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
   const formatGuard =
     "上次输出未通过 JSON 校验。请仅输出合法 JSON 对象，不要代码块或多余文本。";
-  const parseAttempts = 2;
+  const paragraphGuard =
+    "上次输出的 revised 未按要求分段（至少3段，段落之间空一行）。请修正并仅输出合法 JSON 对象。";
+  const parseAttempts = 3;
   let content = "";
   let parsed: any | null = null;
   let parsedRevised: any[] = [];
   let lastError: string | undefined;
   let finalPromptText = promptText;
+  let needParagraphFix = false;
 
   for (let attempt = 0; attempt < parseAttempts; attempt += 1) {
-    const attemptPrompt =
-      attempt === 0 ? userPrompt : `${userPrompt}\n\n${formatGuard}`;
+    const extraGuards = [];
+    if (attempt > 0) {
+      extraGuards.push(formatGuard);
+    }
+    if (needParagraphFix) {
+      extraGuards.push(paragraphGuard);
+    }
+    const attemptPrompt = extraGuards.length
+      ? `${userPrompt}\n\n${extraGuards.join("\n")}`
+      : userPrompt;
     finalPromptText = `System:\n${systemPrompt}\n\nUser:\n${attemptPrompt}`;
     try {
       content = await it_callLlmChat(
@@ -823,6 +768,13 @@ export async function it_evaluateAnswer(
     if (parsed) {
       parsedRevised = it_pickRevisedAnswers(parsed);
       if (parsedRevised.length) {
+        const paragraphOk = parsedRevised.every((item) =>
+          it_hasParagraphs(item?.revised),
+        );
+        if (!paragraphOk) {
+          needParagraphFix = true;
+          continue;
+        }
         break;
       }
     }
@@ -902,7 +854,7 @@ export async function it_evaluateAnswer(
       return {
         question: String(item?.question || questions[idx] || `第${idx + 1}题`),
         original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
-        revised: it_ensureParagraphs(String(item?.revised || "")),
+        revised: String(item?.revised || ""),
         estimatedTimeMin: estimated,
         outlineOriginal: outlineOriginalRaw.length ? outlineOriginalRaw : undefined,
         outlineRevised: outlineRevisedRaw.length ? outlineRevisedRaw : undefined,
