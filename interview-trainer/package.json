@@ -1,8 +1,8 @@
 {
   "name": "interview-trainer",
-  "displayName": "面试训练助手",
-  "description": "面试训练录音、转写与评价助手",
-  "version": "0.1.4-beta.5",
+  "displayName": "闈㈣瘯璁粌鍔╂墜",
+  "description": "闈㈣瘯璁粌褰曢煶銆佽浆鍐欎笌璇勪环鍔╂墜",
+  "version": "0.1.4-beta.6",
   "publisher": "interview-trainer",
   "license": "MIT",
   "repository": {
@@ -27,34 +27,34 @@
       {
         "command": "itInterviewTrainer.open",
         "category": "Interview Trainer",
-        "title": "打开面试训练助手"
+        "title": "鎵撳紑闈㈣瘯璁粌鍔╂墜"
       },
       {
         "command": "itInterviewTrainer.analyzeAudioFile",
         "category": "Interview Trainer",
-        "title": "分析音频文件"
+        "title": "鍒嗘瀽闊抽鏂囦欢"
       },
       {
         "command": "itInterviewTrainer.openSettings",
         "category": "Interview Trainer",
-        "title": "打开面试训练配置"
+        "title": "鎵撳紑闈㈣瘯璁粌閰嶇疆"
       },
       {
         "command": "itInterviewTrainer.openHistory",
         "category": "Interview Trainer",
-        "title": "查看历史记录"
+        "title": "鏌ョ湅鍘嗗彶璁板綍"
       },
       {
         "command": "itInterviewTrainer.runSpecify",
         "category": "Interview Trainer",
-        "title": "运行 Specify"
+        "title": "杩愯 Specify"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "itInterviewTrainer",
-          "title": "面试训练助手",
+          "title": "闈㈣瘯璁粌鍔╂墜",
           "icon": "assets/sidebar-icon.svg"
         }
       ]
@@ -64,7 +64,7 @@
         {
           "type": "webview",
           "id": "itInterviewTrainer.mainView",
-          "name": "面试训练助手",
+          "name": "闈㈣瘯璁粌鍔╂墜",
           "icon": "assets/sidebar-icon.svg",
           "visibility": "visible"
         }

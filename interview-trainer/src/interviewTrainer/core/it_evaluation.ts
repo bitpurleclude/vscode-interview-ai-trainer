@@ -211,6 +211,87 @@ function it_outlineHasIndent(items?: string[]): boolean {
   return items.some((line) => /^\s{2,}[-*+]/.test(String(line || "")));
 }
 
+function it_countParagraphs(text: string): number {
+  return String(text || "")
+    .trim()
+    .split(/\r?\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+}
+
+function it_splitSentences(text: string): string[] {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) {
+    return [];
+  }
+  const matches = trimmed.match(/[^。！？!?]+[。！？!?]?/g);
+  if (!matches) {
+    return [trimmed];
+  }
+  return matches.map((item) => item.trim()).filter(Boolean);
+}
+
+function it_insertParagraphsByKeywords(text: string): string {
+  const keywords = [
+    "首先",
+    "其次",
+    "再次",
+    "然后",
+    "此外",
+    "同时",
+    "再者",
+    "最后",
+    "总之",
+    "综上",
+    "因此",
+    "因而",
+    "其一",
+    "其二",
+    "其三",
+    "一是",
+    "二是",
+    "三是",
+    "四是",
+    "五是",
+  ];
+  const pattern = new RegExp(`([。！？!?])\\s*(?=(${keywords.join("|")}))`, "g");
+  return String(text || "").replace(pattern, "$1\n\n");
+}
+
+function it_ensureParagraphs(text: string): string {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return "";
+  }
+  if (it_countParagraphs(raw) >= 3) {
+    return raw;
+  }
+  let adjusted = it_insertParagraphsByKeywords(raw);
+  if (it_countParagraphs(adjusted) >= 3) {
+    return adjusted;
+  }
+  if (raw.includes("\n") && !/\n\s*\n/.test(raw)) {
+    const doubled = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    if (it_countParagraphs(doubled) >= 3) {
+      return doubled;
+    }
+  }
+  const sentences = it_splitSentences(raw);
+  if (sentences.length >= 3) {
+    const groupSize = Math.ceil(sentences.length / 3);
+    const paragraphs: string[] = [];
+    for (let i = 0; i < sentences.length; i += groupSize) {
+      paragraphs.push(sentences.slice(i, i + groupSize).join(""));
+    }
+    return paragraphs.join("\n\n");
+  }
+  return raw;
+}
+
 async function it_generateOutlines(
   config: ItEvaluationConfig,
   items: Array<{ question: string; original: string; revised: string }>,
@@ -821,7 +902,7 @@ export async function it_evaluateAnswer(
       return {
         question: String(item?.question || questions[idx] || `第${idx + 1}题`),
         original: String(item?.original || resolvedAnswers[idx]?.answer || ""),
-        revised: String(item?.revised || ""),
+        revised: it_ensureParagraphs(String(item?.revised || "")),
         estimatedTimeMin: estimated,
         outlineOriginal: outlineOriginalRaw.length ? outlineOriginalRaw : undefined,
         outlineRevised: outlineRevisedRaw.length ? outlineRevisedRaw : undefined,
