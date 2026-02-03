@@ -6,6 +6,10 @@ export interface ItParsedQuestions {
   source: "llm" | "heuristic";
   raw?: string;
   error?: string;
+  debug?: {
+    request?: Record<string, unknown>;
+    response?: Record<string, unknown>;
+  };
 }
 
 function it_cleanQuestionText(text: string): string {
@@ -81,7 +85,10 @@ export async function it_parseQuestions(
 ): Promise<ItParsedQuestions> {
   const fallback = it_parseQuestionsHeuristic(text);
   if (!llmConfig || !text.trim()) {
-    return fallback;
+    return {
+      ...fallback,
+      error: llmConfig ? undefined : "LLM not configured",
+    };
   }
 
   const systemPrompt =
@@ -109,13 +116,32 @@ export async function it_parseQuestions(
     maxOutputTokens: Math.min(200, Number(llmConfig.maxOutputTokens ?? 200)),
     antiRepeat: false,
   };
+  const debugRequest = {
+    provider: parseConfig.provider,
+    baseUrl: parseConfig.baseUrl,
+    model: parseConfig.model,
+    temperature: parseConfig.temperature,
+    topP: parseConfig.topP,
+    timeoutSec: parseConfig.timeoutSec,
+    maxRetries: parseConfig.maxRetries,
+    useResponses: parseConfig.useResponses,
+    webSearch: parseConfig.webSearch,
+    reasoningEffort: parseConfig.reasoningEffort,
+    maxOutputTokens: parseConfig.maxOutputTokens,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  };
 
   let parseError: string | undefined;
+  let responseText: string | undefined;
   try {
     const content = await it_callLlmChat(parseConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
+    responseText = content;
     const parsed = it_extractJson(content);
     if (parsed && Array.isArray(parsed.questions)) {
       const questions = parsed.questions
@@ -128,6 +154,10 @@ export async function it_parseQuestions(
           questions,
           source: "llm",
           raw: content,
+          debug: {
+            request: debugRequest,
+            response: { text: content },
+          },
         };
       }
     }
@@ -150,5 +180,13 @@ export async function it_parseQuestions(
     }
   }
 
-  return { ...fallback, error: parseError };
+  return {
+    ...fallback,
+    error: parseError,
+    raw: responseText,
+    debug: {
+      request: debugRequest,
+      response: responseText ? { text: responseText } : undefined,
+    },
+  };
 }
