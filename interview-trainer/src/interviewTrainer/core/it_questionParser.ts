@@ -5,6 +5,7 @@ export interface ItParsedQuestions {
   questions: string[];
   source: "llm" | "heuristic";
   raw?: string;
+  error?: string;
 }
 
 function it_cleanQuestionText(text: string): string {
@@ -96,8 +97,22 @@ export async function it_parseQuestions(
     text,
   ].join("\n");
 
+  const parseConfig: ItLlmConfig = {
+    ...llmConfig,
+    temperature: 0.2,
+    topP: 0.7,
+    timeoutSec: Math.min(20, Number(llmConfig.timeoutSec ?? 60)),
+    maxRetries: 0,
+    useResponses: false,
+    webSearch: false,
+    reasoningEffort: "minimal",
+    maxOutputTokens: Math.min(200, Number(llmConfig.maxOutputTokens ?? 200)),
+    antiRepeat: false,
+  };
+
+  let parseError: string | undefined;
   try {
-    const content = await it_callLlmChat(llmConfig, [
+    const content = await it_callLlmChat(parseConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
@@ -116,9 +131,24 @@ export async function it_parseQuestions(
         };
       }
     }
-  } catch {
-    // ignore and fallback
+  } catch (err) {
+    if (err instanceof Error) {
+      parseError = err.message;
+    } else {
+      parseError = String(err);
+    }
+    const extra = (err as { response?: { status?: number; data?: unknown } })?.response;
+    if (extra?.status) {
+      parseError += ` | status=${extra.status}`;
+    }
+    if (extra?.data) {
+      try {
+        parseError += ` | data=${JSON.stringify(extra.data).slice(0, 300)}`;
+      } catch {
+        parseError += " | data=[unserializable]";
+      }
+    }
   }
 
-  return fallback;
+  return { ...fallback, error: parseError };
 }

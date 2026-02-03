@@ -912,6 +912,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       }
       const llmConfig = this.it_getLlmConfig();
       const parsed = await it_parseQuestions(text, llmConfig);
+      if (parsed.error) {
+        this.logCorpusTrace("题目解析 LLM 失败", { error: parsed.error });
+      }
       if (cacheRoot && (parsed.material || parsed.questions.length)) {
         await it_writeQuestionParseCache(cacheRoot, text, {
           material: parsed.material || "",

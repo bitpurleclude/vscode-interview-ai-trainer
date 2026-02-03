@@ -1486,6 +1486,9 @@ export async function it_runAnalysis(
         const parsed = await it_parseQuestions(questionText, llmConfig);
         const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
         const sourceLabel = parsed.source === "llm" ? "API" : "本地";
+        if (parsed.error && deps.onCorpusTrace) {
+          deps.onCorpusTrace("题目解析 LLM 失败", { error: parsed.error });
+        }
         if (parsed.material) {
           questionText = parsed.material;
         }
