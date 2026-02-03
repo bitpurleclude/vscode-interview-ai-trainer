@@ -172,6 +172,11 @@ export interface ItConfigSnapshot {
     perQuestionSystemPrompts?: string[];
     perQuestionDemoPrompts?: string[];
   };
+  llmTasks?: {
+    questionParse?: string;
+    segment?: string;
+    evaluation?: string;
+  };
   evaluation?: {
     answerMode?: string;
   };

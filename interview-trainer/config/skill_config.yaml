@@ -22,6 +22,10 @@ evaluation:
 topics:
   title_mode: llm
   max_title_len: 18
+llm_tasks:
+  question_parse: ""
+  segment: ""
+  evaluation: ""
 retrieval:
   enabled: true
   mode: vector

@@ -362,6 +362,19 @@ const InterviewTrainer: React.FC = () => {
       maxRetries: 1,
     },
   });
+  const [llmTaskForm, setLlmTaskForm] = useState({
+    questionParse: "",
+    segment: "",
+    evaluation: "",
+  });
+  const [llmProfileDraft, setLlmProfileDraft] = useState({
+    id: "",
+    name: "",
+  });
+  const [savingLlmTasks, setSavingLlmTasks] = useState(false);
+  const [llmTaskSaveMessage, setLlmTaskSaveMessage] = useState<string | null>(null);
+  const [savingLlmProfile, setSavingLlmProfile] = useState(false);
+  const [llmProfileMessage, setLlmProfileMessage] = useState<string | null>(null);
   const [retrievalForm, setRetrievalForm] = useState({
     mode: "vector",
     topK: 5,
@@ -585,6 +598,14 @@ const InterviewTrainer: React.FC = () => {
     (id: string) => providerProfiles[id]?.display_name || id,
     [providerProfiles],
   );
+  const llmProfileList = useMemo(
+    () => Object.keys(apiForm.llmProfiles || {}).sort((a, b) => a.localeCompare(b)),
+    [apiForm.llmProfiles],
+  );
+  const getLlmProfileLabel = useCallback(
+    (id: string) => apiForm.llmProfiles?.[id]?.display_name || id,
+    [apiForm.llmProfiles],
+  );
   const embeddingWarmup = itState.embeddingWarmup;
   const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
 
@@ -610,6 +631,11 @@ const InterviewTrainer: React.FC = () => {
         setPerQuestionDemoPrompts(
           resp.content.prompts?.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
         );
+        setLlmTaskForm({
+          questionParse: resp.content.llmTasks?.questionParse || "",
+          segment: resp.content.llmTasks?.segment || "",
+          evaluation: resp.content.llmTasks?.evaluation || "",
+        });
       } else {
         // fallback to unlock UI even if后端出错
         const fallbackConfig: ItConfigSnapshot = {
@@ -626,6 +652,11 @@ const InterviewTrainer: React.FC = () => {
             demoPrompt: DEFAULT_DEMO_PROMPT,
             perQuestionSystemPrompts: ["", "", ""],
             perQuestionDemoPrompts: ["", "", ""],
+          },
+          llmTasks: {
+            questionParse: "",
+            segment: "",
+            evaluation: "",
           },
           llm: {
             provider: "baidu_qianfan",
@@ -1587,6 +1618,103 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingApiConfig(false);
+  };
+  const handleSaveLlmTasks = async () => {
+    setSavingLlmTasks(true);
+    setLlmTaskSaveMessage(null);
+    try {
+      const resp = await request("it/updateLlmTaskProfiles", {
+        tasks: {
+          questionParse: llmTaskForm.questionParse,
+          segment: llmTaskForm.segment,
+          evaluation: llmTaskForm.evaluation,
+        },
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+          setLlmTaskForm({
+            questionParse: resp.content.llmTasks?.questionParse || "",
+            segment: resp.content.llmTasks?.segment || "",
+            evaluation: resp.content.llmTasks?.evaluation || "",
+          });
+        }
+        setLlmTaskSaveMessage("分阶段配置已保存");
+      } else {
+        setLlmTaskSaveMessage("分阶段配置保存失败，请重试。");
+      }
+    } catch (err) {
+      setLlmTaskSaveMessage(
+        `分阶段配置保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingLlmTasks(false);
+  };
+  const handleSaveLlmProfile = async () => {
+    const profileId = llmProfileDraft.id.trim();
+    if (!profileId) {
+      setLlmProfileMessage("请填写 Profile ID。");
+      return;
+    }
+    setSavingLlmProfile(true);
+    setLlmProfileMessage(null);
+    try {
+      const resp = await request("it/saveLlmProfile", {
+        environment: apiForm.environment,
+        profileId,
+        displayName: llmProfileDraft.name.trim(),
+        profile: apiForm.llm,
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+          setApiForm((prev) => ({
+            ...prev,
+            llmProfiles: resp.content.llmProfiles || prev.llmProfiles,
+          }));
+        }
+        setLlmProfileMessage("Profile 已保存/覆盖。");
+      } else {
+        setLlmProfileMessage("保存失败，请检查输入。");
+      }
+    } catch (err) {
+      setLlmProfileMessage(
+        `保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingLlmProfile(false);
+  };
+  const handleDeleteLlmProfile = async () => {
+    const profileId = llmProfileDraft.id.trim();
+    if (!profileId) {
+      setLlmProfileMessage("请填写要删除的 Profile ID。");
+      return;
+    }
+    setSavingLlmProfile(true);
+    setLlmProfileMessage(null);
+    try {
+      const resp = await request("it/deleteLlmProfile", {
+        environment: apiForm.environment,
+        profileId,
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+          setApiForm((prev) => ({
+            ...prev,
+            llmProfiles: resp.content.llmProfiles || prev.llmProfiles,
+          }));
+        }
+        setLlmProfileMessage("Profile 已删除。");
+      } else {
+        setLlmProfileMessage("删除失败，请检查输入。");
+      }
+    } catch (err) {
+      setLlmProfileMessage(
+        `删除失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingLlmProfile(false);
   };
   const handleSavePrompts = async (
     scope: "evaluation" | "demo" | "per-question",
@@ -2845,6 +2973,151 @@ const InterviewTrainer: React.FC = () => {
                       {llmTestMessage && (
                         <div className="it-settings__hint">{llmTestMessage}</div>
                       )}
+                    </div>
+
+                    <div className="it-question">
+                      <div className="it-settings__title">LLM Profiles</div>
+                      <div className="it-settings__desc">
+                        保存当前 LLM 参数为可复用 Profile，用于分阶段选择
+                      </div>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 90 }}>Profile ID</div>
+                        <input
+                          className="it-input"
+                          value={llmProfileDraft.id}
+                          onChange={(event) =>
+                            setLlmProfileDraft((prev) => ({ ...prev, id: event.target.value }))
+                          }
+                          placeholder="doubao_seed_1_8"
+                        />
+                        <div style={{ minWidth: 70 }}>名称</div>
+                        <input
+                          className="it-input"
+                          value={llmProfileDraft.name}
+                          onChange={(event) =>
+                            setLlmProfileDraft((prev) => ({ ...prev, name: event.target.value }))
+                          }
+                          placeholder="可选"
+                        />
+                      </div>
+                      <div className="it-settings__actions">
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={uiLocked || savingLlmProfile}
+                          onClick={handleSaveLlmProfile}
+                        >
+                          {savingLlmProfile ? "保存中..." : "保存/覆盖"}
+                        </button>
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={uiLocked || savingLlmProfile}
+                          onClick={handleDeleteLlmProfile}
+                        >
+                          删除
+                        </button>
+                      </div>
+                      {llmProfileMessage && (
+                        <div className="it-settings__hint">{llmProfileMessage}</div>
+                      )}
+                      <div className="it-settings__hint">
+                        保存时会使用左侧 LLM（评分/问答）表单的参数；同名 Profile 会被覆盖。
+                      </div>
+                      {llmProfileList.length > 0 && (
+                        <div className="it-retrieval__list">
+                          {llmProfileList.map((item) => (
+                            <div key={item} className="it-retrieval__item">
+                              <div className="it-retrieval__label">
+                                {getLlmProfileLabel(item)}
+                              </div>
+                              <div className="it-retrieval__path">{item}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="it-question">
+                      <div className="it-settings__title">分阶段 LLM</div>
+                      <div className="it-settings__desc">
+                        为题目解析 / 多题分段 / 面试评价分别指定 Profile（留空=默认 LLM）
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 90 }}>题目解析</div>
+                        <select
+                          className="it-select"
+                          value={llmTaskForm.questionParse}
+                          onChange={(event) =>
+                            setLlmTaskForm((prev) => ({
+                              ...prev,
+                              questionParse: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">默认</option>
+                          {llmProfileList.map((item) => (
+                            <option key={item} value={item}>
+                              {getLlmProfileLabel(item)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 90 }}>多题分段</div>
+                        <select
+                          className="it-select"
+                          value={llmTaskForm.segment}
+                          onChange={(event) =>
+                            setLlmTaskForm((prev) => ({
+                              ...prev,
+                              segment: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">默认</option>
+                          {llmProfileList.map((item) => (
+                            <option key={item} value={item}>
+                              {getLlmProfileLabel(item)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 90 }}>面试评价</div>
+                        <select
+                          className="it-select"
+                          value={llmTaskForm.evaluation}
+                          onChange={(event) =>
+                            setLlmTaskForm((prev) => ({
+                              ...prev,
+                              evaluation: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">默认</option>
+                          {llmProfileList.map((item) => (
+                            <option key={item} value={item}>
+                              {getLlmProfileLabel(item)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="it-settings__actions">
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={uiLocked || savingLlmTasks}
+                          onClick={handleSaveLlmTasks}
+                        >
+                          {savingLlmTasks ? "保存中..." : "保存分阶段配置"}
+                        </button>
+                      </div>
+                      {llmTaskSaveMessage && (
+                        <div className="it-settings__hint">{llmTaskSaveMessage}</div>
+                      )}
+                      <div className="it-settings__hint">
+                        最佳实践：为“解析/分段”选高上下文模型（如 doubao-1.5-pro-32k），为“评价”选
+                        高质量模型（如 doubao-seed-1.8）。Profile 命名建议：
+                        provider-model-purpose，例如 doubao_seed_1_8_eval。
+                      </div>
                     </div>
 
                     <div className="it-question">

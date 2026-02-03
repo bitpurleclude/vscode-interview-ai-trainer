@@ -195,6 +195,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       : "https://qianfan.baidubce.com/v2";
     const workspace = this.configBundle.skill.workspace ?? {};
     const retrieval = this.configBundle.skill.retrieval ?? {};
+    const llmTasks = this.configBundle.skill.llm_tasks ?? {};
     const vector = retrieval.vector ?? {};
     const cacheRoot = this.context.globalStorageUri?.fsPath || "";
     const workspaceRoot =
@@ -244,6 +245,12 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           (this.configBundle.skill.prompts?.per_question_system_prompts as string[]) || [],
         perQuestionDemoPrompts:
           (this.configBundle.skill.prompts?.per_question_demo_prompts as string[]) || [],
+      },
+      llmTasks: {
+        questionParse:
+          llmTasks.question_parse || llmTasks.questionParse || "",
+        segment: llmTasks.segment || llmTasks.segment_align || llmTasks.segmentAlign || "",
+        evaluation: llmTasks.evaluation || llmTasks.evaluate || "",
       },
       evaluation: {
         answerMode:
@@ -415,7 +422,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     };
   }
 
-  private it_getLlmConfig(): ItLlmConfig | null {
+  private it_getLlmConfig(profileId?: string): ItLlmConfig | null {
     const env = this.configBundle.api.active?.environment || "prod";
     const envConfig = this.configBundle.api.environments?.[env] ?? {};
     const providerId =
@@ -424,10 +431,20 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       providerId && this.configBundle.providers?.[providerId]?.llm
         ? this.configBundle.providers?.[providerId]?.llm
         : undefined;
-    const llm = {
+    const baseLlm = {
       ...(providerProfile || {}),
       ...(envConfig.llm || {}),
       provider: providerId || envConfig.llm?.provider,
+    };
+    const profile =
+      profileId && envConfig.llm_profiles ? envConfig.llm_profiles[profileId] : undefined;
+    const llm = {
+      ...baseLlm,
+      ...(profile || {}),
+      provider: profile?.provider || baseLlm.provider,
+      api_key: profile?.api_key || profile?.apiKey || baseLlm.api_key,
+      base_url: profile?.base_url || profile?.baseUrl || baseLlm.base_url,
+      model: profile?.model || baseLlm.model,
     };
     if (!llm.provider || !llm.api_key) {
       return null;
@@ -910,7 +927,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           };
         }
       }
-      const llmConfig = this.it_getLlmConfig();
+      const taskCfg = this.configBundle.skill.llm_tasks || {};
+      const taskProfile =
+        String(taskCfg.question_parse || taskCfg.questionParse || "").trim() || undefined;
+      const llmConfig = this.it_getLlmConfig(taskProfile);
       const parsed = await it_parseQuestions(text, llmConfig);
       if (parsed.debug?.request) {
         this.logCorpusTrace("题目解析 LLM 请求", parsed.debug.request);
@@ -981,7 +1001,13 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       );
       const env = this.configBundle.api.active?.environment || "prod";
       const envConfig = this.configBundle.api.environments?.[env] ?? {};
-      const evalProvider = envConfig.llm?.provider || "heuristic";
+      const taskCfg = this.configBundle.skill.llm_tasks || {};
+      const evalProfileId = String(taskCfg.evaluation || taskCfg.evaluate || "").trim() || undefined;
+      const evalLlmConfig = this.it_getLlmConfig(evalProfileId);
+      if (evalLlmConfig) {
+        evalLlmConfig.maxOutputTokens = 0;
+      }
+      const evalProvider = evalLlmConfig?.provider || envConfig.llm?.provider || "heuristic";
       const evalIsDoubao = evalProvider === "volc_doubao";
       const evalDefaultBase = evalIsDoubao
         ? "https://ark.cn-beijing.volces.com"
@@ -991,32 +1017,37 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         : "ernie-4.5-turbo-128k";
       const evaluationConfig = {
         provider: evalProvider,
-        model: envConfig.llm?.model || evalDefaultModel,
-        baseUrl: envConfig.llm?.base_url || evalDefaultBase,
-        apiKey: envConfig.llm?.api_key || "",
-        temperature: Number(envConfig.llm?.temperature ?? 0.8),
-        topP: Number(envConfig.llm?.top_p ?? 0.8),
-        timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
-        maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
+        model: evalLlmConfig?.model || envConfig.llm?.model || evalDefaultModel,
+        baseUrl: evalLlmConfig?.baseUrl || envConfig.llm?.base_url || evalDefaultBase,
+        apiKey: evalLlmConfig?.apiKey || envConfig.llm?.api_key || "",
+        temperature: Number(evalLlmConfig?.temperature ?? envConfig.llm?.temperature ?? 0.8),
+        topP: Number(evalLlmConfig?.topP ?? envConfig.llm?.top_p ?? 0.8),
+        timeoutSec: Number(evalLlmConfig?.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
+        maxRetries: Math.max(
+          5,
+          Number(evalLlmConfig?.maxRetries ?? envConfig.llm?.max_retries ?? 1),
+        ),
         useResponses: Boolean(
-          envConfig.llm?.use_responses ??
+          evalLlmConfig?.useResponses ??
+            envConfig.llm?.use_responses ??
             envConfig.llm?.useResponses ??
             (evalIsDoubao ? true : false),
         ),
         webSearch: Boolean(
-          envConfig.llm?.web_search ??
+          evalLlmConfig?.webSearch ??
+            envConfig.llm?.web_search ??
             envConfig.llm?.webSearch ??
             (evalIsDoubao ? true : false),
         ),
         reasoningEffort:
+          evalLlmConfig?.reasoningEffort ??
           envConfig.llm?.reasoning_effort ??
           envConfig.llm?.reasoningEffort ??
           (evalIsDoubao ? "medium" : undefined),
-        maxOutputTokens: Number(
-          envConfig.llm?.max_output_tokens ?? envConfig.llm?.maxOutputTokens ?? 800,
-        ),
+        maxOutputTokens: 0,
         reusePrefix: Boolean(
-          envConfig.llm?.reuse_prefix ??
+          evalLlmConfig?.reusePrefix ??
+            envConfig.llm?.reuse_prefix ??
             envConfig.llm?.reusePrefix ??
             (evalIsDoubao ? true : false),
         ),
@@ -1189,6 +1220,143 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { titleMode, maxTitleLen };
+    });
+    this.webviewProtocol.on("it/updateLlmTaskProfiles", async (msg) => {
+      const payload = msg.data || {};
+      const tasks = payload.tasks || {};
+      this.configBundle = it_loadConfigBundle(this.context);
+      const current = this.configBundle.skill.llm_tasks || {};
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        llm_tasks: {
+          ...current,
+          question_parse: String(tasks.questionParse || tasks.question_parse || "").trim(),
+          segment: String(tasks.segment || "").trim(),
+          evaluation: String(tasks.evaluation || "").trim(),
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = await this.refreshConfigSnapshot();
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/saveLlmProfile", async (msg) => {
+      const payload = msg.data || {};
+      const profileId = String(payload.profileId || "").trim();
+      if (!profileId || !/^[a-zA-Z0-9_-]+$/.test(profileId)) {
+        throw new Error("profileId 只能包含字母、数字、_、-");
+      }
+      this.configBundle = it_loadConfigBundle(this.context);
+      const apiConfig = { ...this.configBundle.api };
+      const environment =
+        String(payload.environment || "").trim() ||
+        apiConfig.active?.environment ||
+        "prod";
+      const envConfig = {
+        ...(apiConfig.environments?.[environment] || {}),
+      };
+      const baseLlm = envConfig.llm || {};
+      const incoming = payload.profile || {};
+      const displayName = String(payload.displayName || "").trim();
+      const nextProfile = {
+        provider: incoming.provider || baseLlm.provider || apiConfig.active?.llm || "baidu_qianfan",
+        base_url: incoming.baseUrl ?? incoming.base_url ?? baseLlm.base_url ?? "",
+        model: incoming.model ?? baseLlm.model ?? "",
+        api_key: incoming.apiKey ?? incoming.api_key ?? "",
+        temperature: Number(incoming.temperature ?? baseLlm.temperature ?? 0.8),
+        top_p: Number(incoming.topP ?? incoming.top_p ?? baseLlm.top_p ?? 0.8),
+        timeout_sec: Number(incoming.timeoutSec ?? incoming.timeout_sec ?? baseLlm.timeout_sec ?? 60),
+        max_retries: Number(incoming.maxRetries ?? incoming.max_retries ?? baseLlm.max_retries ?? 1),
+        anti_repeat: Boolean(
+          incoming.antiRepeat ??
+            incoming.anti_repeat ??
+            baseLlm.anti_repeat ??
+            baseLlm.antiRepeat ??
+            false,
+        ),
+        use_responses: Boolean(
+          incoming.useResponses ??
+            incoming.use_responses ??
+            baseLlm.use_responses ??
+            baseLlm.useResponses ??
+            false,
+        ),
+        web_search: Boolean(
+          incoming.webSearch ??
+            incoming.web_search ??
+            baseLlm.web_search ??
+            baseLlm.webSearch ??
+            false,
+        ),
+        reasoning_effort:
+          incoming.reasoningEffort ??
+          incoming.reasoning_effort ??
+          baseLlm.reasoning_effort ??
+          baseLlm.reasoningEffort,
+        max_output_tokens: Number(
+          incoming.maxOutputTokens ??
+            incoming.max_output_tokens ??
+            baseLlm.max_output_tokens ??
+            baseLlm.maxOutputTokens ??
+            0,
+        ),
+        reuse_prefix: Boolean(
+          incoming.reusePrefix ??
+            incoming.reuse_prefix ??
+            baseLlm.reuse_prefix ??
+            baseLlm.reusePrefix ??
+            false,
+        ),
+        display_name: displayName || profileId,
+      };
+      const llmProfiles = { ...(envConfig.llm_profiles || {}) };
+      llmProfiles[profileId] = nextProfile;
+      apiConfig.environments = {
+        ...apiConfig.environments,
+        [environment]: {
+          ...envConfig,
+          llm_profiles: llmProfiles,
+        },
+      };
+      it_saveApiConfig(this.context, apiConfig);
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.api = apiConfig;
+      this.configSnapshot = this.buildConfigSnapshot(apiConfig);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/deleteLlmProfile", async (msg) => {
+      const payload = msg.data || {};
+      const profileId = String(payload.profileId || "").trim();
+      if (!profileId) {
+        throw new Error("missing profileId");
+      }
+      this.configBundle = it_loadConfigBundle(this.context);
+      const apiConfig = { ...this.configBundle.api };
+      const environment =
+        String(payload.environment || "").trim() ||
+        apiConfig.active?.environment ||
+        "prod";
+      const envConfig = {
+        ...(apiConfig.environments?.[environment] || {}),
+      };
+      const llmProfiles = { ...(envConfig.llm_profiles || {}) };
+      if (llmProfiles[profileId]) {
+        delete llmProfiles[profileId];
+      }
+      apiConfig.environments = {
+        ...apiConfig.environments,
+        [environment]: {
+          ...envConfig,
+          llm_profiles: llmProfiles,
+        },
+      };
+      it_saveApiConfig(this.context, apiConfig);
+      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle.api = apiConfig;
+      this.configSnapshot = this.buildConfigSnapshot(apiConfig);
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return this.configSnapshot;
     });
     this.webviewProtocol.on("it/createProviderConfig", async (msg) => {
       const providerId = String(msg.data?.providerId || "").trim();

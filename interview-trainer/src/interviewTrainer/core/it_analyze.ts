@@ -397,21 +397,30 @@ function it_buildVolcAudioPayload(
   };
 }
 
-function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
-  const llm = envConfig?.llm ?? {};
-  if (!llm.provider || !llm.api_key) {
+function it_getLlmConfig(
+  envConfig: any,
+  override?: Record<string, any>,
+): ItLlmConfig | null {
+  const base = envConfig?.llm ?? {};
+  const llm = {
+    ...base,
+    ...(override || {}),
+  };
+  const provider = llm.provider || base.provider;
+  const apiKey = llm.api_key || llm.apiKey || base.api_key || "";
+  if (!provider || !apiKey) {
     return null;
   }
-  const isDoubao = llm.provider === "volc_doubao";
+  const isDoubao = provider === "volc_doubao";
   const defaultBase = isDoubao
     ? "https://ark.cn-beijing.volces.com"
     : "https://qianfan.baidubce.com/v2";
   const retryValue = Number(llm.max_retries ?? 1);
   const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
   return {
-    provider: llm.provider,
-    apiKey: llm.api_key || "",
-    baseUrl: llm.base_url || defaultBase,
+    provider,
+    apiKey,
+    baseUrl: llm.base_url || llm.baseUrl || defaultBase,
     model:
       llm.model ||
       (isDoubao ? "doubao-seed-1-8-251228" : "ernie-4.5-turbo-128k"),
@@ -435,6 +444,24 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
   };
 }
 
+function it_resolveTaskProfile(
+  envConfig: any,
+  skillConfig: Record<string, any>,
+  taskKey: "question_parse" | "segment" | "evaluation",
+): Record<string, any> | null {
+  const tasks = skillConfig?.llm_tasks || {};
+  const profileId = String(
+    tasks[taskKey] ||
+      (taskKey === "question_parse" ? tasks.questionParse : "") ||
+      "",
+  ).trim();
+  if (!profileId) {
+    return null;
+  }
+  const profiles = envConfig?.llm_profiles || {};
+  return profiles[profileId] || null;
+}
+
 function it_extractJson(text: string): any | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -448,10 +475,18 @@ function it_extractJson(text: string): any | null {
   }
 }
 
+function it_maskLlmConfig(config: ItLlmConfig): Record<string, unknown> {
+  return {
+    ...config,
+    apiKey: config.apiKey ? "***" : "",
+  };
+}
+
 async function it_assignSegmentsWithLlm(
   llmConfig: ItLlmConfig,
   questions: string[],
   segments: ItAudioSegment[],
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<
   | {
       timings: ItQuestionTiming[];
@@ -489,10 +524,18 @@ async function it_assignSegmentsWithLlm(
   ].join("\n");
 
   try {
+    onTrace?.("多题分段 LLM 请求（远程对齐）", {
+      config: it_maskLlmConfig(llmConfig),
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
     const content = await it_callLlmChat(llmConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
+    onTrace?.("多题分段 LLM 返回（远程对齐）", { text: content });
     const parsed = it_extractJson(content);
     const assignments = Array.isArray(parsed?.assignments)
       ? parsed.assignments
@@ -542,7 +585,10 @@ async function it_assignSegmentsWithLlm(
         .trim();
     }
     return answeredCount ? { timings, answers } : null;
-  } catch {
+  } catch (error) {
+    onTrace?.("多题分段 LLM 失败（远程对齐）", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }
@@ -551,6 +597,7 @@ async function it_splitAnswersWithLlm(
   llmConfig: ItLlmConfig,
   questions: string[],
   transcript: string,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<Array<{ question: string; answer: string }> | null> {
   if (!questions.length || !transcript.trim()) {
     return null;
@@ -573,10 +620,18 @@ async function it_splitAnswersWithLlm(
   ].join("\n");
 
   try {
+    onTrace?.("多题分段 LLM 请求（逐题拆分）", {
+      config: it_maskLlmConfig(llmConfig),
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
     const content = await it_callLlmChat(llmConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
+    onTrace?.("多题分段 LLM 返回（逐题拆分）", { text: content });
     const parsed = it_extractJson(content);
     const answers = Array.isArray(parsed?.answers) ? parsed.answers : [];
     if (!answers.length) {
@@ -637,7 +692,10 @@ async function it_splitAnswersWithLlm(
       answeredCount += 1;
     });
     return answeredCount ? result : null;
-  } catch {
+  } catch (error) {
+    onTrace?.("多题分段 LLM 失败（逐题拆分）", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }
@@ -1441,7 +1499,12 @@ export async function it_runAnalysis(
   };
   const env = deps.apiConfig.active?.environment || "prod";
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
-  const llmConfig = it_getLlmConfig(envConfig);
+  const questionParseProfile = it_resolveTaskProfile(
+    envConfig,
+    deps.skillConfig,
+    "question_parse",
+  );
+  const llmConfig = it_getLlmConfig(envConfig, questionParseProfile || undefined);
   const cacheRoot = deps.context.globalStorageUri?.fsPath;
   let questionText = request.questionText?.trim() || "";
   let questionList = (request.questionList ?? []).filter((q) => q.trim());
@@ -1658,6 +1721,16 @@ export async function it_runAnalysis(
     ensureNotAborted();
   }
 
+  const segmentProfile = it_resolveTaskProfile(
+    envConfig,
+    deps.skillConfig,
+    "segment",
+  );
+  const segmentLlmConfig = it_getLlmConfig(envConfig, segmentProfile || undefined);
+  if (segmentLlmConfig) {
+    segmentLlmConfig.maxOutputTokens = 0;
+  }
+
   const multiQuestion = questionList.length > 1;
   if (multiQuestion) {
     reportProgress("segment", 5, "多题分段 5% · 准备中", "running");
@@ -1672,13 +1745,14 @@ export async function it_runAnalysis(
   let llmTimingAttempted = false;
   let llmTimingFailed = false;
   if (multiQuestion) {
-    if (audioSegments && llmConfig) {
+    if (audioSegments && segmentLlmConfig) {
       llmTimingAttempted = true;
       reportProgress("segment", 25, "多题分段 25% · 正在分段", "running");
       const splitAnswers = await it_splitAnswersWithLlm(
-        llmConfig,
+        segmentLlmConfig,
         questionList,
         transcript,
+        deps.onCorpusTrace,
       );
       reportProgress(
         "segment",
@@ -1716,9 +1790,10 @@ export async function it_runAnalysis(
         if (missingAlignment) {
           reportProgress("segment", 65, "多题分段 65% · 正在远程对齐", "running");
           const assigned = await it_assignSegmentsWithLlm(
-            llmConfig,
+            segmentLlmConfig,
             questionList,
             audioSegments,
+            deps.onCorpusTrace,
           );
           if (assigned) {
             questionTimings = assigned.timings;
@@ -1736,12 +1811,13 @@ export async function it_runAnalysis(
         }
       }
       if (!questionTimings.length) {
-        reportProgress("segment", 80, "多题分段 80% · 正在远程兜底", "running");
-        const assigned = await it_assignSegmentsWithLlm(
-          llmConfig,
-          questionList,
-          audioSegments,
-        );
+      reportProgress("segment", 80, "多题分段 80% · 正在远程兜底", "running");
+      const assigned = await it_assignSegmentsWithLlm(
+        segmentLlmConfig,
+        questionList,
+        audioSegments,
+        deps.onCorpusTrace,
+      );
         if (assigned) {
           questionTimings = assigned.timings;
           if (!questionAnswers) {
@@ -2087,7 +2163,16 @@ export async function it_runAnalysis(
     request.audio,
   );
 
-  const evalProvider = envConfig.llm?.provider || "heuristic";
+  const evaluationProfile = it_resolveTaskProfile(
+    envConfig,
+    deps.skillConfig,
+    "evaluation",
+  );
+  const evaluationLlmConfig = it_getLlmConfig(envConfig, evaluationProfile || undefined);
+  if (evaluationLlmConfig) {
+    evaluationLlmConfig.maxOutputTokens = 0;
+  }
+  const evalProvider = evaluationLlmConfig?.provider || envConfig.llm?.provider || "heuristic";
   const evalIsDoubao = evalProvider === "volc_doubao";
   const evalDefaultBase = evalIsDoubao
     ? "https://ark.cn-beijing.volces.com"
@@ -2097,33 +2182,43 @@ export async function it_runAnalysis(
     : "ernie-4.5-turbo-128k";
   const evaluationConfig = {
     provider: evalProvider,
-    model: envConfig.llm?.model || evalDefaultModel,
-    baseUrl: envConfig.llm?.base_url || evalDefaultBase,
-    apiKey: envConfig.llm?.api_key || "",
-    temperature: Number(envConfig.llm?.temperature ?? 0.8),
-    topP: Number(envConfig.llm?.top_p ?? 0.8),
-    timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
-    maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
-    antiRepeat: Boolean(envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false),
+    model: evaluationLlmConfig?.model || envConfig.llm?.model || evalDefaultModel,
+    baseUrl: evaluationLlmConfig?.baseUrl || envConfig.llm?.base_url || evalDefaultBase,
+    apiKey: evaluationLlmConfig?.apiKey || envConfig.llm?.api_key || "",
+    temperature: Number(evaluationLlmConfig?.temperature ?? envConfig.llm?.temperature ?? 0.8),
+    topP: Number(evaluationLlmConfig?.topP ?? envConfig.llm?.top_p ?? 0.8),
+    timeoutSec: Number(evaluationLlmConfig?.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
+    maxRetries: Math.max(
+      5,
+      Number(evaluationLlmConfig?.maxRetries ?? envConfig.llm?.max_retries ?? 1),
+    ),
+    antiRepeat: Boolean(
+      evaluationLlmConfig?.antiRepeat ??
+        envConfig.llm?.anti_repeat ??
+        envConfig.llm?.antiRepeat ??
+        false,
+    ),
     useResponses: Boolean(
-      envConfig.llm?.use_responses ??
+      evaluationLlmConfig?.useResponses ??
+        envConfig.llm?.use_responses ??
         envConfig.llm?.useResponses ??
         (evalIsDoubao ? true : false),
     ),
     webSearch: Boolean(
-      envConfig.llm?.web_search ??
+      evaluationLlmConfig?.webSearch ??
+        envConfig.llm?.web_search ??
         envConfig.llm?.webSearch ??
         (evalIsDoubao ? true : false),
     ),
     reasoningEffort:
+      evaluationLlmConfig?.reasoningEffort ??
       envConfig.llm?.reasoning_effort ??
       envConfig.llm?.reasoningEffort ??
       (evalIsDoubao ? "medium" : undefined),
-    maxOutputTokens: Number(
-      envConfig.llm?.max_output_tokens ?? envConfig.llm?.maxOutputTokens ?? 800,
-    ),
+    maxOutputTokens: 0,
     reusePrefix: Boolean(
-      envConfig.llm?.reuse_prefix ??
+      evaluationLlmConfig?.reusePrefix ??
+        envConfig.llm?.reuse_prefix ??
         envConfig.llm?.reusePrefix ??
         (evalIsDoubao ? true : false),
     ),
@@ -2136,7 +2231,9 @@ export async function it_runAnalysis(
   };
 
   const evalUsesApi = Boolean(
-    envConfig.llm?.provider && envConfig.llm?.provider !== "heuristic" && envConfig.llm?.api_key,
+    evaluationLlmConfig?.provider &&
+      evaluationLlmConfig?.provider !== "heuristic" &&
+      evaluationLlmConfig?.apiKey,
   );
   const evalLabel = evalUsesApi ? "API" : "LLM不可用";
   const evalModeLabel = evaluationConfig.answerMode === "two-step" ? "两步法" : "单次";
