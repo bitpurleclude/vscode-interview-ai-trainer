@@ -9,9 +9,9 @@ export interface ItParsedQuestions {
 
 function it_cleanQuestionText(text: string): string {
   return text
-    .replace(/^第\s*[一二三四五六七八九十0-9]+\s*[题问][：:]?/, "")
-    .replace(/^【?题目】?/, "")
-    .replace(/^\d+[.、]/, "")
+    .replace(/^第\s*[一二三四五六七八九十百千万0-9]+\s*[题问][：:、.．)?]?\s*/u, "")
+    .replace(/^【?题目】?\s*/u, "")
+    .replace(/^\d+\s*[.、．)\]]\s*/u, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -22,25 +22,28 @@ function it_parseQuestionsHeuristic(text: string): ItParsedQuestions {
     return { material: "", questions: [], source: "heuristic" };
   }
 
-  const marker = /第\s*[一二三四五六七八九十0-9]+\s*[题问][：:]/g;
+  const marker = /第\s*[一二三四五六七八九十百千万0-9]+\s*[题问][：:、.．]?/gu;
   const matches = Array.from(normalized.matchAll(marker));
   if (!matches.length) {
     return {
-      material: normalized.replace(/【题目】/g, "").trim(),
+      material: normalized.replace(/【题目】/gu, "").trim(),
       questions: [],
       source: "heuristic",
     };
   }
 
   const firstIdx = matches[0].index ?? 0;
-  let material = normalized.slice(0, firstIdx).replace(/【题目】/g, "").trim();
+  let material = normalized.slice(0, firstIdx).replace(/【题目】/gu, "").trim();
   const questions: string[] = [];
 
   for (let i = 0; i < matches.length; i += 1) {
     const start = (matches[i].index ?? 0) + matches[i][0].length;
-    const end = i < matches.length - 1 ? matches[i + 1].index ?? normalized.length : normalized.length;
+    const end =
+      i < matches.length - 1 ? matches[i + 1].index ?? normalized.length : normalized.length;
     const raw = normalized.slice(start, end).trim();
-    const cleaned = raw.split(/解析[:：]|答案[:：]|建议[:：]|参考[:：]|点评[:：]/)[0].trim();
+    const cleaned = raw
+      .split(/解析[:：]|答案[:：]|建议[:：]|参考[:：]|点评[:：]/u)[0]
+      .trim();
     const question = it_cleanQuestionText(cleaned);
     if (question) {
       questions.push(question);
@@ -48,7 +51,7 @@ function it_parseQuestionsHeuristic(text: string): ItParsedQuestions {
   }
 
   if (!questions.length) {
-    material = normalized.replace(/【题目】/g, "").trim();
+    material = normalized.replace(/【题目】/gu, "").trim();
   }
 
   return {
@@ -85,7 +88,7 @@ export async function it_parseQuestions(
   const userPrompt = [
     "要求:",
     "1) material 只保留背景材料或引导语，不要包含题目、解析或答案。",
-    "2) questions 仅包含真实题目，每题单独一句，去掉“解析/答案/参考/建议/点评”等内容。",
+    "2) questions 仅包含真实题目，每题单独一行，去掉“解析/答案/参考/建议/点评”等内容。",
     "3) 如果没有题目，请返回 questions 为空数组。",
     "输出JSON字段: material, questions。",
     "",
@@ -100,7 +103,9 @@ export async function it_parseQuestions(
     ]);
     const parsed = it_extractJson(content);
     if (parsed && Array.isArray(parsed.questions)) {
-      const questions = parsed.questions.map((item: any) => it_cleanQuestionText(String(item))).filter(Boolean);
+      const questions = parsed.questions
+        .map((item: any) => it_cleanQuestionText(String(item)))
+        .filter(Boolean);
       const material = String(parsed.material || "").trim();
       if (questions.length) {
         return {

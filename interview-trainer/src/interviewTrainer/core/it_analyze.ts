@@ -1464,30 +1464,24 @@ export async function it_runAnalysis(
     const cached = cacheRoot
       ? await it_readQuestionParseCache(cacheRoot, parseInput)
       : null;
-    if (cached && (cached.material || cached.questions.length)) {
-      if (cached.material) {
+    const hasCachedQuestions = Boolean(cached && cached.questions.length);
+    if (hasCachedQuestions) {
+      if (cached?.material) {
         questionText = cached.material;
       }
-      if (cached.questions.length) {
-        questionList = cached.questions;
-      }
-      if (questionList.length) {
-        reportProgress(
-          "question",
-          100,
-          `题目解析 100% · 缓存 · ${questionList.length}题`,
-          "success",
-        );
-      } else {
-        reportProgress(
-          "question",
-          100,
-          "题目解析完成 · 缓存未识别题目",
-          "error",
-        );
-      }
+      questionList = cached?.questions ?? [];
+      reportProgress(
+        "question",
+        100,
+        `题目解析 100% · 缓存 · ${questionList.length}题`,
+        "success",
+      );
     } else {
-      reportProgress("question", 5, "题目解析 5% · 本地", "running");
+      const prefix =
+        cached && (cached.material || cached.questions.length)
+          ? "题目解析 5% · 缓存未识别，重新解析"
+          : "题目解析 5% · 本地";
+      reportProgress("question", 5, prefix, "running");
       parsePromise = (async () => {
         const parsed = await it_parseQuestions(questionText, llmConfig);
         const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
