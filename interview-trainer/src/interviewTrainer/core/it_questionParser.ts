@@ -113,7 +113,7 @@ export async function it_parseQuestions(
     useResponses: false,
     webSearch: false,
     reasoningEffort: "minimal",
-    maxOutputTokens: Math.min(200, Number(llmConfig.maxOutputTokens ?? 200)),
+    maxOutputTokens: undefined,
     antiRepeat: false,
   };
   const debugRequest = {
