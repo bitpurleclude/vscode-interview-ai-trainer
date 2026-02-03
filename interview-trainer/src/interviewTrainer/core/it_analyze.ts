@@ -85,6 +85,65 @@ function it_getEnvConfig(apiConfig: ItApiConfig, env: string): any {
   return apiConfig.environments?.[env] ?? {};
 }
 
+function it_sanitizeTopicTitle(raw: string, maxLen: number): string {
+  const cleaned = String(raw || "")
+    .replace(/\s+/g, "")
+    .replace(/[\p{P}\p{S}]/gu, "");
+  const base = cleaned || String(raw || "").trim();
+  if (!base) {
+    return "未命名";
+  }
+  return base.slice(0, Math.max(1, maxLen));
+}
+
+async function it_generateTopicTitleWithLlm(
+  llmConfig: ItLlmConfig | null,
+  questionText: string,
+  questionList: string[],
+  maxLen: number,
+): Promise<string | null> {
+  if (!llmConfig) {
+    return null;
+  }
+  const material = questionText.trim();
+  const questions = questionList.filter((item) => item.trim());
+  if (!material && !questions.length) {
+    return null;
+  }
+  const systemPrompt = [
+    "你是题干标题提炼器，只输出 JSON。",
+    `标题用于文件夹命名，长度<=${maxLen}字，不要标点、引号、空格或换行。`,
+    "如果是多题目与背景材料，请提炼总体主题，不要只取第一题前几个字。",
+    "输出 JSON 格式: { \"title\": \"...\" }",
+  ].join("\n");
+  const userPrompt = [
+    material ? `背景材料/题干:\n${material}` : "",
+    questions.length ? `题目列表:\n${questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  try {
+    const content = await it_callLlmChat(
+      {
+        ...llmConfig,
+        maxRetries: Math.max(0, Number(llmConfig.maxRetries ?? 1)),
+      },
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    );
+    const parsed = it_extractJson(content);
+    const candidate =
+      (parsed && (parsed.title || parsed.name || parsed.topic)) ||
+      String(content || "").split(/\r?\n/)[0];
+    const normalized = it_sanitizeTopicTitle(String(candidate || ""), maxLen);
+    return normalized || null;
+  } catch {
+    return null;
+  }
+}
+
 function it_deriveTopicTitle(
   questionText?: string,
   questionList?: string[],
@@ -1951,12 +2010,27 @@ export async function it_runAnalysis(
   }
   deps.onPartial?.({ notes });
   ensureNotAborted();
-  const topicTitle = it_deriveTopicTitle(
+  const topicCfg = deps.skillConfig.topics ?? {};
+  const maxTitleLen = Number(topicCfg.max_title_len ?? 18);
+  const titleModeRaw = String(topicCfg.title_mode ?? topicCfg.titleMode ?? "llm");
+  const titleMode = titleModeRaw === "simple" ? "simple" : "llm";
+  let topicTitle = it_deriveTopicTitle(
     questionText,
     questionList,
     transcript,
-    Number(deps.skillConfig.topics?.max_title_len ?? 32),
+    maxTitleLen,
   );
+  if (titleMode === "llm") {
+    const generatedTitle = await it_generateTopicTitleWithLlm(
+      llmConfig,
+      questionText,
+      questionList,
+      maxTitleLen,
+    );
+    if (generatedTitle) {
+      topicTitle = generatedTitle;
+    }
+  }
 
   const topicDir = await it_resolveTopicDirAsync(
     deps.workspaceRoot,

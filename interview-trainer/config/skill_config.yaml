@@ -19,6 +19,9 @@ evaluation:
     - 表达感染力
     - 专业素养
     - 政策理解
+topics:
+  title_mode: llm
+  max_title_len: 18
 retrieval:
   enabled: true
   mode: vector

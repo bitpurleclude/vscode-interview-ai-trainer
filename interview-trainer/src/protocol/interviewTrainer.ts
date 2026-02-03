@@ -175,6 +175,10 @@ export interface ItConfigSnapshot {
   evaluation?: {
     answerMode?: string;
   };
+  topics?: {
+    titleMode?: string;
+    maxTitleLen?: number;
+  };
   llm: {
     provider: string;
     baseUrl: string;

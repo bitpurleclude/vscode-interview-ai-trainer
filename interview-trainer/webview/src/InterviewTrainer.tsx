@@ -393,6 +393,10 @@ const InterviewTrainer: React.FC = () => {
   const [promptSaveScope, setPromptSaveScope] = useState<
     "evaluation" | "demo" | "per-question" | null
   >(null);
+  const [topicTitleMode, setTopicTitleMode] = useState<"llm" | "simple">("llm");
+  const [topicTitleLen, setTopicTitleLen] = useState(18);
+  const [savingTopicSettings, setSavingTopicSettings] = useState(false);
+  const [topicSaveMessage, setTopicSaveMessage] = useState<string | null>(null);
   const [showRawOutput, setShowRawOutput] = useState(false);
   const [creatingProvider, setCreatingProvider] = useState(false);
   const [providerCreateMessage, setProviderCreateMessage] = useState<string | null>(null);
@@ -668,6 +672,10 @@ const InterviewTrainer: React.FC = () => {
     }
     const nextAnswerMode = String(config.evaluation?.answerMode || "two-step");
     setAnswerMode(nextAnswerMode === "single" ? "single" : "two-step");
+    const nextTitleMode = String(config.topics?.titleMode || "llm");
+    setTopicTitleMode(nextTitleMode === "simple" ? "simple" : "llm");
+    const nextTitleLen = Number(config.topics?.maxTitleLen ?? 18);
+    setTopicTitleLen(Number.isFinite(nextTitleLen) ? nextTitleLen : 18);
   }, [config, applyProfileToForm, applyRetrievalToForm]);
 
   useEffect(() => {
@@ -1489,6 +1497,24 @@ const InterviewTrainer: React.FC = () => {
         `提示词保存失败：${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  };
+  const handleSaveTopicSettings = async () => {
+    setSavingTopicSettings(true);
+    setTopicSaveMessage(null);
+    try {
+      await request("it/updateTopicSettings", {
+        topics: {
+          titleMode: topicTitleMode,
+          maxTitleLen: Number(topicTitleLen),
+        },
+      });
+      setTopicSaveMessage("命名设置已保存");
+    } catch (err) {
+      setTopicSaveMessage(
+        `命名设置保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingTopicSettings(false);
   };
   const handleRetrievalFieldChange = (
     key:
@@ -3293,6 +3319,44 @@ const InterviewTrainer: React.FC = () => {
                   选择保存目录
                 </button>
               </div>
+              <div className="it-input-row it-input-row--nowrap">
+                <div style={{ minWidth: 80 }}>历史命名</div>
+                <select
+                  className="it-select"
+                  value={topicTitleMode}
+                  disabled={uiLocked || savingTopicSettings}
+                  onChange={(event) =>
+                    setTopicTitleMode(event.target.value === "simple" ? "simple" : "llm")
+                  }
+                >
+                  <option value="llm">LLM 摘要</option>
+                  <option value="simple">题干前缀</option>
+                </select>
+                <div style={{ minWidth: 60 }}>长度</div>
+                <input
+                  className="it-input"
+                  type="number"
+                  min={4}
+                  max={18}
+                  value={topicTitleLen}
+                  disabled={uiLocked || savingTopicSettings}
+                  onChange={(event) => setTopicTitleLen(Number(event.target.value))}
+                  style={{ width: 90 }}
+                />
+                <button
+                  className="it-button it-button--secondary it-button--compact"
+                  disabled={uiLocked || savingTopicSettings}
+                  onClick={handleSaveTopicSettings}
+                >
+                  {savingTopicSettings ? "保存中..." : "保存命名"}
+                </button>
+              </div>
+              <div className="it-settings__hint">
+                选择“LLM 摘要”会额外调用一次 LLM，增加耗时与费用。
+              </div>
+              {topicSaveMessage && (
+                <div className="it-settings__hint">{topicSaveMessage}</div>
+              )}
               <div className="it-retrieval__list">
                 {retrievalDirs.map((item) => (
                   <div key={item.key} className="it-retrieval__item">

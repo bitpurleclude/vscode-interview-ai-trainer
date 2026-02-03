@@ -176,6 +176,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const llmConfig = envConfig.llm ?? {};
     const asrConfig = envConfig.asr ?? {};
     const evaluationCfg = this.configBundle.skill.evaluation ?? {};
+    const topicCfg = this.configBundle.skill.topics ?? {};
     const llmProfiles = envConfig.llm_profiles || {};
     const asrProfiles = envConfig.asr_profiles || {};
     const llmDefaultBase =
@@ -237,6 +238,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       evaluation: {
         answerMode:
           evaluationCfg.answer_mode || evaluationCfg.answerMode || "two-step",
+      },
+      topics: {
+        titleMode: topicCfg.title_mode || topicCfg.titleMode || "llm",
+        maxTitleLen: Number(topicCfg.max_title_len ?? 18),
       },
       llm: {
         provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
@@ -1085,6 +1090,32 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       this.scheduleEmbeddingWarmup("retrieval-update");
       return this.configSnapshot;
+    });
+    this.webviewProtocol.on("it/updateTopicSettings", async (msg) => {
+      const payload = msg.data || {};
+      const incoming = payload.topics || {};
+      this.configBundle = it_loadConfigBundle(this.context);
+      const current = this.configBundle.skill.topics || {};
+      const titleModeRaw = String(
+        incoming.titleMode ?? incoming.title_mode ?? current.title_mode ?? "llm",
+      );
+      const titleMode = titleModeRaw === "simple" ? "simple" : "llm";
+      const maxTitleLenRaw = Number(
+        incoming.maxTitleLen ?? incoming.max_title_len ?? current.max_title_len ?? 18,
+      );
+      const maxTitleLen = Math.max(4, Math.min(18, maxTitleLenRaw));
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        topics: {
+          ...current,
+          title_mode: titleMode,
+          max_title_len: maxTitleLen,
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = await this.refreshConfigSnapshot();
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return { titleMode, maxTitleLen };
     });
     this.webviewProtocol.on("it/createProviderConfig", async (msg) => {
       const providerId = String(msg.data?.providerId || "").trim();
