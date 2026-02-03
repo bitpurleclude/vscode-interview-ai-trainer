@@ -479,6 +479,19 @@
   gap: 10px;
 }
 
+.it-status__evaluation {
+  margin-top: 12px;
+}
+
+.it-evaluation__stream-grid--status {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.it-status__evaluation .it-evaluation__stream-card {
+  min-height: 240px;
+}
+
 .it-evaluation__stream-card {
   border: 1px solid var(--vscode-sideBar-border);
   border-radius: 8px;
