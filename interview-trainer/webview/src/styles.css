@@ -479,28 +479,27 @@
   gap: 10px;
 }
 
-.it-evaluation__stream-inline {
-  margin: 8px 0 4px;
+.it-step__evaluation-streams {
+  margin-top: 8px;
+  padding: 8px;
   border: 1px solid var(--vscode-sideBar-border);
   border-radius: 8px;
-  padding: 6px 8px;
   background: var(--vscode-editorWidget-background);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
-.it-status__evaluation {
-  margin-top: 12px;
+.it-step__evaluation-title {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 6px;
 }
 
-.it-evaluation__stream-grid--status {
+.it-step--evaluation .it-evaluation__stream-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
-.it-status__evaluation .it-evaluation__stream-card {
-  min-height: 320px;
+.it-step--evaluation .it-evaluation__stream-card {
+  min-height: 220px;
 }
 
 .it-evaluation__stream-card {
@@ -548,10 +547,6 @@
   flex: 1;
 }
 
-.it-evaluation__stream-inline .it-evaluation__stream-text,
-.it-evaluation__stream-inline .it-evaluation__stream-preview {
-  max-height: 140px;
-}
 
 .it-evaluation__stream-preview {
   color: var(--vscode-descriptionForeground);

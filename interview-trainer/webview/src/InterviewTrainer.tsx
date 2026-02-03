@@ -1033,69 +1033,6 @@ const InterviewTrainer: React.FC = () => {
     const fallback = questionText.trim();
     return fallback ? [fallback] : [];
   }, [analysisResult, parsedQuestionList, questionText]);
-  const renderInlineEvaluationStream = useCallback(
-    (index: number) => {
-      if (!streamingSettings.enabled) {
-        return null;
-      }
-      const previewLimit = Math.max(50, streamingSettings.previewChars || 200);
-      const stream = evaluationStreams[index];
-      const hasText = Boolean(stream?.text);
-      const isActive = regeneratingIndex === index || hasText;
-      const status = stream?.done
-        ? "完成"
-        : isActive
-          ? "输出中"
-          : "等待";
-      return (
-        <div className="it-evaluation__stream-inline">
-          <div className="it-evaluation__stream-header">
-            <span className="it-evaluation__stream-title">
-              实时输出（仅保留最新 {previewLimit} 字）
-            </span>
-            <span className="it-evaluation__stream-status">{status}</span>
-            {hasText && (
-              <button
-                type="button"
-                className="it-link-button it-evaluation__stream-toggle"
-                onClick={() =>
-                  setEvaluationStreams((prev) => ({
-                    ...prev,
-                    [index]: {
-                      ...(prev[index] || {
-                        text: "",
-                        collapsed: false,
-                        done: false,
-                      }),
-                      collapsed: !prev[index]?.collapsed,
-                    },
-                  }))
-                }
-              >
-                {stream?.collapsed ? "展开" : "收起"}
-              </button>
-            )}
-          </div>
-          {stream?.collapsed ? (
-            <div className="it-evaluation__stream-preview">
-              {stream?.text || "（等待输出）"}
-            </div>
-          ) : (
-            <div className="it-evaluation__stream-text">
-              {stream?.text || "（等待输出）"}
-            </div>
-          )}
-        </div>
-      );
-    },
-    [
-      evaluationStreams,
-      regeneratingIndex,
-      setEvaluationStreams,
-      streamingSettings.enabled,
-      streamingSettings.previewChars,
-    ],
-  );
   const buildQuestionParseInput = useCallback(() => {
     const text = questionText.trim();
     const list = questionList.trim();
@@ -2454,7 +2391,8 @@ const InterviewTrainer: React.FC = () => {
       <div className="it-steps">
         {steps.map((step) => {
           const stream = stepStreams[step.id];
-          const showStream = streamingSettings.enabled && stream?.text;
+          const isEvaluationStep = step.id === "evaluation";
+          const showStream = streamingSettings.enabled && stream?.text && !isEvaluationStep;
           const previewChars = Math.max(50, streamingSettings.previewChars || 200);
           const previewText = showStream
             ? String(stream?.text || "").slice(-previewChars)
@@ -2470,6 +2408,68 @@ const InterviewTrainer: React.FC = () => {
             </div>
             {step.message && (
               <div className="it-step__meta">{step.message}</div>
+            )}
+            {isEvaluationStep && streamingSettings.enabled && (
+              <div className="it-step__evaluation-streams">
+                <div className="it-step__evaluation-title">
+                  面试评价实时输出（仅保留最新 {previewChars} 字）
+                </div>
+                <div className="it-evaluation__stream-grid">
+                  {[0, 1, 2].map((idx) => {
+                    const evalStream = evaluationStreams[idx];
+                    const label = evaluationStreamQuestions[idx] || `第${idx + 1}题`;
+                    const isActive = Boolean(evalStream?.text);
+                    const status = evalStream?.done
+                      ? "完成"
+                      : isActive
+                        ? "输出中"
+                        : "等待";
+                    return (
+                      <div
+                        key={`eval-stream-${idx}`}
+                        className={`it-evaluation__stream-card ${
+                          evalStream?.done ? "is-done" : ""
+                        }`}
+                      >
+                        <div className="it-evaluation__stream-header">
+                          <span className="it-evaluation__stream-title">{label}</span>
+                          <span className="it-evaluation__stream-status">{status}</span>
+                          {isActive && (
+                            <button
+                              type="button"
+                              className="it-link-button it-evaluation__stream-toggle"
+                              onClick={() =>
+                                setEvaluationStreams((prev) => ({
+                                  ...prev,
+                                  [idx]: {
+                                    ...(prev[idx] || {
+                                      text: "",
+                                      collapsed: false,
+                                      done: false,
+                                    }),
+                                    collapsed: !prev[idx]?.collapsed,
+                                  },
+                                }))
+                              }
+                            >
+                              {evalStream?.collapsed ? "展开" : "收起"}
+                            </button>
+                          )}
+                        </div>
+                        {evalStream?.collapsed ? (
+                          <div className="it-evaluation__stream-preview">
+                            {evalStream?.text || "（等待输出）"}
+                          </div>
+                        ) : (
+                          <div className="it-evaluation__stream-text">
+                            {evalStream?.text || "（等待输出）"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
             {showStream && (
               <div className="it-step__stream">
@@ -2510,74 +2510,6 @@ const InterviewTrainer: React.FC = () => {
     );
   };
 
-  const renderEvaluationStreams = () => {
-    if (!streamingSettings.enabled) {
-      return null;
-    }
-    const previewLimit = Math.max(50, streamingSettings.previewChars || 200);
-    return (
-      <div className="it-status__evaluation">
-        <div className="it-section-header">
-          <h4>面试评价实时输出（仅保留最新 {previewLimit} 字）</h4>
-        </div>
-        <div className="it-evaluation__stream-grid it-evaluation__stream-grid--status">
-          {[0, 1, 2].map((idx) => {
-            const stream = evaluationStreams[idx];
-            const label = evaluationStreamQuestions[idx] || `第${idx + 1}题`;
-            const isActive = Boolean(stream?.text);
-            const status = stream?.done
-              ? "完成"
-              : isActive
-                ? "输出中"
-                : "等待";
-            return (
-              <div
-                key={`eval-stream-status-${idx}`}
-                className={`it-evaluation__stream-card ${
-                  stream?.done ? "is-done" : ""
-                }`}
-              >
-                <div className="it-evaluation__stream-header">
-                  <span className="it-evaluation__stream-title">{label}</span>
-                  <span className="it-evaluation__stream-status">{status}</span>
-                  {isActive && (
-                    <button
-                      type="button"
-                      className="it-link-button it-evaluation__stream-toggle"
-                      onClick={() =>
-                        setEvaluationStreams((prev) => ({
-                          ...prev,
-                          [idx]: {
-                            ...(prev[idx] || {
-                              text: "",
-                              collapsed: false,
-                              done: false,
-                            }),
-                            collapsed: !prev[idx]?.collapsed,
-                          },
-                        }))
-                      }
-                    >
-                      {stream?.collapsed ? "展开" : "收起"}
-                    </button>
-                  )}
-                </div>
-                {stream?.collapsed ? (
-                  <div className="it-evaluation__stream-preview">
-                    {stream?.text || "（等待输出）"}
-                  </div>
-                ) : (
-                  <div className="it-evaluation__stream-text">
-                    {stream?.text || "（等待输出）"}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
 
   return (
@@ -2684,7 +2616,6 @@ const InterviewTrainer: React.FC = () => {
 
       {activePage === "practice" && (
         <>
-          {renderEvaluationStreams()}
           <div className="it-flow">
             <div className="it-flow__left">{renderSteps(itState.steps)}</div>
             <div className="it-flow__right">
@@ -3008,7 +2939,6 @@ const InterviewTrainer: React.FC = () => {
                                     {regeneratingIndex === idx ? "生成中..." : "重新生成示范"}
                                   </button>
                                 </div>
-                                {renderInlineEvaluationStream(idx)}
                                 <div className="it-revised-item__block">
                                   <span>原回答：</span>
                                   {it_renderParagraphs(item.original, `${idx}-orig`)}
