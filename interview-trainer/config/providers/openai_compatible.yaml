@@ -1,0 +1,27 @@
+﻿provider: openai_compatible
+display_name: OpenAI Compatible
+llm:
+  provider: openai_compatible
+  base_url: https://gmn.chuangzuoli.com/v1
+  model: gpt-5.2-codex
+  api_key: ""
+  temperature: 0.8
+  top_p: 0.8
+  timeout_sec: 60
+  max_retries: 1
+embedding:
+  provider: openai_compatible
+  base_url: https://gmn.chuangzuoli.com/v1
+  model: ""
+  api_key: ""
+  timeout_sec: 30
+  max_retries: 1
+asr:
+  provider: ""
+  base_url: ""
+  api_key: ""
+  secret_key: ""
+  language: zh
+  dev_pid: 1537
+  timeout_sec: 120
+  max_retries: 1

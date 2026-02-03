@@ -1,7 +1,7 @@
 import axios from "axios";
 import { ItQianfanConfig, ItQianfanMessage, it_callQianfanChat } from "./it_qianfan";
 
-export type ItLlmProvider = "baidu_qianfan" | "volc_doubao" | string;
+export type ItLlmProvider = "baidu_qianfan" | "volc_doubao" | "openai_compatible" | string;
 export type ItLlmReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export interface ItLlmConfig extends ItQianfanConfig {
@@ -87,6 +87,49 @@ async function it_callDoubaoChat(
   throw lastError instanceof Error
     ? lastError
     : new Error("Doubao chat request failed.");
+}
+
+async function it_callOpenAiCompatibleChat(
+  cfg: ItLlmConfig,
+  messages: ItLlmMessage[],
+): Promise<string> {
+  const base = (cfg.baseUrl || "https://api.openai.com/v1").trim().replace(/\/$/, "");
+  const lower = base.toLowerCase();
+  const url = lower.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+  const headers = {
+    Authorization: `Bearer ${cfg.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  const payload: any = {
+    model: cfg.model || "gpt-4.1-mini",
+    messages,
+    temperature: cfg.temperature,
+    top_p: cfg.topP,
+  };
+  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
+    payload.max_tokens = Number(cfg.maxOutputTokens);
+  }
+
+  let lastError: unknown = undefined;
+  for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+    try {
+      const response = await axios.post(url, payload, {
+        headers,
+        timeout: cfg.timeoutSec * 1000,
+      });
+      const text =
+        response.data?.choices?.[0]?.message?.content ??
+        response.data?.choices?.[0]?.delta?.content ??
+        response.data?.choices?.[0]?.text ??
+        "";
+      return String(text || "");
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("OpenAI compatible chat request failed.");
 }
 
 function it_buildDoubaoResponsesUrl(base: string): string {
@@ -228,5 +271,9 @@ export async function it_callLlmChat(
     }
     return it_callDoubaoChat(cfg, resolvedMessages);
   }
-  throw new Error(`涓嶆敮鎸佺殑 LLM 鎻愪緵鏂? ${provider}`);
+  if (provider === "openai_compatible") {
+    return it_callOpenAiCompatibleChat(cfg, resolvedMessages);
+  }
+  throw new Error(`????????? LLM ??????? ${provider}`);
 }
+
