@@ -402,10 +402,10 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
   if (!llm.provider || !llm.api_key) {
     return null;
   }
-  const defaultBase =
-    llm.provider === "volc_doubao"
-      ? "https://ark.cn-beijing.volces.com"
-      : "https://qianfan.baidubce.com/v2";
+  const isDoubao = llm.provider === "volc_doubao";
+  const defaultBase = isDoubao
+    ? "https://ark.cn-beijing.volces.com"
+    : "https://qianfan.baidubce.com/v2";
   const retryValue = Number(llm.max_retries ?? 1);
   const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
   return {
@@ -414,14 +414,24 @@ function it_getLlmConfig(envConfig: any): ItLlmConfig | null {
     baseUrl: llm.base_url || defaultBase,
     model:
       llm.model ||
-      (llm.provider === "volc_doubao"
-        ? "doubao-1-5-pro-32k-250115"
-        : "ernie-4.5-turbo-128k"),
+      (isDoubao ? "doubao-seed-1-8-251228" : "ernie-4.5-turbo-128k"),
     temperature: Number(llm.temperature ?? 0.2),
     topP: Number(llm.top_p ?? 0.8),
     timeoutSec: Number(llm.timeout_sec ?? 60),
     maxRetries: resolvedRetries,
     antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
+    useResponses: Boolean(
+      llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false),
+    ),
+    webSearch: Boolean(
+      llm.web_search ?? llm.webSearch ?? (isDoubao ? true : false),
+    ),
+    reasoningEffort:
+      llm.reasoning_effort ?? llm.reasoningEffort ?? (isDoubao ? "medium" : undefined),
+    maxOutputTokens: Number(llm.max_output_tokens ?? llm.maxOutputTokens ?? 800),
+    reusePrefix: Boolean(
+      llm.reuse_prefix ?? llm.reusePrefix ?? (isDoubao ? true : false),
+    ),
   };
 }
 
@@ -2062,14 +2072,13 @@ export async function it_runAnalysis(
   );
 
   const evalProvider = envConfig.llm?.provider || "heuristic";
-  const evalDefaultBase =
-    evalProvider === "volc_doubao"
-      ? "https://ark.cn-beijing.volces.com"
-      : "https://qianfan.baidubce.com/v2";
-  const evalDefaultModel =
-    evalProvider === "volc_doubao"
-      ? "doubao-1-5-pro-32k-250115"
-      : "ernie-4.5-turbo-128k";
+  const evalIsDoubao = evalProvider === "volc_doubao";
+  const evalDefaultBase = evalIsDoubao
+    ? "https://ark.cn-beijing.volces.com"
+    : "https://qianfan.baidubce.com/v2";
+  const evalDefaultModel = evalIsDoubao
+    ? "doubao-seed-1-8-251228"
+    : "ernie-4.5-turbo-128k";
   const evaluationConfig = {
     provider: evalProvider,
     model: envConfig.llm?.model || evalDefaultModel,
@@ -2080,6 +2089,28 @@ export async function it_runAnalysis(
     timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
     maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
     antiRepeat: Boolean(envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false),
+    useResponses: Boolean(
+      envConfig.llm?.use_responses ??
+        envConfig.llm?.useResponses ??
+        (evalIsDoubao ? true : false),
+    ),
+    webSearch: Boolean(
+      envConfig.llm?.web_search ??
+        envConfig.llm?.webSearch ??
+        (evalIsDoubao ? true : false),
+    ),
+    reasoningEffort:
+      envConfig.llm?.reasoning_effort ??
+      envConfig.llm?.reasoningEffort ??
+      (evalIsDoubao ? "medium" : undefined),
+    maxOutputTokens: Number(
+      envConfig.llm?.max_output_tokens ?? envConfig.llm?.maxOutputTokens ?? 800,
+    ),
+    reusePrefix: Boolean(
+      envConfig.llm?.reuse_prefix ??
+        envConfig.llm?.reusePrefix ??
+        (evalIsDoubao ? true : false),
+    ),
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
     answerMode:

@@ -3,13 +3,72 @@
   ItEvaluation,
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
-import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
+import { it_callDoubaoResponses, it_callLlmChat, ItLlmConfig } from "../api/it_llm";
+import { it_hashText } from "../utils/it_text";
 
 export interface ItEvaluationConfig extends ItLlmConfig {
   provider: "baidu_qianfan" | "heuristic" | "volc_doubao";
   language: string;
   dimensions: string[];
   answerMode?: "single" | "two-step";
+}
+
+const IT_PREFIX_CACHE_LIMIT = 50;
+const IT_PREFIX_CACHE = new Map<
+  string,
+  { responseId: string; updatedAt: number }
+>();
+
+function it_getPrefixCache(key: string): string | undefined {
+  const entry = IT_PREFIX_CACHE.get(key);
+  if (!entry) {
+    return undefined;
+  }
+  entry.updatedAt = Date.now();
+  return entry.responseId;
+}
+
+function it_setPrefixCache(key: string, responseId: string): void {
+  IT_PREFIX_CACHE.set(key, { responseId, updatedAt: Date.now() });
+  if (IT_PREFIX_CACHE.size <= IT_PREFIX_CACHE_LIMIT) {
+    return;
+  }
+  const entries = Array.from(IT_PREFIX_CACHE.entries()).sort(
+    (a, b) => a[1].updatedAt - b[1].updatedAt,
+  );
+  while (entries.length > IT_PREFIX_CACHE_LIMIT) {
+    const oldest = entries.shift();
+    if (oldest) {
+      IT_PREFIX_CACHE.delete(oldest[0]);
+    }
+  }
+}
+
+function it_buildPrefixKey(
+  config: ItEvaluationConfig,
+  systemPrompt: string,
+  staticPrompt: string,
+): string {
+  const base = [
+    config.provider,
+    config.baseUrl,
+    config.model,
+    config.temperature,
+    config.topP,
+    config.reasoningEffort,
+    config.maxOutputTokens,
+    config.webSearch ? "1" : "0",
+    systemPrompt,
+    staticPrompt,
+  ]
+    .map((item) => String(item ?? ""))
+    .join("|");
+  return it_hashText(base);
+}
+
+function it_appendNonce(text: string): string {
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${text}\n\n[nonce:${nonce}]`;
 }
 
 const IT_DIMENSION_MAP: Record<string, string> = {
@@ -311,6 +370,11 @@ async function it_generateRevisedByOutline(
         timeoutSec: config.timeoutSec,
         maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
         antiRepeat: config.antiRepeat,
+        useResponses: config.useResponses,
+        webSearch: config.webSearch,
+        reasoningEffort: config.reasoningEffort,
+        maxOutputTokens: config.maxOutputTokens,
+        reusePrefix: config.reusePrefix,
       },
       [
         { role: "system", content: systemPrompt },
@@ -376,6 +440,11 @@ async function it_generateOutlines(
         timeoutSec: config.timeoutSec,
         maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
         antiRepeat: config.antiRepeat,
+        useResponses: config.useResponses,
+        webSearch: config.webSearch,
+        reasoningEffort: config.reasoningEffort,
+        maxOutputTokens: config.maxOutputTokens,
+        reusePrefix: config.reusePrefix,
       },
       [
         { role: "system", content: systemPrompt },
@@ -779,7 +848,7 @@ export async function it_evaluateAnswer(
   const material = materialText?.trim() || "";
   const backgroundQuestions =
     contextQuestions && contextQuestions.length ? contextQuestions : [];
-  const userPromptParts = [
+  const staticPromptParts = [
     demoPrompt ? `示范补充要求:\n${demoPrompt}` : "示范补充要求: 无",
     material ? `材料:\n${material}` : "材料: 无",
     backgroundQuestions.length
@@ -793,13 +862,6 @@ export async function it_evaluateAnswer(
           .join("\n")}`
       : "本次评审题目列表: 无",
     `本题题干:\n${question || "未提供"}`,
-    `本题回答:\n${transcript || "未提供"}`,
-    questions.length
-      ? `本次评审回答:\n${resolvedAnswers
-          .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
-          .join("\n")}`
-      : "本次评审回答: 无",
-    `声学摘要:\n${it_buildSummary(acoustic)}`,
     `评分维度(每项1-10分): ${dimensions.join("。")}`,
     "评分输出字段必须使用 overallScore 与 scores（维度:分数），禁止使用“评分/维度评分/维度Scores”等变体。",
     "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
@@ -815,7 +877,19 @@ export async function it_evaluateAnswer(
       : "检索笔记: 无",
   ];
 
-  const userPrompt = userPromptParts.join("\n\n");
+  const dynamicPromptParts = [
+    `本题回答:\n${transcript || "未提供"}`,
+    questions.length
+      ? `本次评审回答:\n${resolvedAnswers
+          .map((item, idx) => `${idx + 1}. ${item.answer || "（空）"}`)
+          .join("\n")}`
+      : "本次评审回答: 无",
+    `声学摘要:\n${it_buildSummary(acoustic)}`,
+  ];
+
+  const staticPrompt = staticPromptParts.join("\n\n");
+  const dynamicPrompt = dynamicPromptParts.join("\n\n");
+  const userPrompt = [staticPrompt, dynamicPrompt].filter(Boolean).join("\n\n");
   const promptText = `System:\n${systemPrompt}\n\nUser:\n${userPrompt}`;
 
   if (!config.apiKey || config.provider === "heuristic") {
@@ -838,29 +912,90 @@ export async function it_evaluateAnswer(
   let parsedRevised: any[] = [];
   let lastError: string | undefined;
   let finalPromptText = promptText;
+  const usePrefixReuse =
+    config.provider === "volc_doubao" &&
+    Boolean(config.useResponses) &&
+    Boolean(config.reusePrefix) &&
+    !config.antiRepeat;
+  const prefixKey = usePrefixReuse
+    ? it_buildPrefixKey(config, systemPrompt, staticPrompt)
+    : "";
 
   for (let attempt = 0; attempt < parseAttempts; attempt += 1) {
-    const attemptPrompt =
-      attempt === 0 ? userPrompt : `${userPrompt}\n\n${formatGuard}`;
+    const attemptDynamicPrompt =
+      attempt === 0 ? dynamicPrompt : `${dynamicPrompt}\n\n${formatGuard}`;
+    const attemptPrompt = [staticPrompt, attemptDynamicPrompt]
+      .filter(Boolean)
+      .join("\n\n");
     finalPromptText = `System:\n${systemPrompt}\n\nUser:\n${attemptPrompt}`;
     try {
-      content = await it_callLlmChat(
-        {
-          provider: config.provider,
-          apiKey: config.apiKey,
-          baseUrl: config.baseUrl,
-          model: config.model,
-          temperature: config.temperature,
-          topP: config.topP,
-          timeoutSec: config.timeoutSec,
-          maxRetries: resolvedRetries,
-          antiRepeat: config.antiRepeat,
-        },
-        [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: attemptPrompt },
-        ],
-      );
+      const callConfig = {
+        provider: config.provider,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        temperature: config.temperature,
+        topP: config.topP,
+        timeoutSec: config.timeoutSec,
+        maxRetries: resolvedRetries,
+        antiRepeat: config.antiRepeat,
+        useResponses: config.useResponses,
+        webSearch: config.webSearch,
+        reasoningEffort: config.reasoningEffort,
+        maxOutputTokens: config.maxOutputTokens,
+        reusePrefix: config.reusePrefix,
+      };
+      if (usePrefixReuse) {
+        let responseId = it_getPrefixCache(prefixKey);
+        if (!responseId) {
+          const prefixPrompt = `${staticPrompt}\n\n仅用于前缀缓存，请回复OK。`;
+          const prefixResp = await it_callDoubaoResponses(
+            callConfig,
+            [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: prefixPrompt },
+            ],
+            {
+              reasoningEffort: "minimal",
+              maxOutputTokens: 16,
+              webSearch: false,
+            },
+          );
+          if (prefixResp.responseId) {
+            responseId = prefixResp.responseId;
+            it_setPrefixCache(prefixKey, prefixResp.responseId);
+          }
+        }
+        if (responseId) {
+          const dynamicPayload = config.antiRepeat
+            ? it_appendNonce(attemptDynamicPrompt)
+            : attemptDynamicPrompt;
+          const resp = await it_callDoubaoResponses(
+            callConfig,
+            [{ role: "user", content: dynamicPayload }],
+            {
+              previousResponseId: responseId,
+            },
+          );
+          content = resp.text;
+        } else {
+          content = await it_callLlmChat(
+            callConfig,
+            [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: attemptPrompt },
+            ],
+          );
+        }
+      } else {
+        content = await it_callLlmChat(
+          callConfig,
+          [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: attemptPrompt },
+          ],
+        );
+      }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       continue;

@@ -179,10 +179,12 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const topicCfg = this.configBundle.skill.topics ?? {};
     const llmProfiles = envConfig.llm_profiles || {};
     const asrProfiles = envConfig.asr_profiles || {};
-    const llmDefaultBase =
-      llmConfig.provider === "volc_doubao"
-        ? "https://ark.cn-beijing.volces.com"
-        : "https://qianfan.baidubce.com/v2";
+    const resolvedLlmProvider =
+      llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan";
+    const isDoubao = resolvedLlmProvider === "volc_doubao";
+    const llmDefaultBase = isDoubao
+      ? "https://ark.cn-beijing.volces.com"
+      : "https://qianfan.baidubce.com/v2";
     const workspace = this.configBundle.skill.workspace ?? {};
     const retrieval = this.configBundle.skill.retrieval ?? {};
     const vector = retrieval.vector ?? {};
@@ -220,7 +222,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     return {
       activeEnvironment: env,
       envList: Object.keys(apiConfig.environments || {}),
-      llmProvider: apiConfig.active?.llm || llmConfig.provider || "baidu_qianfan",
+      llmProvider: resolvedLlmProvider,
       asrProvider: apiConfig.active?.asr || asrConfig.provider || "baidu_vop",
       acousticProvider: apiConfig.active?.acoustic || "api",
       llmProfiles,
@@ -244,19 +246,35 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         maxTitleLen: Number(topicCfg.max_title_len ?? 18),
       },
       llm: {
-        provider: llmConfig.provider || apiConfig.active?.llm || "baidu_qianfan",
+        provider: resolvedLlmProvider,
         baseUrl: llmConfig.base_url || llmDefaultBase,
         model:
           llmConfig.model ||
-          (llmConfig.provider === "volc_doubao"
-            ? "doubao-1-5-pro-32k-250115"
-            : "ernie-4.5-turbo-128k"),
+          (isDoubao ? "doubao-seed-1-8-251228" : "ernie-4.5-turbo-128k"),
         apiKey: llmConfig.api_key || "",
         temperature: Number(llmConfig.temperature ?? 0.8),
         topP: Number(llmConfig.top_p ?? 0.8),
         timeoutSec: Number(llmConfig.timeout_sec ?? 60),
         maxRetries: Number(llmConfig.max_retries ?? 1),
         antiRepeat: Boolean(llmConfig.anti_repeat ?? llmConfig.antiRepeat ?? false),
+        useResponses: Boolean(
+          llmConfig.use_responses ??
+            llmConfig.useResponses ??
+            (isDoubao ? true : false),
+        ),
+        webSearch: Boolean(
+          llmConfig.web_search ?? llmConfig.webSearch ?? (isDoubao ? true : false),
+        ),
+        reasoningEffort:
+          llmConfig.reasoning_effort ??
+          llmConfig.reasoningEffort ??
+          (isDoubao ? "medium" : undefined),
+        maxOutputTokens: Number(
+          llmConfig.max_output_tokens ?? llmConfig.maxOutputTokens ?? 800,
+        ),
+        reusePrefix: Boolean(
+          llmConfig.reuse_prefix ?? llmConfig.reusePrefix ?? (isDoubao ? true : false),
+        ),
       },
       asr: {
         provider: asrConfig.provider || apiConfig.active?.asr || "baidu_vop",
@@ -406,24 +424,34 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     if (!llm.provider || !llm.api_key) {
       return null;
     }
-    const defaultBase =
-      llm.provider === "volc_doubao"
-        ? "https://ark.cn-beijing.volces.com"
-        : "https://qianfan.baidubce.com/v2";
+    const isDoubao = llm.provider === "volc_doubao";
+    const defaultBase = isDoubao
+      ? "https://ark.cn-beijing.volces.com"
+      : "https://qianfan.baidubce.com/v2";
     return {
       provider: llm.provider,
       apiKey: llm.api_key || "",
       baseUrl: llm.base_url || defaultBase,
       model:
         llm.model ||
-        (llm.provider === "volc_doubao"
-          ? "doubao-1-5-pro-32k-250115"
-          : "ernie-4.5-turbo-128k"),
+        (isDoubao ? "doubao-seed-1-8-251228" : "ernie-4.5-turbo-128k"),
       temperature: Number(llm.temperature ?? 0.8),
       topP: Number(llm.top_p ?? 0.8),
       timeoutSec: Number(llm.timeout_sec ?? 60),
       maxRetries: Number(llm.max_retries ?? 1),
       antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
+      useResponses: Boolean(
+        llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false),
+      ),
+      webSearch: Boolean(
+        llm.web_search ?? llm.webSearch ?? (isDoubao ? true : false),
+      ),
+      reasoningEffort:
+        llm.reasoning_effort ?? llm.reasoningEffort ?? (isDoubao ? "medium" : undefined),
+      maxOutputTokens: Number(llm.max_output_tokens ?? llm.maxOutputTokens ?? 800),
+      reusePrefix: Boolean(
+        llm.reuse_prefix ?? llm.reusePrefix ?? (isDoubao ? true : false),
+      ),
     };
   }
 
@@ -930,14 +958,13 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const env = this.configBundle.api.active?.environment || "prod";
       const envConfig = this.configBundle.api.environments?.[env] ?? {};
       const evalProvider = envConfig.llm?.provider || "heuristic";
-      const evalDefaultBase =
-        evalProvider === "volc_doubao"
-          ? "https://ark.cn-beijing.volces.com"
-          : "https://qianfan.baidubce.com/v2";
-      const evalDefaultModel =
-        evalProvider === "volc_doubao"
-          ? "doubao-1-5-pro-32k-250115"
-          : "ernie-4.5-turbo-128k";
+      const evalIsDoubao = evalProvider === "volc_doubao";
+      const evalDefaultBase = evalIsDoubao
+        ? "https://ark.cn-beijing.volces.com"
+        : "https://qianfan.baidubce.com/v2";
+      const evalDefaultModel = evalIsDoubao
+        ? "doubao-seed-1-8-251228"
+        : "ernie-4.5-turbo-128k";
       const evaluationConfig = {
         provider: evalProvider,
         model: envConfig.llm?.model || evalDefaultModel,
@@ -947,6 +974,28 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         topP: Number(envConfig.llm?.top_p ?? 0.8),
         timeoutSec: Number(envConfig.llm?.timeout_sec ?? 60),
         maxRetries: Math.max(5, Number(envConfig.llm?.max_retries ?? 1)),
+        useResponses: Boolean(
+          envConfig.llm?.use_responses ??
+            envConfig.llm?.useResponses ??
+            (evalIsDoubao ? true : false),
+        ),
+        webSearch: Boolean(
+          envConfig.llm?.web_search ??
+            envConfig.llm?.webSearch ??
+            (evalIsDoubao ? true : false),
+        ),
+        reasoningEffort:
+          envConfig.llm?.reasoning_effort ??
+          envConfig.llm?.reasoningEffort ??
+          (evalIsDoubao ? "medium" : undefined),
+        maxOutputTokens: Number(
+          envConfig.llm?.max_output_tokens ?? envConfig.llm?.maxOutputTokens ?? 800,
+        ),
+        reusePrefix: Boolean(
+          envConfig.llm?.reuse_prefix ??
+            envConfig.llm?.reusePrefix ??
+            (evalIsDoubao ? true : false),
+        ),
         language: this.configBundle.skill.evaluation?.language || "zh-CN",
         dimensions: this.configBundle.skill.evaluation?.dimensions ?? [],
         answerMode:
@@ -1390,7 +1439,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           : "https://qianfan.baidubce.com/v2";
       const llmDefaultModel =
         llmForm.provider === "volc_doubao"
-          ? "doubao-1-5-pro-32k-250115"
+          ? "doubao-seed-1-8-251228"
           : "ernie-4.5-turbo-128k";
 
       envConfig.llm = {
@@ -1409,6 +1458,23 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         max_retries: Number(llmForm.maxRetries ?? envConfig.llm?.max_retries ?? 1),
         anti_repeat: Boolean(
           llmForm.antiRepeat ?? envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false,
+        ),
+        use_responses: Boolean(
+          llmForm.useResponses ?? envConfig.llm?.use_responses ?? envConfig.llm?.useResponses ?? false,
+        ),
+        reasoning_effort:
+          llmForm.reasoningEffort ?? envConfig.llm?.reasoning_effort ?? envConfig.llm?.reasoningEffort,
+        max_output_tokens: Number(
+          llmForm.maxOutputTokens ??
+            envConfig.llm?.max_output_tokens ??
+            envConfig.llm?.maxOutputTokens ??
+            800,
+        ),
+        web_search: Boolean(
+          llmForm.webSearch ?? envConfig.llm?.web_search ?? envConfig.llm?.webSearch ?? false,
+        ),
+        reuse_prefix: Boolean(
+          llmForm.reusePrefix ?? envConfig.llm?.reuse_prefix ?? envConfig.llm?.reusePrefix ?? false,
         ),
       };
       envConfig.llm_provider = envConfig.llm.provider;
@@ -1556,7 +1622,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           : "https://qianfan.baidubce.com/v2";
       const defaultModel =
         provider === "volc_doubao"
-          ? "doubao-1-5-pro-32k-250115"
+          ? "doubao-seed-1-8-251228"
           : "ernie-4.5-turbo-128k";
 
       const cfg: ItLlmConfig = {
@@ -1569,6 +1635,11 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         timeoutSec: Number(llmForm.timeoutSec ?? 30),
         maxRetries: Number(llmForm.maxRetries ?? 0),
         antiRepeat: Boolean(llmForm.antiRepeat ?? false),
+        useResponses: Boolean(llmForm.useResponses ?? false),
+        webSearch: Boolean(llmForm.webSearch ?? false),
+        reasoningEffort: llmForm.reasoningEffort,
+        maxOutputTokens: Number(llmForm.maxOutputTokens ?? 0),
+        reusePrefix: Boolean(llmForm.reusePrefix ?? false),
       };
       if (!cfg.apiKey) {
         throw new Error("缺少 LLM API Key");

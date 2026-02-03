@@ -342,6 +342,11 @@ const InterviewTrainer: React.FC = () => {
       timeoutSec: 60,
       maxRetries: 1,
       antiRepeat: false,
+      useResponses: false,
+      webSearch: false,
+      reasoningEffort: "medium",
+      maxOutputTokens: 800,
+      reusePrefix: false,
     },
     asr: {
       provider: "baidu_vop",
@@ -426,11 +431,21 @@ const InterviewTrainer: React.FC = () => {
         provider === "volc_doubao"
           ? {
               baseUrl: "https://ark.cn-beijing.volces.com",
-              model: "doubao-1-5-pro-32k-250115",
+              model: "doubao-seed-1-8-251228",
+              useResponses: true,
+              webSearch: true,
+              reasoningEffort: "medium",
+              maxOutputTokens: 800,
+              reusePrefix: true,
             }
           : {
               baseUrl: "https://qianfan.baidubce.com/v2",
               model: "ernie-4.5-turbo-128k",
+              useResponses: false,
+              webSearch: false,
+              reasoningEffort: "medium",
+              maxOutputTokens: 800,
+              reusePrefix: false,
             };
       const asrDefaults = {
         baseUrl: "https://vop.baidu.com/server_api",
@@ -459,6 +474,28 @@ const InterviewTrainer: React.FC = () => {
           maxRetries: Number(llmProfile?.max_retries ?? llmProfile?.maxRetries ?? 1),
           antiRepeat: Boolean(
             llmProfile?.anti_repeat ?? llmProfile?.antiRepeat ?? prev.llm.antiRepeat ?? false,
+          ),
+          useResponses: Boolean(
+            llmProfile?.use_responses ??
+              llmProfile?.useResponses ??
+              llmDefaults.useResponses,
+          ),
+          webSearch: Boolean(
+            llmProfile?.web_search ?? llmProfile?.webSearch ?? llmDefaults.webSearch,
+          ),
+          reasoningEffort:
+            llmProfile?.reasoning_effort ??
+            llmProfile?.reasoningEffort ??
+            llmDefaults.reasoningEffort,
+          maxOutputTokens: Number(
+            llmProfile?.max_output_tokens ??
+              llmProfile?.maxOutputTokens ??
+              llmDefaults.maxOutputTokens,
+          ),
+          reusePrefix: Boolean(
+            llmProfile?.reuse_prefix ??
+              llmProfile?.reusePrefix ??
+              llmDefaults.reusePrefix,
           ),
         },
         asr: {
@@ -1299,11 +1336,21 @@ const InterviewTrainer: React.FC = () => {
           provider === "volc_doubao"
             ? {
                 baseUrl: "https://ark.cn-beijing.volces.com",
-                model: "doubao-1-5-pro-32k-250115",
+                model: "doubao-seed-1-8-251228",
+                useResponses: true,
+                webSearch: true,
+                reasoningEffort: "medium",
+                maxOutputTokens: 800,
+                reusePrefix: true,
               }
             : {
                 baseUrl: "https://qianfan.baidubce.com/v2",
                 model: "ernie-4.5-turbo-128k",
+                useResponses: false,
+                webSearch: false,
+                reasoningEffort: "medium",
+                maxOutputTokens: 800,
+                reusePrefix: false,
               };
         const nextProfile =
           (provider === prev.llm.provider ? prev.llm : undefined) ||
@@ -1333,6 +1380,35 @@ const InterviewTrainer: React.FC = () => {
             ),
             antiRepeat: Boolean(
               nextProfile.anti_repeat ?? nextProfile.antiRepeat ?? prev.llm.antiRepeat ?? false,
+            ),
+            useResponses: Boolean(
+              nextProfile.use_responses ??
+                nextProfile.useResponses ??
+                defaults.useResponses ??
+                prev.llm.useResponses,
+            ),
+            webSearch: Boolean(
+              nextProfile.web_search ??
+                nextProfile.webSearch ??
+                defaults.webSearch ??
+                prev.llm.webSearch,
+            ),
+            reasoningEffort:
+              nextProfile.reasoning_effort ??
+              nextProfile.reasoningEffort ??
+              defaults.reasoningEffort ??
+              prev.llm.reasoningEffort,
+            maxOutputTokens: Number(
+              nextProfile.max_output_tokens ??
+                nextProfile.maxOutputTokens ??
+                defaults.maxOutputTokens ??
+                prev.llm.maxOutputTokens,
+            ),
+            reusePrefix: Boolean(
+              nextProfile.reuse_prefix ??
+                nextProfile.reusePrefix ??
+                defaults.reusePrefix ??
+                prev.llm.reusePrefix,
             ),
           },
         };
@@ -1415,6 +1491,11 @@ const InterviewTrainer: React.FC = () => {
         timeoutSec: Number(apiForm.llm.timeoutSec),
         maxRetries: Number(apiForm.llm.maxRetries),
         antiRepeat: Boolean(apiForm.llm.antiRepeat),
+        useResponses: Boolean(apiForm.llm.useResponses),
+        webSearch: Boolean(apiForm.llm.webSearch),
+        reasoningEffort: apiForm.llm.reasoningEffort,
+        maxOutputTokens: Number(apiForm.llm.maxOutputTokens),
+        reusePrefix: Boolean(apiForm.llm.reusePrefix),
       },
       asr: {
         provider: apiForm.asr.provider,
@@ -1441,6 +1522,11 @@ const InterviewTrainer: React.FC = () => {
           timeout_sec: Number(apiForm.llm.timeoutSec),
           max_retries: Number(apiForm.llm.maxRetries),
           anti_repeat: Boolean(apiForm.llm.antiRepeat),
+          use_responses: Boolean(apiForm.llm.useResponses),
+          web_search: Boolean(apiForm.llm.webSearch),
+          reasoning_effort: apiForm.llm.reasoningEffort,
+          max_output_tokens: Number(apiForm.llm.maxOutputTokens),
+          reuse_prefix: Boolean(apiForm.llm.reusePrefix),
         },
       },
       asrProfiles: {
@@ -2649,6 +2735,76 @@ const InterviewTrainer: React.FC = () => {
                           />
                           <span>加入随机标记</span>
                         </label>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>Responses</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(apiForm.llm.useResponses)}
+                            onChange={(event) =>
+                              handleApiFieldChange("llm", "useResponses", event.target.checked)
+                            }
+                          />
+                          <span>启用 Responses API</span>
+                        </label>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>前缀复用</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(apiForm.llm.reusePrefix)}
+                            onChange={(event) =>
+                              handleApiFieldChange("llm", "reusePrefix", event.target.checked)
+                            }
+                          />
+                          <span>仅复用提示词与题干</span>
+                        </label>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>联网检索</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(apiForm.llm.webSearch)}
+                            onChange={(event) =>
+                              handleApiFieldChange("llm", "webSearch", event.target.checked)
+                            }
+                          />
+                          <span>启用 web_search</span>
+                        </label>
+                      </div>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 80 }}>深度思考</div>
+                        <select
+                          className="it-select"
+                          value={apiForm.llm.reasoningEffort || "medium"}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "reasoningEffort", event.target.value)
+                          }
+                        >
+                          <option value="minimal">minimal</option>
+                          <option value="low">low</option>
+                          <option value="medium">medium</option>
+                          <option value="high">high</option>
+                        </select>
+                        <div style={{ minWidth: 90 }}>输出上限</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={apiForm.llm.maxOutputTokens}
+                          onChange={(event) =>
+                            handleApiFieldChange(
+                              "llm",
+                              "maxOutputTokens",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="it-settings__hint">
+                        Responses、深度思考与 web_search 会增加调用耗时与费用；前缀复用仅当前会话有效。
                       </div>
                       <div className="it-settings__actions">
                         <button

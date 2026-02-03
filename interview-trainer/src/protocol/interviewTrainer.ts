@@ -189,6 +189,11 @@ export interface ItConfigSnapshot {
     timeoutSec: number;
     maxRetries: number;
     antiRepeat?: boolean;
+    useResponses?: boolean;
+    webSearch?: boolean;
+    reasoningEffort?: string;
+    maxOutputTokens?: number;
+    reusePrefix?: boolean;
   };
   asr: {
     provider: string;

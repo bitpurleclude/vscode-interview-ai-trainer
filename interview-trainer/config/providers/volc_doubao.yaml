@@ -3,12 +3,17 @@ display_name: Doubao
 llm:
   provider: volc_doubao
   base_url: https://ark.cn-beijing.volces.com
-  model: doubao-1-5-pro-32k-250115
+  model: doubao-seed-1-8-251228
   api_key: ""
   temperature: 0.8
   top_p: 0.8
   timeout_sec: 60
   max_retries: 1
+  use_responses: true
+  web_search: true
+  reasoning_effort: medium
+  max_output_tokens: 800
+  reuse_prefix: true
 embedding:
   provider: volc_doubao
   base_url: https://ark.cn-beijing.volces.com
