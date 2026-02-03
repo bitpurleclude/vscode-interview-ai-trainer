@@ -469,6 +469,69 @@
   font-size: 12px;
 }
 
+.it-evaluation__streaming {
+  margin-top: 8px;
+}
+
+.it-evaluation__stream-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.it-evaluation__stream-card {
+  border: 1px solid var(--vscode-sideBar-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--vscode-editorWidget-background);
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+}
+
+.it-evaluation__stream-card.is-done {
+  border-color: var(--vscode-testing-iconPassed, var(--vscode-sideBar-border));
+}
+
+.it-evaluation__stream-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-evaluation__stream-title {
+  flex: 1;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.it-evaluation__stream-status {
+  font-size: 11px;
+}
+
+.it-evaluation__stream-text,
+.it-evaluation__stream-preview {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.it-evaluation__stream-preview {
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-evaluation__stream-toggle {
+  font-size: 11px;
+}
+
 .it-note-hits {
   list-style: none;
   margin: 0;

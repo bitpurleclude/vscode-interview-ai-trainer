@@ -1,26 +1,13 @@
 import axios from "axios";
-import { ItQianfanConfig, ItQianfanMessage, it_callQianfanChat } from "./it_qianfan";
-
-export type ItLlmProvider = "baidu_qianfan" | "volc_doubao" | "openai_compatible" | string;
-export type ItLlmReasoningEffort = "minimal" | "low" | "medium" | "high";
-
-export interface ItLlmConfig extends ItQianfanConfig {
-  provider: ItLlmProvider;
-  antiRepeat?: boolean;
-  useResponses?: boolean;
-  webSearch?: boolean;
-  reasoningEffort?: ItLlmReasoningEffort;
-  maxOutputTokens?: number;
-  reusePrefix?: boolean;
-  stream?: boolean;
-}
-
-export type ItLlmMessage = ItQianfanMessage;
-export type ItLlmResponse = {
-  text: string;
-  responseId?: string;
-  raw?: any;
-};
+import { it_callQianfanChat } from "./it_qianfan";
+import { ItLlmConfig, ItLlmMessage, ItLlmResponse } from "./it_llmTypes";
+import {
+  it_buildDoubaoChatRequest,
+  it_buildDoubaoResponsesRequest,
+  it_buildOpenAiChatRequest,
+  it_buildOpenAiResponsesRequest,
+  ItLlmRequestOptions,
+} from "./it_requestBuilder";
 
 function it_withNonce(messages: ItLlmMessage[]): ItLlmMessage[] {
   const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -42,32 +29,7 @@ async function it_callDoubaoChat(
   cfg: ItLlmConfig,
   messages: ItLlmMessage[],
 ): Promise<string> {
-  const base = (cfg.baseUrl || "https://ark.cn-beijing.volces.com").trim().replace(/\/$/, "");
-  const lower = base.toLowerCase();
-  const url =
-    lower.includes("/api/v3/chat/completions") || lower.endsWith("/chat/completions")
-      ? base
-      : lower.endsWith("/api/v3")
-        ? `${base}/chat/completions`
-        : lower.endsWith("/api/v3/chat")
-          ? `${base}/completions`
-          : `${base}/api/v3/chat/completions`;
-  const headers = {
-    Authorization: `Bearer ${cfg.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const payload: any = {
-    model: cfg.model || "doubao-seed-1-8-251228",
-    messages,
-    temperature: cfg.temperature,
-    top_p: cfg.topP,
-  };
-  if (cfg.reasoningEffort) {
-    payload.reasoning_effort = cfg.reasoningEffort;
-  }
-  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
-    payload.max_completion_tokens = Number(cfg.maxOutputTokens);
-  }
+  const { url, headers, payload } = it_buildDoubaoChatRequest(cfg, messages, false);
 
   let lastError: unknown = undefined;
   for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
@@ -94,22 +56,7 @@ async function it_callOpenAiCompatibleChat(
   cfg: ItLlmConfig,
   messages: ItLlmMessage[],
 ): Promise<string> {
-  const base = (cfg.baseUrl || "https://api.openai.com/v1").trim().replace(/\/$/, "");
-  const lower = base.toLowerCase();
-  const url = lower.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
-  const headers = {
-    Authorization: `Bearer ${cfg.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const payload: any = {
-    model: cfg.model || "gpt-4.1-mini",
-    messages,
-    temperature: cfg.temperature,
-    top_p: cfg.topP,
-  };
-  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
-    payload.max_tokens = Number(cfg.maxOutputTokens);
-  }
+  const { url, headers, payload } = it_buildOpenAiChatRequest(cfg, messages, false);
 
   let lastError: unknown = undefined;
   for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
@@ -134,7 +81,18 @@ async function it_callOpenAiCompatibleChat(
 }
 
 function it_extractStreamDelta(payload: any): string {
+  const eventType = payload?.type;
+  if (typeof eventType === "string") {
+    if (eventType.includes("output_text.delta") && typeof payload?.delta === "string") {
+      return payload.delta;
+    }
+    if (eventType.includes("output_text.done")) {
+      return "";
+    }
+  }
   const delta =
+    payload?.delta ??
+    payload?.output_text?.delta ??
     payload?.choices?.[0]?.delta?.content ??
     payload?.choices?.[0]?.message?.content ??
     payload?.choices?.[0]?.text ??
@@ -194,23 +152,7 @@ async function it_callOpenAiCompatibleChatStream(
   messages: ItLlmMessage[],
   onDelta?: (delta: string, full: string) => void,
 ): Promise<string> {
-  const base = (cfg.baseUrl || "https://api.openai.com/v1").trim().replace(/\/$/, "");
-  const lower = base.toLowerCase();
-  const url = lower.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
-  const headers = {
-    Authorization: `Bearer ${cfg.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const payload: any = {
-    model: cfg.model || "gpt-4.1-mini",
-    messages,
-    temperature: cfg.temperature,
-    top_p: cfg.topP,
-    stream: true,
-  };
-  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
-    payload.max_tokens = Number(cfg.maxOutputTokens);
-  }
+  const { url, headers, payload } = it_buildOpenAiChatRequest(cfg, messages, true);
 
   let lastError: unknown = undefined;
   for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
@@ -235,33 +177,7 @@ async function it_callDoubaoChatStream(
   messages: ItLlmMessage[],
   onDelta?: (delta: string, full: string) => void,
 ): Promise<string> {
-  const base = (cfg.baseUrl || "https://ark.cn-beijing.volces.com").trim().replace(/\/$/, "");
-  const lower = base.toLowerCase();
-  const url =
-    lower.includes("/api/v3/chat/completions") || lower.endsWith("/chat/completions")
-      ? base
-      : lower.endsWith("/api/v3")
-        ? `${base}/chat/completions`
-        : lower.endsWith("/api/v3/chat")
-          ? `${base}/completions`
-          : `${base}/api/v3/chat/completions`;
-  const headers = {
-    Authorization: `Bearer ${cfg.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const payload: any = {
-    model: cfg.model || "doubao-seed-1-8-251228",
-    messages,
-    temperature: cfg.temperature,
-    top_p: cfg.topP,
-    stream: true,
-  };
-  if (cfg.reasoningEffort) {
-    payload.reasoning_effort = cfg.reasoningEffort;
-  }
-  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
-    payload.max_completion_tokens = Number(cfg.maxOutputTokens);
-  }
+  const { url, headers, payload } = it_buildDoubaoChatRequest(cfg, messages, true);
 
   let lastError: unknown = undefined;
   for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
@@ -281,32 +197,6 @@ async function it_callDoubaoChatStream(
     : new Error("Doubao chat stream failed.");
 }
 
-function it_buildDoubaoResponsesUrl(base: string): string {
-  const trimmed = (base || "").trim().replace(/\/$/, "");
-  const lower = trimmed.toLowerCase();
-  if (lower.includes("/api/v3/responses") || lower.endsWith("/responses")) {
-    return trimmed;
-  }
-  if (lower.endsWith("/api/v3")) {
-    return `${trimmed}/responses`;
-  }
-  if (lower.endsWith("/api/v3/")) {
-    return `${trimmed}responses`;
-  }
-  return `${trimmed}/api/v3/responses`;
-}
-
-function it_toResponsesInput(messages: ItLlmMessage[]): any[] {
-  return messages.map((msg) => ({
-    role: msg.role,
-    content: [
-      {
-        type: "input_text",
-        text: msg.content,
-      },
-    ],
-  }));
-}
 
 function it_extractResponseText(data: any): string {
   const direct = data?.output_text ?? data?.outputText ?? data?.text;
@@ -344,44 +234,76 @@ function it_extractResponseId(data: any): string | undefined {
   return id ? String(id) : undefined;
 }
 
+async function it_callOpenAiCompatibleResponses(
+  cfg: ItLlmConfig,
+  messages: ItLlmMessage[],
+  options?: ItLlmRequestOptions,
+): Promise<ItLlmResponse> {
+  const { url, headers, payload } = it_buildOpenAiResponsesRequest(
+    cfg,
+    messages,
+    options,
+    false,
+  );
+
+  let lastError: unknown = undefined;
+  for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+    try {
+      const response = await axios.post(url, payload, {
+        headers,
+        timeout: cfg.timeoutSec * 1000,
+      });
+      return {
+        text: it_extractResponseText(response.data),
+        responseId: it_extractResponseId(response.data),
+        raw: response.data,
+      };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("OpenAI compatible responses request failed.");
+}
+
+async function it_callOpenAiCompatibleResponsesStream(
+  cfg: ItLlmConfig,
+  messages: ItLlmMessage[],
+  onDelta?: (delta: string, full: string) => void,
+  options?: ItLlmRequestOptions,
+): Promise<string> {
+  const { url, headers, payload } = it_buildOpenAiResponsesRequest(
+    cfg,
+    messages,
+    options,
+    true,
+  );
+
+  let lastError: unknown = undefined;
+  for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+    try {
+      const response = await axios.post(url, payload, {
+        headers,
+        timeout: cfg.timeoutSec * 1000,
+        responseType: "stream",
+      });
+      return await it_consumeSseStream(response.data, onDelta);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("OpenAI compatible responses stream failed.");
+}
+
 export async function it_callDoubaoResponses(
   cfg: ItLlmConfig,
   messages: ItLlmMessage[],
-  options?: {
-    previousResponseId?: string;
-    reasoningEffort?: ItLlmReasoningEffort;
-    maxOutputTokens?: number;
-    webSearch?: boolean;
-  },
+  options?: ItLlmRequestOptions,
 ): Promise<ItLlmResponse> {
-  const base = (cfg.baseUrl || "https://ark.cn-beijing.volces.com").trim();
-  const url = it_buildDoubaoResponsesUrl(base);
-  const headers = {
-    Authorization: `Bearer ${cfg.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const input = it_toResponsesInput(messages);
-  const payload: any = {
-    model: cfg.model || "doubao-seed-1-8-251228",
-    input,
-    temperature: cfg.temperature,
-    top_p: cfg.topP,
-  };
-  const reasoningEffort = options?.reasoningEffort ?? cfg.reasoningEffort;
-  if (reasoningEffort) {
-    payload.reasoning = { effort: reasoningEffort };
-  }
-  const maxOutputTokens = options?.maxOutputTokens ?? cfg.maxOutputTokens;
-  if (Number.isFinite(maxOutputTokens) && Number(maxOutputTokens) > 0) {
-    payload.max_output_tokens = Number(maxOutputTokens);
-  }
-  if (options?.previousResponseId) {
-    payload.previous_response_id = options.previousResponseId;
-  }
-  const webSearch = options?.webSearch ?? cfg.webSearch;
-  if (webSearch) {
-    payload.tools = [{ type: "web_search" }];
-  }
+  const { url, headers, payload } = it_buildDoubaoResponsesRequest(cfg, messages, options);
 
   let lastError: unknown = undefined;
   for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
@@ -410,17 +332,22 @@ export async function it_callLlmChat(
 ): Promise<string> {
   const resolvedMessages = cfg.antiRepeat ? it_withNonce(messages) : messages;
   const provider = cfg.provider || "baidu_qianfan";
+  const apiMode = cfg.apiMode || (cfg.useResponses ? "responses" : "chat");
   if (provider === "baidu_qianfan") {
     return it_callQianfanChat(cfg, resolvedMessages);
   }
   if (provider === "volc_doubao") {
-    if (cfg.useResponses) {
+    if (apiMode === "responses") {
       const resp = await it_callDoubaoResponses(cfg, resolvedMessages);
       return resp.text;
     }
     return it_callDoubaoChat(cfg, resolvedMessages);
   }
   if (provider === "openai_compatible") {
+    if (apiMode === "responses") {
+      const resp = await it_callOpenAiCompatibleResponses(cfg, resolvedMessages);
+      return resp.text;
+    }
     return it_callOpenAiCompatibleChat(cfg, resolvedMessages);
   }
   throw new Error(`Unsupported LLM provider: ${provider}`);
@@ -436,13 +363,22 @@ export async function it_callLlmChatStreaming(
 ): Promise<string> {
   const resolvedMessages = cfg.antiRepeat ? it_withNonce(messages) : messages;
   const provider = cfg.provider || "baidu_qianfan";
+  const apiMode = cfg.apiMode || (cfg.useResponses ? "responses" : "chat");
   const streamEnabled = options?.stream ?? cfg.stream ?? true;
   if (streamEnabled) {
     if (provider === "openai_compatible") {
+      if (apiMode === "responses") {
+        return it_callOpenAiCompatibleResponsesStream(
+          cfg,
+          resolvedMessages,
+          options?.onDelta,
+        );
+      }
       return it_callOpenAiCompatibleChatStream(cfg, resolvedMessages, options?.onDelta);
     }
     if (provider === "volc_doubao") {
-      const streamCfg = cfg.useResponses ? { ...cfg, useResponses: false } : cfg;
+      const streamCfg: ItLlmConfig =
+        apiMode === "responses" ? { ...cfg, useResponses: false, apiMode: "chat" } : cfg;
       return it_callDoubaoChatStream(streamCfg, resolvedMessages, options?.onDelta);
     }
   }

@@ -1,4 +1,5 @@
-import { ItLlmConfig, it_callLlmChatStreaming } from "../api/it_llm";
+import { it_callLlmChatStreaming } from "../api/it_llm";
+import { ItLlmConfig } from "../api/it_llmTypes";
 
 export interface ItParsedQuestions {
   material: string;
@@ -112,6 +113,7 @@ export async function it_parseQuestions(
     timeoutSec: Math.min(20, Number(llmConfig.timeoutSec ?? 60)),
     maxRetries: 0,
     useResponses: false,
+    apiMode: "chat",
     webSearch: false,
     reasoningEffort: "minimal",
     maxOutputTokens: undefined,
@@ -127,6 +129,9 @@ export async function it_parseQuestions(
     timeoutSec: parseConfig.timeoutSec,
     maxRetries: parseConfig.maxRetries,
     useResponses: parseConfig.useResponses,
+    apiMode: parseConfig.apiMode,
+    responsesPath: parseConfig.responsesPath,
+    toolsPreset: parseConfig.toolsPreset,
     webSearch: parseConfig.webSearch,
     reasoningEffort: parseConfig.reasoningEffort,
     maxOutputTokens: parseConfig.maxOutputTokens,

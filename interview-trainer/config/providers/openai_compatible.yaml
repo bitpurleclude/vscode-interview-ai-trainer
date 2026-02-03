@@ -9,6 +9,9 @@ llm:
   top_p: 0.8
   timeout_sec: 60
   max_retries: 1
+  api_mode: responses
+  responses_path: https://gmn.chuangzuoli.com/responses
+  tools_preset: codex_like
 embedding:
   provider: openai_compatible
   base_url: https://gmn.chuangzuoli.com/v1

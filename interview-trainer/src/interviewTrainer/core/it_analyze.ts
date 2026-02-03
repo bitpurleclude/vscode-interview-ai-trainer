@@ -17,7 +17,8 @@ import { v4 as uuidv4 } from "uuid";
 import { it_callBaiduAsr } from "../api/it_baidu";
 import { it_callVolcAsr } from "../api/it_volc_asr";
 import { ItApiConfig } from "../api/it_apiConfig";
-import { it_callLlmChat, it_callLlmChatStreaming, ItLlmConfig } from "../api/it_llm";
+import { it_callLlmChat, it_callLlmChatStreaming } from "../api/it_llm";
+import { ItLlmConfig } from "../api/it_llmTypes";
 import { it_evaluateAnswer } from "./it_evaluation";
 import {
   ItCorpusItem,
@@ -70,6 +71,12 @@ interface ItAnalyzeDeps {
   }) => void;
   onStream?: (update: {
     step: ItWorkflowStep;
+    text: string;
+    done?: boolean;
+    reset?: boolean;
+  }) => void;
+  onEvalStream?: (update: {
+    questionIndex: number;
     text: string;
     done?: boolean;
     reset?: boolean;
@@ -423,6 +430,19 @@ function it_getLlmConfig(
     : "https://qianfan.baidubce.com/v2";
   const retryValue = Number(llm.max_retries ?? 1);
   const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
+  const useResponses = Boolean(
+    llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false),
+  );
+  const apiModeRaw = llm.api_mode ?? llm.apiMode;
+  const apiMode = apiModeRaw
+    ? String(apiModeRaw).toLowerCase() === "responses"
+      ? "responses"
+      : "chat"
+    : useResponses
+      ? "responses"
+      : "chat";
+  const responsesPath = llm.responses_path ?? llm.responsesPath ?? "";
+  const toolsPreset = llm.tools_preset ?? llm.toolsPreset ?? "";
   return {
     provider,
     apiKey,
@@ -435,9 +455,10 @@ function it_getLlmConfig(
     timeoutSec: Number(llm.timeout_sec ?? 60),
     maxRetries: resolvedRetries,
     antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
-    useResponses: Boolean(
-      llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false),
-    ),
+    useResponses,
+    apiMode,
+    responsesPath: responsesPath ? String(responsesPath) : "",
+    toolsPreset: toolsPreset ? String(toolsPreset) : "",
     webSearch: Boolean(
       llm.web_search ?? llm.webSearch ?? (isDoubao ? true : false),
     ),
@@ -2246,6 +2267,26 @@ export async function it_runAnalysis(
         envConfig.llm?.useResponses ??
         (evalIsDoubao ? true : false),
     ),
+    apiMode:
+      evaluationLlmConfig?.apiMode ??
+      envConfig.llm?.api_mode ??
+      envConfig.llm?.apiMode ??
+      ((evaluationLlmConfig?.useResponses ??
+        envConfig.llm?.use_responses ??
+        envConfig.llm?.useResponses ??
+        (evalIsDoubao ? true : false))
+        ? "responses"
+        : "chat"),
+    responsesPath:
+      evaluationLlmConfig?.responsesPath ??
+      envConfig.llm?.responses_path ??
+      envConfig.llm?.responsesPath ??
+      "",
+    toolsPreset:
+      evaluationLlmConfig?.toolsPreset ??
+      envConfig.llm?.tools_preset ??
+      envConfig.llm?.toolsPreset ??
+      "",
     webSearch: Boolean(
       evaluationLlmConfig?.webSearch ??
         envConfig.llm?.web_search ??
@@ -2324,50 +2365,58 @@ export async function it_runAnalysis(
     "running",
   );
   const evaluations: ItEvaluation[] = [];
-  const streamEnabled = Boolean(deps.onStream);
+  const streamEnabled = Boolean(deps.onStream || deps.onEvalStream);
   if (streamEnabled) {
-    for (let idx = 0; idx < evalQuestions.length; idx += 1) {
-      const question = evalQuestions[idx];
-      const result = await it_evaluateAnswer(
-        question,
-        evalAnswers[idx]?.answer || "",
-        evalAcoustics[idx],
-        evalNotes[idx] || [],
-        evaluationConfig,
-        [question],
-        [{ question, answer: evalAnswers[idx]?.answer || "" }],
-        questionText,
-        evalQuestions,
-        [
-          request.systemPrompt?.trim(),
-          request.perQuestionSystemPrompts?.[idx]?.trim(),
-        ]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
-        [
-          request.demoPrompt?.trim(),
-          request.perQuestionDemoPrompts?.[idx]?.trim(),
-        ]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
-        deps.onCorpusTrace,
-        deps.onStream
-          ? (update) => deps.onStream?.({ step: "evaluation", ...update })
-          : undefined,
-      );
-      evaluations.push(result);
-      completed += 1;
-      const progress = Math.min(
-        95,
-        baseProgress + Math.round((spanProgress * completed) / totalQuestions),
-      );
-      reportProgress(
-        "evaluation",
-        progress,
-        `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
-        "running",
-      );
-    }
+    const tasks = evalQuestions.map((question, idx) =>
+      (async () => {
+        const streamHandler =
+          deps.onStream || deps.onEvalStream
+            ? (update: { text: string; done?: boolean; reset?: boolean }) => {
+                deps.onStream?.({ step: "evaluation", ...update });
+                deps.onEvalStream?.({ questionIndex: idx, ...update });
+              }
+            : undefined;
+        const result = await it_evaluateAnswer(
+          question,
+          evalAnswers[idx]?.answer || "",
+          evalAcoustics[idx],
+          evalNotes[idx] || [],
+          evaluationConfig,
+          [question],
+          [{ question, answer: evalAnswers[idx]?.answer || "" }],
+          questionText,
+          evalQuestions,
+          [
+            request.systemPrompt?.trim(),
+            request.perQuestionSystemPrompts?.[idx]?.trim(),
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined,
+          [
+            request.demoPrompt?.trim(),
+            request.perQuestionDemoPrompts?.[idx]?.trim(),
+          ]
+            .filter(Boolean)
+            .join("\n\n") || undefined,
+          deps.onCorpusTrace,
+          streamHandler,
+        );
+        evaluations[idx] = result;
+        completed += 1;
+        const progress = Math.min(
+          95,
+          baseProgress + Math.round((spanProgress * completed) / totalQuestions),
+        );
+        reportProgress(
+          "evaluation",
+          progress,
+          `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
+          "running",
+        );
+        return result;
+      })(),
+    );
+    await Promise.all(tasks);
   } else {
     const parallel = await Promise.all(
       evalQuestions.map((question, idx) =>

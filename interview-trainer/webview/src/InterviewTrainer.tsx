@@ -326,6 +326,16 @@ const InterviewTrainer: React.FC = () => {
       }
     >
   >({});
+  const [evaluationStreams, setEvaluationStreams] = useState<
+    Record<
+      number,
+      {
+        text: string;
+        collapsed: boolean;
+        done?: boolean;
+      }
+    >
+  >({});
   const [historyItems, setHistoryItems] = useState<ItHistoryItem[]>([]);
   const [showNoteHits, setShowNoteHits] = useState(false);
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
@@ -358,6 +368,9 @@ const InterviewTrainer: React.FC = () => {
       maxRetries: 1,
       antiRepeat: false,
       useResponses: false,
+      apiMode: "chat",
+      responsesPath: "/v1/responses",
+      toolsPreset: "",
       webSearch: false,
       reasoningEffort: "medium",
       maxOutputTokens: 800,
@@ -387,6 +400,7 @@ const InterviewTrainer: React.FC = () => {
     id: "",
     name: "",
   });
+  const [selectedLlmProfileId, setSelectedLlmProfileId] = useState("");
   const [savingLlmTasks, setSavingLlmTasks] = useState(false);
   const [llmTaskSaveMessage, setLlmTaskSaveMessage] = useState<string | null>(null);
   const [savingLlmProfile, setSavingLlmProfile] = useState(false);
@@ -462,12 +476,16 @@ const InterviewTrainer: React.FC = () => {
         (cfg.asr && cfg.asr.provider === asrProvider ? cfg.asr : null) ||
         (cfg.asrProfiles && cfg.asrProfiles[asrProvider]) ||
         (asrProviderProfile?.asr as any);
+      const isOpenAiCompat = provider === "openai_compatible";
       const llmDefaults =
         provider === "volc_doubao"
           ? {
               baseUrl: "https://ark.cn-beijing.volces.com",
               model: "doubao-seed-1-8-251228",
               useResponses: true,
+              apiMode: "responses",
+              responsesPath: "/api/v3/responses",
+              toolsPreset: "",
               webSearch: true,
               reasoningEffort: "medium",
               maxOutputTokens: 800,
@@ -478,6 +496,9 @@ const InterviewTrainer: React.FC = () => {
               baseUrl: "https://qianfan.baidubce.com/v2",
               model: "ernie-4.5-turbo-128k",
               useResponses: false,
+              apiMode: isOpenAiCompat ? "responses" : "chat",
+              responsesPath: "/v1/responses",
+              toolsPreset: isOpenAiCompat ? "codex_like" : "",
               webSearch: false,
               reasoningEffort: "medium",
               maxOutputTokens: 800,
@@ -517,6 +538,24 @@ const InterviewTrainer: React.FC = () => {
               llmProfile?.useResponses ??
               llmDefaults.useResponses,
           ),
+          apiMode: (() => {
+            const raw = llmProfile?.api_mode ?? llmProfile?.apiMode;
+            if (raw) {
+              return String(raw).toLowerCase() === "responses" ? "responses" : "chat";
+            }
+            const fallback = Boolean(
+              llmProfile?.use_responses ??
+                llmProfile?.useResponses ??
+                llmDefaults.useResponses,
+            );
+            return fallback ? "responses" : "chat";
+          })(),
+          responsesPath:
+            llmProfile?.responses_path ??
+            llmProfile?.responsesPath ??
+            llmDefaults.responsesPath,
+          toolsPreset:
+            llmProfile?.tools_preset ?? llmProfile?.toolsPreset ?? llmDefaults.toolsPreset,
           webSearch: Boolean(
             llmProfile?.web_search ?? llmProfile?.webSearch ?? llmDefaults.webSearch,
           ),
@@ -633,6 +672,84 @@ const InterviewTrainer: React.FC = () => {
     (id: string) => apiForm.llmProfiles?.[id]?.display_name || id,
     [apiForm.llmProfiles],
   );
+  const resolveLlmApiMode = useCallback((raw: unknown, fallbackUseResponses: boolean) => {
+    if (raw) {
+      return String(raw).toLowerCase() === "responses" ? "responses" : "chat";
+    }
+    return fallbackUseResponses ? "responses" : "chat";
+  }, []);
+  const applyLlmProfileToForm = useCallback(
+    (profile: Record<string, any>) => {
+      if (!profile) {
+        return;
+      }
+      setApiForm((prev) => {
+        const fallbackUseResponses = Boolean(
+          profile.use_responses ?? profile.useResponses ?? prev.llm.useResponses,
+        );
+        const apiMode = resolveLlmApiMode(profile.api_mode ?? profile.apiMode, fallbackUseResponses);
+        return {
+          ...prev,
+          llm: {
+            ...prev.llm,
+            provider: profile.provider || prev.llm.provider,
+            baseUrl: profile.base_url || profile.baseUrl || prev.llm.baseUrl,
+            model: profile.model || prev.llm.model,
+            apiKey: profile.api_key || profile.apiKey || prev.llm.apiKey,
+            temperature: Number(profile.temperature ?? prev.llm.temperature),
+            topP: Number(profile.top_p ?? profile.topP ?? prev.llm.topP),
+            timeoutSec: Number(profile.timeout_sec ?? profile.timeoutSec ?? prev.llm.timeoutSec),
+            maxRetries: Number(profile.max_retries ?? profile.maxRetries ?? prev.llm.maxRetries),
+            antiRepeat: Boolean(
+              profile.anti_repeat ?? profile.antiRepeat ?? prev.llm.antiRepeat,
+            ),
+            useResponses: fallbackUseResponses,
+            apiMode,
+            responsesPath:
+              profile.responses_path ?? profile.responsesPath ?? prev.llm.responsesPath,
+            toolsPreset: profile.tools_preset ?? profile.toolsPreset ?? prev.llm.toolsPreset,
+            webSearch: Boolean(profile.web_search ?? profile.webSearch ?? prev.llm.webSearch),
+            reasoningEffort:
+              profile.reasoning_effort ?? profile.reasoningEffort ?? prev.llm.reasoningEffort,
+            maxOutputTokens: Number(
+              profile.max_output_tokens ??
+                profile.maxOutputTokens ??
+                prev.llm.maxOutputTokens,
+            ),
+            reusePrefix: Boolean(
+              profile.reuse_prefix ?? profile.reusePrefix ?? prev.llm.reusePrefix,
+            ),
+            stream: Boolean(profile.stream ?? profile.stream_enabled ?? prev.llm.stream),
+          },
+        };
+      });
+    },
+    [resolveLlmApiMode],
+  );
+  const handleLoadLlmProfile = useCallback(
+    (profileId: string) => {
+      setSelectedLlmProfileId(profileId);
+      if (!profileId) {
+        return;
+      }
+      const profile = apiForm.llmProfiles?.[profileId];
+      if (!profile) {
+        return;
+      }
+      applyLlmProfileToForm(profile);
+      setLlmProfileDraft({
+        id: profileId,
+        name: profile.display_name || "",
+      });
+    },
+    [apiForm.llmProfiles, applyLlmProfileToForm],
+  );
+  const handleResetLlmProfile = useCallback(() => {
+    if (config) {
+      applyProfileToForm(config);
+    }
+    setSelectedLlmProfileId("");
+  }, [applyProfileToForm, config]);
   const embeddingWarmup = itState.embeddingWarmup;
   const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
 
@@ -694,6 +811,15 @@ const InterviewTrainer: React.FC = () => {
             topP: 0.8,
             timeoutSec: 60,
             maxRetries: 1,
+            useResponses: false,
+            apiMode: "chat",
+            responsesPath: "/v1/responses",
+            toolsPreset: "",
+            webSearch: false,
+            reasoningEffort: "medium",
+            maxOutputTokens: 800,
+            reusePrefix: false,
+            stream: true,
           },
           asr: {
             provider: "baidu_vop",
@@ -809,11 +935,11 @@ const InterviewTrainer: React.FC = () => {
         const current = prev[step] || { text: "", collapsed: false, done: false };
         const reset = Boolean(data?.reset);
         const done = Boolean(data?.done);
-        const nextText = typeof data?.text === "string"
-          ? data.text
-          : reset
-            ? ""
-            : current.text;
+        const rawText =
+          typeof data?.text === "string" ? data.text : reset ? "" : current.text;
+        const previewLimit = Math.max(50, streamingSettings.previewChars || 200);
+        const nextText =
+          rawText.length > previewLimit ? rawText.slice(-previewLimit) : rawText;
         let collapsed = reset ? false : current.collapsed;
         if (done && streamingSettings.autoCollapse) {
           collapsed = true;
@@ -831,11 +957,54 @@ const InterviewTrainer: React.FC = () => {
     return () => {
       disposeStream();
     };
-  }, [on, streamingSettings.enabled, streamingSettings.autoCollapse]);
+  }, [on, streamingSettings.enabled, streamingSettings.autoCollapse, streamingSettings.previewChars]);
+
+  useEffect(() => {
+    const disposeStream = on("it/evaluationStreamUpdate", (data) => {
+      if (!streamingSettings.enabled) {
+        return;
+      }
+      const index = Number(data?.questionIndex ?? 0);
+      if (!Number.isFinite(index) || index < 0) {
+        return;
+      }
+      setEvaluationStreams((prev) => {
+        const current = prev[index] || { text: "", collapsed: false, done: false };
+        const reset = Boolean(data?.reset);
+        const done = Boolean(data?.done);
+        const rawText =
+          typeof data?.text === "string" ? data.text : reset ? "" : current.text;
+        const previewLimit = Math.max(50, streamingSettings.previewChars || 200);
+        const nextText =
+          rawText.length > previewLimit ? rawText.slice(-previewLimit) : rawText;
+        let collapsed = reset ? false : current.collapsed;
+        if (done && streamingSettings.autoCollapse) {
+          collapsed = true;
+        }
+        return {
+          ...prev,
+          [index]: {
+            text: nextText,
+            collapsed,
+            done,
+          },
+        };
+      });
+    });
+    return () => {
+      disposeStream();
+    };
+  }, [on, streamingSettings.enabled, streamingSettings.autoCollapse, streamingSettings.previewChars]);
 
   useEffect(() => {
     setShowRawOutput(false);
   }, [analysisResult]);
+
+  useEffect(() => {
+    if (selectedLlmProfileId && !apiForm.llmProfiles?.[selectedLlmProfileId]) {
+      setSelectedLlmProfileId("");
+    }
+  }, [apiForm.llmProfiles, selectedLlmProfileId]);
 
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
@@ -853,6 +1022,17 @@ const InterviewTrainer: React.FC = () => {
         .filter(Boolean),
     [questionList],
   );
+  const evaluationStreamQuestions = useMemo(() => {
+    const list =
+      (analysisResult?.questionList && analysisResult.questionList.length
+        ? analysisResult.questionList
+        : parsedQuestionList) || [];
+    if (list.length) {
+      return list.slice(0, 3);
+    }
+    const fallback = questionText.trim();
+    return fallback ? [fallback] : [];
+  }, [analysisResult, parsedQuestionList, questionText]);
   const buildQuestionParseInput = useCallback(() => {
     const text = questionText.trim();
     const list = questionList.trim();
@@ -1252,6 +1432,7 @@ const InterviewTrainer: React.FC = () => {
       return;
     }
     setStepStreams({});
+    setEvaluationStreams({});
     setIsProcessing(true);
     setShowNoteHits(false);
     analysisCancelledRef.current = false;
@@ -1460,12 +1641,16 @@ const InterviewTrainer: React.FC = () => {
       if (scope === "llm" && key === "provider") {
         const provider = String(value);
         const providerProfile = providerProfiles?.[provider]?.llm || {};
+        const isOpenAiCompat = provider === "openai_compatible";
         const defaults =
           provider === "volc_doubao"
               ? {
                   baseUrl: "https://ark.cn-beijing.volces.com",
                   model: "doubao-seed-1-8-251228",
                   useResponses: true,
+                  apiMode: "responses",
+                  responsesPath: "/api/v3/responses",
+                  toolsPreset: "",
                   webSearch: true,
                   reasoningEffort: "medium",
                   maxOutputTokens: 800,
@@ -1476,6 +1661,9 @@ const InterviewTrainer: React.FC = () => {
                   baseUrl: "https://qianfan.baidubce.com/v2",
                   model: "ernie-4.5-turbo-128k",
                   useResponses: false,
+                  apiMode: isOpenAiCompat ? "responses" : "chat",
+                  responsesPath: "/v1/responses",
+                  toolsPreset: isOpenAiCompat ? "codex_like" : "",
                   webSearch: false,
                   reasoningEffort: "medium",
                   maxOutputTokens: 800,
@@ -1517,6 +1705,25 @@ const InterviewTrainer: React.FC = () => {
                 defaults.useResponses ??
                 prev.llm.useResponses,
             ),
+            apiMode: (() => {
+              const raw = nextProfile.api_mode ?? nextProfile.apiMode;
+              if (raw) {
+                return String(raw).toLowerCase() === "responses" ? "responses" : "chat";
+              }
+              const fallback = Boolean(
+                nextProfile.use_responses ??
+                  nextProfile.useResponses ??
+                  defaults.useResponses ??
+                  prev.llm.useResponses,
+              );
+              return fallback ? "responses" : "chat";
+            })(),
+            responsesPath:
+              nextProfile.responses_path ??
+              nextProfile.responsesPath ??
+              defaults.responsesPath,
+            toolsPreset:
+              nextProfile.tools_preset ?? nextProfile.toolsPreset ?? defaults.toolsPreset,
             webSearch: Boolean(
               nextProfile.web_search ??
                 nextProfile.webSearch ??
@@ -1546,6 +1753,18 @@ const InterviewTrainer: React.FC = () => {
                 defaults.stream ??
                 prev.llm.stream,
             ),
+          },
+        };
+      }
+      if (scope === "llm" && key === "apiMode") {
+        const mode = String(value || "chat");
+        const resolved = mode === "responses" ? "responses" : "chat";
+        return {
+          ...prev,
+          llm: {
+            ...prev.llm,
+            apiMode: resolved,
+            useResponses: resolved === "responses",
           },
         };
       }
@@ -1628,6 +1847,9 @@ const InterviewTrainer: React.FC = () => {
         maxRetries: Number(apiForm.llm.maxRetries),
         antiRepeat: Boolean(apiForm.llm.antiRepeat),
         useResponses: Boolean(apiForm.llm.useResponses),
+        apiMode: apiForm.llm.apiMode,
+        responsesPath: apiForm.llm.responsesPath,
+        toolsPreset: apiForm.llm.toolsPreset,
         webSearch: Boolean(apiForm.llm.webSearch),
         reasoningEffort: apiForm.llm.reasoningEffort,
         maxOutputTokens: Number(apiForm.llm.maxOutputTokens),
@@ -1660,6 +1882,9 @@ const InterviewTrainer: React.FC = () => {
           max_retries: Number(apiForm.llm.maxRetries),
           anti_repeat: Boolean(apiForm.llm.antiRepeat),
           use_responses: Boolean(apiForm.llm.useResponses),
+          api_mode: apiForm.llm.apiMode,
+          responses_path: apiForm.llm.responsesPath,
+          tools_preset: apiForm.llm.toolsPreset,
           web_search: Boolean(apiForm.llm.webSearch),
           reasoning_effort: apiForm.llm.reasoningEffort,
           max_output_tokens: Number(apiForm.llm.maxOutputTokens),
@@ -2568,6 +2793,69 @@ const InterviewTrainer: React.FC = () => {
                       </div>
                     </div>
                   ) : null}
+                  {streamingSettings.enabled && (
+                    <div className="it-evaluation__section it-evaluation__streaming">
+                      <div className="it-section-header">
+                        <h4>面试评价实时输出（仅保留最新 {Math.max(50, streamingSettings.previewChars || 200)} 字）</h4>
+                      </div>
+                      <div className="it-evaluation__stream-grid">
+                        {[0, 1, 2].map((idx) => {
+                          const stream = evaluationStreams[idx];
+                          const label =
+                            evaluationStreamQuestions[idx] || `第${idx + 1}题`;
+                          const isActive = Boolean(stream?.text);
+                          const status = stream?.done
+                            ? "完成"
+                            : isActive
+                              ? "输出中"
+                              : "等待";
+                          return (
+                            <div
+                              key={`eval-stream-${idx}`}
+                              className={`it-evaluation__stream-card ${
+                                stream?.done ? "is-done" : ""
+                              }`}
+                            >
+                              <div className="it-evaluation__stream-header">
+                                <span className="it-evaluation__stream-title">{label}</span>
+                                <span className="it-evaluation__stream-status">{status}</span>
+                                {isActive && (
+                                  <button
+                                    type="button"
+                                    className="it-link-button it-evaluation__stream-toggle"
+                                    onClick={() =>
+                                      setEvaluationStreams((prev) => ({
+                                        ...prev,
+                                        [idx]: {
+                                          ...(prev[idx] || {
+                                            text: "",
+                                            collapsed: false,
+                                            done: false,
+                                          }),
+                                          collapsed: !prev[idx]?.collapsed,
+                                        },
+                                      }))
+                                    }
+                                  >
+                                    {stream?.collapsed ? "展开" : "收起"}
+                                  </button>
+                                )}
+                              </div>
+                              {stream?.collapsed ? (
+                                <div className="it-evaluation__stream-preview">
+                                  {stream?.text || "（等待输出）"}
+                                </div>
+                              ) : (
+                                <div className="it-evaluation__stream-text">
+                                  {stream?.text || "（等待输出）"}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {evaluationPreview ? (
                     <>
                       <div className="it-evaluation__summary">
@@ -3045,19 +3333,51 @@ const InterviewTrainer: React.FC = () => {
                           <span>加入随机标记</span>
                         </label>
                       </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Responses</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(apiForm.llm.useResponses)}
-                            onChange={(event) =>
-                              handleApiFieldChange("llm", "useResponses", event.target.checked)
-                            }
-                          />
-                          <span>启用 Responses API</span>
-                        </label>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 80 }}>API 模式</div>
+                        <select
+                          className="it-select"
+                          value={apiForm.llm.apiMode || (apiForm.llm.useResponses ? "responses" : "chat")}
+                          onChange={(event) =>
+                            handleApiFieldChange("llm", "apiMode", event.target.value)
+                          }
+                        >
+                          <option value="chat">Chat Completions</option>
+                          <option value="responses">Responses</option>
+                        </select>
                       </div>
+                      {String(apiForm.llm.apiMode || "") === "responses" && (
+                        <>
+                          <div className="it-input-row it-input-row--nowrap">
+                            <div style={{ minWidth: 80 }}>Responses Path</div>
+                            <input
+                              className="it-input"
+                              value={apiForm.llm.responsesPath}
+                              placeholder="/v1/responses 或 /responses"
+                              onChange={(event) =>
+                                handleApiFieldChange("llm", "responsesPath", event.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="it-input-row it-input-row--nowrap">
+                            <div style={{ minWidth: 80 }}>Tools 预设</div>
+                            <select
+                              className="it-select"
+                              value={apiForm.llm.toolsPreset || ""}
+                              onChange={(event) =>
+                                handleApiFieldChange("llm", "toolsPreset", event.target.value)
+                              }
+                            >
+                              <option value="">不使用</option>
+                              <option value="codex_like">codex_like（GMN 网关）</option>
+                            </select>
+                          </div>
+                          <div className="it-settings__hint">
+                            Responses 路径可填完整 URL（如 https://gmn.chuangzuoli.com/responses），
+                            或相对路径（/v1/responses、/responses）。GMN 网关需要 toolsPreset=codex_like。
+                          </div>
+                        </>
+                      )}
                       <div className="it-input-row">
                         <div style={{ minWidth: 80 }}>流式输出</div>
                         <label className="it-toggle">
@@ -3211,7 +3531,29 @@ const InterviewTrainer: React.FC = () => {
                     <div className="it-question">
                       <div className="it-settings__title">LLM Profiles</div>
                       <div className="it-settings__desc">
-                        保存当前 LLM 参数为可复用 Profile，用于分阶段选择
+                        保存当前 LLM 参数为可复用 Profile；可一键载入已有 Profile 到左侧表单
+                      </div>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 90 }}>载入 Profile</div>
+                        <select
+                          className="it-select"
+                          value={selectedLlmProfileId}
+                          onChange={(event) => handleLoadLlmProfile(event.target.value)}
+                        >
+                          <option value="">不载入（手动编辑）</option>
+                          {llmProfileList.map((item) => (
+                            <option key={item} value={item}>
+                              {getLlmProfileLabel(item)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={uiLocked}
+                          onClick={handleResetLlmProfile}
+                        >
+                          载入默认
+                        </button>
                       </div>
                       <div className="it-input-row it-input-row--nowrap">
                         <div style={{ minWidth: 90 }}>Profile ID</div>

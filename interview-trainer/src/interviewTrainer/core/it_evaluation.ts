@@ -3,16 +3,12 @@
   ItEvaluation,
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
-import {
-  it_callDoubaoResponses,
-  it_callLlmChat,
-  it_callLlmChatStreaming,
-  ItLlmConfig,
-} from "../api/it_llm";
+import { it_callDoubaoResponses, it_callLlmChat, it_callLlmChatStreaming } from "../api/it_llm";
+import { ItLlmConfig, ItLlmProvider } from "../api/it_llmTypes";
 import { it_hashText } from "../utils/it_text";
 
 export interface ItEvaluationConfig extends ItLlmConfig {
-  provider: "baidu_qianfan" | "heuristic" | "volc_doubao";
+  provider: ItLlmProvider | "heuristic";
   language: string;
   dimensions: string[];
   answerMode?: "single" | "two-step";
@@ -384,6 +380,12 @@ async function it_generateRevisedByOutline(
       maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
       antiRepeat: config.antiRepeat,
       useResponses: config.useResponses,
+      apiMode: config.apiMode,
+      responsesPath: config.responsesPath,
+      toolsPreset: config.toolsPreset,
+      include: config.include,
+      store: config.store,
+      promptCacheKey: config.promptCacheKey,
       webSearch: config.webSearch,
       reasoningEffort: config.reasoningEffort,
       maxOutputTokens: config.maxOutputTokens,
@@ -475,6 +477,12 @@ async function it_generateOutlines(
       maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
       antiRepeat: config.antiRepeat,
       useResponses: config.useResponses,
+      apiMode: config.apiMode,
+      responsesPath: config.responsesPath,
+      toolsPreset: config.toolsPreset,
+      include: config.include,
+      store: config.store,
+      promptCacheKey: config.promptCacheKey,
       webSearch: config.webSearch,
       reasoningEffort: config.reasoningEffort,
       maxOutputTokens: config.maxOutputTokens,
@@ -970,7 +978,7 @@ export async function it_evaluateAnswer(
   let finalPromptText = promptText;
   const usePrefixReuse =
     config.provider === "volc_doubao" &&
-    Boolean(config.useResponses) &&
+    Boolean(config.apiMode === "responses" || config.useResponses) &&
     Boolean(config.reusePrefix) &&
     !config.antiRepeat;
   const prefixKey = usePrefixReuse
@@ -996,6 +1004,12 @@ export async function it_evaluateAnswer(
         maxRetries: resolvedRetries,
         antiRepeat: config.antiRepeat,
         useResponses: config.useResponses,
+        apiMode: config.apiMode,
+        responsesPath: config.responsesPath,
+        toolsPreset: config.toolsPreset,
+        include: config.include,
+        store: config.store,
+        promptCacheKey: config.promptCacheKey,
         webSearch: config.webSearch,
         reasoningEffort: config.reasoningEffort,
         maxOutputTokens: config.maxOutputTokens,

@@ -195,6 +195,9 @@ export interface ItConfigSnapshot {
     maxRetries: number;
     antiRepeat?: boolean;
     useResponses?: boolean;
+    apiMode?: string;
+    responsesPath?: string;
+    toolsPreset?: string;
     webSearch?: boolean;
     reasoningEffort?: string;
     maxOutputTokens?: number;

@@ -9,6 +9,9 @@ llm:
   top_p: 0.8
   timeout_sec: 60
   max_retries: 1
+  api_mode: responses
+  responses_path: /api/v3/responses
+  tools_preset: ""
   use_responses: true
   web_search: true
   reasoning_effort: medium

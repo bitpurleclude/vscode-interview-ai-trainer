@@ -1,4 +1,4 @@
-import path from "path";
+﻿import path from "path";
 import os from "os";
 import fs from "fs";
 import { spawn } from "child_process";
@@ -19,16 +19,15 @@ import {
 } from "../protocol/interviewTrainer";
 
 import {
-  it_loadConfigBundle,
   ItApiConfig,
+  ItConfigBundle,
   it_applySecretOverrides,
   it_ensureConfigFiles,
   it_getUserProviderDir,
-  it_saveApiConfig,
-  it_saveSkillConfig,
-  it_saveProviderConfig,
 } from "./api/it_apiConfig";
-import { it_callLlmChat, ItLlmConfig } from "./api/it_llm";
+import { ItConfigService } from "./api/it_configService";
+import { it_callLlmChat } from "./api/it_llm";
+import { ItLlmConfig } from "./api/it_llmTypes";
 import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_callVolcAsr } from "./api/it_volc_asr";
 import { it_callEmbedding } from "./api/it_embedding";
@@ -102,7 +101,8 @@ const IT_PROGRESS_WEIGHTS: Partial<Record<ItWorkflowStep, number>> = {
 export class InterviewTrainerExtension implements vscode.Disposable {
   private state: ItState = { ...IT_STATUS_INIT };
   private configSnapshot: ItConfigSnapshot;
-  private configBundle: ReturnType<typeof it_loadConfigBundle>;
+  private configBundle: ItConfigBundle;
+  private configService: ItConfigService;
   private traceLogsEnabled = false;
   private recordingChild: import("child_process").ChildProcess | null = null;
   private recordingTempDir: string | null = null;
@@ -128,7 +128,8 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     private readonly webviewProtocol: WebviewProtocol,
   ) {
     this.outputChannel = vscode.window.createOutputChannel("Interview Trainer");
-    this.configBundle = it_loadConfigBundle(this.context);
+    this.configService = new ItConfigService(this.context);
+    this.configBundle = this.configService.loadBundle();
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
     this.updateCorpusWatchers();
     this.registerHandlers();
@@ -343,6 +344,9 @@ export class InterviewTrainerExtension implements vscode.Disposable {
             llmConfig.useResponses ??
             (isDoubao ? true : false),
         ),
+        apiMode: llmConfig.api_mode ?? llmConfig.apiMode,
+        responsesPath: llmConfig.responses_path ?? llmConfig.responsesPath ?? "",
+        toolsPreset: llmConfig.tools_preset ?? llmConfig.toolsPreset ?? "",
         webSearch: Boolean(
           llmConfig.web_search ?? llmConfig.webSearch ?? (isDoubao ? true : false),
         ),
@@ -462,7 +466,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   private async refreshConfigSnapshot(): Promise<ItConfigSnapshot> {
-    this.configBundle = it_loadConfigBundle(this.context);
+    this.configBundle = this.configService.loadBundle();
     this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
     this.configBundle.api = await it_applySecretOverrides(
       this.context,
@@ -527,6 +531,15 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const defaultBase = isDoubao
       ? "https://ark.cn-beijing.volces.com"
       : "https://qianfan.baidubce.com/v2";
+    const apiModeRaw = llm.api_mode ?? llm.apiMode;
+    const apiMode = apiModeRaw
+      ? String(apiModeRaw).toLowerCase() === "responses"
+        ? "responses"
+        : "chat"
+      : undefined;
+    const useResponses = apiMode
+      ? apiMode === "responses"
+      : Boolean(llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false));
     return {
       provider: llm.provider,
       apiKey: llm.api_key || "",
@@ -539,9 +552,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       timeoutSec: Number(llm.timeout_sec ?? 60),
       maxRetries: Number(llm.max_retries ?? 1),
       antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
-      useResponses: Boolean(
-        llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false),
-      ),
+      useResponses,
+      apiMode,
+      responsesPath: llm.responses_path ?? llm.responsesPath ?? "",
+      toolsPreset: llm.tools_preset ?? llm.toolsPreset ?? "",
       webSearch: Boolean(
         llm.web_search ?? llm.webSearch ?? (isDoubao ? true : false),
       ),
@@ -609,7 +623,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     } catch {
       return;
     }
-    this.configBundle = it_loadConfigBundle(this.context);
+    this.configBundle = this.configService.loadBundle();
     const retrievalEnabled = this.configBundle.skill.retrieval?.enabled !== false;
     if (!retrievalEnabled) {
       this.updateEmbeddingWarmup({
@@ -985,7 +999,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     });
     this.webviewProtocol.on("it/parseQuestions", async (msg) => {
       const text = String(msg.data?.text || "");
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
       this.configBundle.api = await it_applySecretOverrides(
         this.context,
@@ -1068,7 +1082,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
             snrDb: undefined,
           };
 
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
       this.configBundle.api = await it_applySecretOverrides(
         this.context,
@@ -1155,7 +1169,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     });
     this.webviewProtocol.on("it/setRetrievalEnabled", async (msg) => {
       const enabled = Boolean(msg.data?.enabled);
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.skill = {
         ...this.configBundle.skill,
         retrieval: {
@@ -1163,7 +1177,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           enabled,
         },
       };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       if (enabled) {
@@ -1174,7 +1188,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.webviewProtocol.on("it/updateRetrievalSettings", async (msg) => {
       const payload = msg.data || {};
       const incoming = payload.retrieval || {};
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       const current = this.configBundle.skill.retrieval || {};
       const currentVector = current.vector || {};
       const incomingVector = incoming.vector || {};
@@ -1234,7 +1248,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         const existing = this.configBundle.providers?.[embeddingProvider] || {
           provider: embeddingProvider,
         };
-        it_saveProviderConfig(this.context, embeddingProvider, {
+        this.configService.saveProviderConfig(embeddingProvider, {
           ...existing,
           provider: embeddingProvider,
           embedding: {
@@ -1264,7 +1278,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           resolvedEmbeddingKey,
         );
       }
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       this.scheduleEmbeddingWarmup("retrieval-update");
@@ -1273,7 +1287,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.webviewProtocol.on("it/updateTopicSettings", async (msg) => {
       const payload = msg.data || {};
       const incoming = payload.topics || {};
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       const current = this.configBundle.skill.topics || {};
       const titleModeRaw = String(
         incoming.titleMode ?? incoming.title_mode ?? current.title_mode ?? "llm",
@@ -1291,7 +1305,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           max_title_len: maxTitleLen,
         },
       };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { titleMode, maxTitleLen };
@@ -1299,18 +1313,12 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.webviewProtocol.on("it/updateLlmTaskProfiles", async (msg) => {
       const payload = msg.data || {};
       const tasks = payload.tasks || {};
-      this.configBundle = it_loadConfigBundle(this.context);
-      const current = this.configBundle.skill.llm_tasks || {};
-      this.configBundle.skill = {
-        ...this.configBundle.skill,
-        llm_tasks: {
-          ...current,
-          question_parse: String(tasks.questionParse || tasks.question_parse || "").trim(),
-          segment: String(tasks.segment || "").trim(),
-          evaluation: String(tasks.evaluation || "").trim(),
-        },
-      };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configBundle = this.configService.loadBundle();
+      this.configBundle.skill = this.configService.updateLlmTasks(
+        this.configBundle.skill,
+        tasks,
+      );
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
@@ -1321,80 +1329,32 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       if (!profileId || !/^[a-zA-Z0-9_-]+$/.test(profileId)) {
         throw new Error("profileId 只能包含字母、数字、_、-");
       }
-      this.configBundle = it_loadConfigBundle(this.context);
-      const apiConfig = { ...this.configBundle.api };
-      const environment =
-        String(payload.environment || "").trim() ||
-        apiConfig.active?.environment ||
-        "prod";
-      const envConfig = {
-        ...(apiConfig.environments?.[environment] || {}),
-      };
+      this.configBundle = this.configService.loadBundle();
+      let apiConfig = { ...this.configBundle.api };
+      const resolved = this.configService.resolveEnvironment(
+        apiConfig,
+        payload.environment,
+      );
+      const environment = resolved.environment;
+      const envConfig = resolved.envConfig;
       const baseLlm = envConfig.llm || {};
       const incoming = payload.profile || {};
       const displayName = String(payload.displayName || "").trim();
-      const nextProfile = {
-        provider: incoming.provider || baseLlm.provider || apiConfig.active?.llm || "baidu_qianfan",
-        base_url: incoming.baseUrl ?? incoming.base_url ?? baseLlm.base_url ?? "",
-        model: incoming.model ?? baseLlm.model ?? "",
-        api_key: incoming.apiKey ?? incoming.api_key ?? "",
-        temperature: Number(incoming.temperature ?? baseLlm.temperature ?? 0.8),
-        top_p: Number(incoming.topP ?? incoming.top_p ?? baseLlm.top_p ?? 0.8),
-        timeout_sec: Number(incoming.timeoutSec ?? incoming.timeout_sec ?? baseLlm.timeout_sec ?? 60),
-        max_retries: Number(incoming.maxRetries ?? incoming.max_retries ?? baseLlm.max_retries ?? 1),
-        anti_repeat: Boolean(
-          incoming.antiRepeat ??
-            incoming.anti_repeat ??
-            baseLlm.anti_repeat ??
-            baseLlm.antiRepeat ??
-            false,
-        ),
-        use_responses: Boolean(
-          incoming.useResponses ??
-            incoming.use_responses ??
-            baseLlm.use_responses ??
-            baseLlm.useResponses ??
-            false,
-        ),
-        web_search: Boolean(
-          incoming.webSearch ??
-            incoming.web_search ??
-            baseLlm.web_search ??
-            baseLlm.webSearch ??
-            false,
-        ),
-        reasoning_effort:
-          incoming.reasoningEffort ??
-          incoming.reasoning_effort ??
-          baseLlm.reasoning_effort ??
-          baseLlm.reasoningEffort,
-        max_output_tokens: Number(
-          incoming.maxOutputTokens ??
-            incoming.max_output_tokens ??
-            baseLlm.max_output_tokens ??
-            baseLlm.maxOutputTokens ??
-            0,
-        ),
-        reuse_prefix: Boolean(
-          incoming.reusePrefix ??
-            incoming.reuse_prefix ??
-            baseLlm.reuse_prefix ??
-            baseLlm.reusePrefix ??
-            false,
-        ),
-        display_name: displayName || profileId,
-      };
-      const llmProfiles = { ...(envConfig.llm_profiles || {}) };
-      llmProfiles[profileId] = nextProfile;
-      apiConfig.environments = {
-        ...apiConfig.environments,
-        [environment]: {
-          ...envConfig,
-          llm_profiles: llmProfiles,
-        },
-      };
-      it_saveApiConfig(this.context, apiConfig);
-      this.configBundle = it_loadConfigBundle(this.context);
+      const nextProfile = this.configService.buildLlmProfile({
+        incoming,
+        baseLlm,
+        fallbackProvider: apiConfig.active?.llm,
+        profileId,
+        displayName,
+      });
+      apiConfig = this.configService.upsertLlmProfile(
+        apiConfig,
+        environment,
+        profileId,
+        nextProfile,
+      );
+      this.configService.saveApiConfig(apiConfig);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.api = apiConfig;
       this.configSnapshot = this.buildConfigSnapshot(apiConfig);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
@@ -1406,28 +1366,16 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       if (!profileId) {
         throw new Error("missing profileId");
       }
-      this.configBundle = it_loadConfigBundle(this.context);
-      const apiConfig = { ...this.configBundle.api };
-      const environment =
-        String(payload.environment || "").trim() ||
-        apiConfig.active?.environment ||
-        "prod";
-      const envConfig = {
-        ...(apiConfig.environments?.[environment] || {}),
-      };
-      const llmProfiles = { ...(envConfig.llm_profiles || {}) };
-      if (llmProfiles[profileId]) {
-        delete llmProfiles[profileId];
-      }
-      apiConfig.environments = {
-        ...apiConfig.environments,
-        [environment]: {
-          ...envConfig,
-          llm_profiles: llmProfiles,
-        },
-      };
-      it_saveApiConfig(this.context, apiConfig);
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
+      let apiConfig = { ...this.configBundle.api };
+      const resolved = this.configService.resolveEnvironment(
+        apiConfig,
+        payload.environment,
+      );
+      const environment = resolved.environment;
+      apiConfig = this.configService.removeLlmProfile(apiConfig, environment, profileId);
+      this.configService.saveApiConfig(apiConfig);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.api = apiConfig;
       this.configSnapshot = this.buildConfigSnapshot(apiConfig);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
@@ -1438,7 +1386,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       if (!providerId || !/^[a-zA-Z0-9_-]+$/.test(providerId)) {
         throw new Error("providerId 只能包含字母、数字、_、-");
       }
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       if (this.configBundle.providers?.[providerId]) {
         throw new Error("Provider 已存在");
       }
@@ -1475,8 +1423,8 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           max_retries: 1,
         },
       };
-      it_saveProviderConfig(this.context, providerId, payload);
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configService.saveProviderConfig(providerId, payload);
+      this.configBundle = this.configService.loadBundle();
       this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
@@ -1487,7 +1435,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         throw new Error("missing providerId");
       }
       const incoming = msg.data?.profile || {};
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       const existing = this.configBundle.providers?.[providerId] || { provider: providerId };
       const next = {
         ...existing,
@@ -1506,8 +1454,8 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           ...(incoming.asr || {}),
         },
       };
-      it_saveProviderConfig(this.context, providerId, next);
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configService.saveProviderConfig(providerId, next);
+      this.configBundle = this.configService.loadBundle();
       this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return this.configSnapshot;
@@ -1632,7 +1580,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         return { canceled: true };
       }
       const normalized = relative ? relative.split(path.sep).join("/") : ".";
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.skill = {
         ...this.configBundle.skill,
         workspace: {
@@ -1640,7 +1588,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           [targetKey]: normalized,
         },
       };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { kind, dir: normalized };
@@ -1664,24 +1612,26 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         return { canceled: true };
       }
       const normalized = relative ? relative.split(path.sep).join("/") : "sessions";
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.skill = {
         ...this.configBundle.skill,
         sessions_dir: normalized || "sessions",
       };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { sessionsDir: normalized || "sessions" };
     });
     this.webviewProtocol.on("it/updateApiSettings", async (msg) => {
       const payload = msg.data || {};
-      const environment =
-        String(payload.environment || "").trim() ||
-        this.configBundle.api.active?.environment ||
-        "prod";
-
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
+      const apiConfig = { ...this.configBundle.api };
+      const resolved = this.configService.resolveEnvironment(
+        apiConfig,
+        payload.environment,
+      );
+      const environment = resolved.environment;
+      const envConfig = resolved.envConfig;
       const storedLlmKey =
         (await this.context.secrets.get(`interviewTrainer.${environment}.llm.apiKey`)) ||
         "";
@@ -1691,148 +1641,102 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const storedAsrSecret =
         (await this.context.secrets.get(`interviewTrainer.${environment}.asr.secretKey`)) ||
         "";
-      const apiConfig = { ...this.configBundle.api };
-      const envConfig = {
-        ...(apiConfig.environments?.[environment] || {}),
-      };
       const llmForm = payload.llm || {};
       const asrForm = payload.asr || {};
       const llmProfiles = { ...(envConfig.llm_profiles || {}) };
       const asrProfiles = { ...(envConfig.asr_profiles || {}) };
+      const providerHint =
+        llmForm.provider || envConfig.llm?.provider || apiConfig.active?.llm;
+      const isDoubao = providerHint === "volc_doubao";
+      const llmDefaultBase = isDoubao
+        ? "https://ark.cn-beijing.volces.com"
+        : "https://qianfan.baidubce.com/v2";
+      const llmDefaultModel = isDoubao
+        ? "doubao-seed-1-8-251228"
+        : "ernie-4.5-turbo-128k";
+      const nextLlm = this.configService.buildLlmConfigFromForm({
+        form: llmForm,
+        baseLlm: envConfig.llm || {},
+        fallbackProvider: apiConfig.active?.llm,
+        defaultBase: llmDefaultBase,
+        defaultModel: llmDefaultModel,
+        storedKey: storedLlmKey,
+      });
+      const nextAsr = this.configService.buildAsrConfigFromForm({
+        form: asrForm,
+        baseAsr: envConfig.asr || {},
+        fallbackProvider: apiConfig.active?.asr,
+        storedKey: storedAsrKey,
+        storedSecret: storedAsrSecret,
+      });
 
-      const llmDefaultBase =
-        llmForm.provider === "volc_doubao"
-          ? "https://ark.cn-beijing.volces.com"
-          : "https://qianfan.baidubce.com/v2";
-      const llmDefaultModel =
-        llmForm.provider === "volc_doubao"
-          ? "doubao-seed-1-8-251228"
-          : "ernie-4.5-turbo-128k";
-
-      envConfig.llm = {
-        ...(envConfig.llm || {}),
-        provider: llmForm.provider || envConfig.llm?.provider || apiConfig.active?.llm || "baidu_qianfan",
-        base_url: llmForm.baseUrl ?? envConfig.llm?.base_url ?? llmDefaultBase,
-        model: llmForm.model ?? envConfig.llm?.model ?? llmDefaultModel,
-        api_key: this.it_firstNonEmpty(
-          llmForm.apiKey,
-          envConfig.llm?.api_key,
-          storedLlmKey,
-        ),
-        temperature: Number(llmForm.temperature ?? envConfig.llm?.temperature ?? 0.8),
-        top_p: Number(llmForm.topP ?? envConfig.llm?.top_p ?? 0.8),
-        timeout_sec: Number(llmForm.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
-        max_retries: Number(llmForm.maxRetries ?? envConfig.llm?.max_retries ?? 1),
-        anti_repeat: Boolean(
-          llmForm.antiRepeat ?? envConfig.llm?.anti_repeat ?? envConfig.llm?.antiRepeat ?? false,
-        ),
-        use_responses: Boolean(
-          llmForm.useResponses ?? envConfig.llm?.use_responses ?? envConfig.llm?.useResponses ?? false,
-        ),
-        reasoning_effort:
-          llmForm.reasoningEffort ?? envConfig.llm?.reasoning_effort ?? envConfig.llm?.reasoningEffort,
-        max_output_tokens: Number(
-          llmForm.maxOutputTokens ??
-            envConfig.llm?.max_output_tokens ??
-            envConfig.llm?.maxOutputTokens ??
-            800,
-        ),
-        web_search: Boolean(
-          llmForm.webSearch ?? envConfig.llm?.web_search ?? envConfig.llm?.webSearch ?? false,
-        ),
-        reuse_prefix: Boolean(
-          llmForm.reusePrefix ?? envConfig.llm?.reuse_prefix ?? envConfig.llm?.reusePrefix ?? false,
-        ),
+      llmProfiles[nextLlm.provider] = {
+        ...nextLlm,
       };
-      envConfig.llm_provider = envConfig.llm.provider;
-      llmProfiles[envConfig.llm.provider] = {
-        ...envConfig.llm,
+      asrProfiles[nextAsr.provider] = {
+        ...nextAsr,
       };
-
-      envConfig.asr = {
-        ...(envConfig.asr || {}),
-        provider: asrForm.provider || envConfig.asr?.provider || apiConfig.active?.asr || "baidu_vop",
-        base_url: asrForm.baseUrl ?? envConfig.asr?.base_url ?? "https://vop.baidu.com/server_api",
-        api_key: this.it_firstNonEmpty(
-          asrForm.apiKey,
-          envConfig.asr?.api_key,
-          storedAsrKey,
-        ),
-        secret_key: this.it_firstNonEmpty(
-          asrForm.secretKey,
-          envConfig.asr?.secret_key,
-          storedAsrSecret,
-        ),
-        mock_text: asrForm.mockText ?? envConfig.asr?.mock_text ?? "",
-        language: asrForm.language ?? envConfig.asr?.language ?? "zh",
-        dev_pid: Number(asrForm.devPid ?? envConfig.asr?.dev_pid ?? 1537),
-        max_chunk_sec: Number(asrForm.maxChunkSec ?? envConfig.asr?.max_chunk_sec ?? 50),
-        max_concurrency: Number(
-          asrForm.maxConcurrency ?? envConfig.asr?.max_concurrency ?? 1,
-        ),
-        timeout_sec: Number(asrForm.timeoutSec ?? envConfig.asr?.timeout_sec ?? 120),
-        max_retries: Number(asrForm.maxRetries ?? envConfig.asr?.max_retries ?? 1),
-      };
-      envConfig.asr_provider = envConfig.asr.provider;
-      asrProfiles[envConfig.asr.provider] = {
-        ...envConfig.asr,
+      const nextEnvConfig = {
+        ...envConfig,
+        llm: nextLlm,
+        llm_provider: nextLlm.provider,
+        asr: nextAsr,
+        asr_provider: nextAsr.provider,
+        llm_profiles: llmProfiles,
+        asr_profiles: asrProfiles,
       };
 
       apiConfig.active = {
         ...apiConfig.active,
         environment,
-        llm: envConfig.llm.provider || apiConfig.active?.llm || "baidu_qianfan",
-        asr: envConfig.asr.provider || apiConfig.active?.asr || "baidu_vop",
+        llm: nextLlm.provider || apiConfig.active?.llm || "baidu_qianfan",
+        asr: nextAsr.provider || apiConfig.active?.asr || "baidu_vop",
       };
       apiConfig.environments = {
         ...apiConfig.environments,
-        [environment]: {
-          ...envConfig,
-          llm_profiles: llmProfiles,
-          asr_profiles: asrProfiles,
-        },
+        [environment]: nextEnvConfig,
       };
 
       await this.context.secrets.store(
         `interviewTrainer.${environment}.llm.apiKey`,
-        envConfig.llm.api_key || "",
+        nextLlm.api_key || "",
       );
       await this.context.secrets.store(
         `interviewTrainer.${environment}.asr.apiKey`,
-        envConfig.asr.api_key || "",
+        nextAsr.api_key || "",
       );
       await this.context.secrets.store(
         `interviewTrainer.${environment}.asr.secretKey`,
-        envConfig.asr.secret_key || "",
+        nextAsr.secret_key || "",
       );
 
-      const llmProvider = envConfig.llm.provider;
+      const llmProvider = nextLlm.provider;
       if (llmProvider && llmProvider !== "heuristic") {
         const existing = this.configBundle.providers?.[llmProvider] || { provider: llmProvider };
-        it_saveProviderConfig(this.context, llmProvider, {
+        this.configService.saveProviderConfig(llmProvider, {
           ...existing,
           provider: llmProvider,
           llm: {
             ...(existing.llm || {}),
-            ...envConfig.llm,
+            ...nextLlm,
           },
         });
       }
-      const asrProvider = envConfig.asr.provider;
+      const asrProvider = nextAsr.provider;
       if (asrProvider && asrProvider !== "mock") {
         const existing = this.configBundle.providers?.[asrProvider] || { provider: asrProvider };
-        it_saveProviderConfig(this.context, asrProvider, {
+        this.configService.saveProviderConfig(asrProvider, {
           ...existing,
           provider: asrProvider,
           asr: {
             ...(existing.asr || {}),
-            ...envConfig.asr,
+            ...nextAsr,
           },
         });
       }
 
-      it_saveApiConfig(this.context, apiConfig);
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configService.saveApiConfig(apiConfig);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.api = apiConfig;
       this.configSnapshot = this.buildConfigSnapshot(apiConfig);
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
@@ -1853,7 +1757,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       const perQuestionDemoPrompts = Array.isArray(payload.perQuestionDemoPrompts)
         ? payload.perQuestionDemoPrompts.map((item: any) => String(item || "")).slice(0, 3)
         : [];
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       const currentEvaluation = this.configBundle.skill.evaluation || {};
       this.configBundle.skill = {
         ...this.configBundle.skill,
@@ -1869,7 +1773,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           per_question_demo_prompts: perQuestionDemoPrompts,
         },
       };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return {
@@ -1887,7 +1791,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         streaming.autoCollapse ?? streaming.auto_collapse ?? true;
       const previewRaw = Number(streaming.previewChars ?? streaming.preview_chars ?? 200);
       const previewChars = Number.isFinite(previewRaw) ? Math.max(50, previewRaw) : 200;
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       const current = this.configBundle.skill.streaming || {};
       this.configBundle.skill = {
         ...this.configBundle.skill,
@@ -1898,7 +1802,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           preview_chars: previewChars,
         },
       };
-      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configService.saveSkillConfig(this.configBundle.skill);
       this.configSnapshot = await this.refreshConfigSnapshot();
       this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
       return { streaming: this.configSnapshot.streaming };
@@ -2592,7 +2496,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         draftEvaluation: undefined,
       });
 
-      this.configBundle = it_loadConfigBundle(this.context);
+      this.configBundle = this.configService.loadBundle();
       this.configBundle.api = this.resolveApiConfigWithProviders(this.configBundle.api);
       this.configBundle.api = await it_applySecretOverrides(
         this.context,
