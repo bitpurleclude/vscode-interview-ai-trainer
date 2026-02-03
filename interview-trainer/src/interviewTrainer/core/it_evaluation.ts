@@ -71,6 +71,13 @@ function it_appendNonce(text: string): string {
   return `${text}\n\n[nonce:${nonce}]`;
 }
 
+function it_maskLlmConfig(config: ItLlmConfig): Record<string, unknown> {
+  return {
+    ...config,
+    apiKey: config.apiKey ? "***" : "",
+  };
+}
+
 const IT_DIMENSION_MAP: Record<string, string> = {
   content_structure: "内容完整性",
   logic_coherence: "逻辑清晰度",
@@ -313,6 +320,7 @@ async function it_generateRevisedByOutline(
   demoPrompt?: string,
   materialText?: string,
   backgroundQuestions?: string[],
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<string[] | null> {
   if (!items.length || !config.apiKey) {
     return null;
@@ -359,28 +367,37 @@ async function it_generateRevisedByOutline(
   ].join("\n\n");
 
   try {
+    const callConfig = {
+      provider: config.provider,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      temperature: config.temperature,
+      topP: config.topP,
+      timeoutSec: config.timeoutSec,
+      maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
+      antiRepeat: config.antiRepeat,
+      useResponses: config.useResponses,
+      webSearch: config.webSearch,
+      reasoningEffort: config.reasoningEffort,
+      maxOutputTokens: config.maxOutputTokens,
+      reusePrefix: config.reusePrefix,
+    };
+    onTrace?.("面试评价 LLM 请求（按提纲生成示范）", {
+      config: it_maskLlmConfig(callConfig),
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
     const content = await it_callLlmChat(
-      {
-        provider: config.provider,
-        apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
-        model: config.model,
-        temperature: config.temperature,
-        topP: config.topP,
-        timeoutSec: config.timeoutSec,
-        maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
-        antiRepeat: config.antiRepeat,
-        useResponses: config.useResponses,
-        webSearch: config.webSearch,
-        reasoningEffort: config.reasoningEffort,
-        maxOutputTokens: config.maxOutputTokens,
-        reusePrefix: config.reusePrefix,
-      },
+      callConfig,
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
     );
+    onTrace?.("面试评价 LLM 返回（按提纲生成示范）", { text: content });
     const parsed = it_extractJsonPayload(content);
     const list = Array.isArray(parsed?.answers)
       ? parsed.answers
@@ -393,7 +410,10 @@ async function it_generateRevisedByOutline(
       return null;
     }
     return list.map((entry: any) => String(entry?.revised || ""));
-  } catch {
+  } catch (error) {
+    onTrace?.("面试评价 LLM 失败（按提纲生成示范）", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }
@@ -401,6 +421,7 @@ async function it_generateRevisedByOutline(
 async function it_generateOutlines(
   config: ItEvaluationConfig,
   items: Array<{ question: string; original: string; revised: string }>,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<Array<{ outlineOriginal?: string[]; outlineRevised?: string[] }> | null> {
   if (!items.length) {
     return null;
@@ -429,28 +450,37 @@ async function it_generateOutlines(
     "输出 JSON 格式: { \"outlines\": [ { \"outlineOriginal\": \"Markdown列表...\", \"outlineRevised\": \"Markdown列表...\" } ] }，outlineOriginal/outlineRevised 必须是 Markdown 列表字符串（必须包含二级缩进，禁止使用箭头符号）。",
   ].join("\n");
   try {
+    const callConfig = {
+      provider: config.provider,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      temperature: config.temperature,
+      topP: config.topP,
+      timeoutSec: config.timeoutSec,
+      maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
+      antiRepeat: config.antiRepeat,
+      useResponses: config.useResponses,
+      webSearch: config.webSearch,
+      reasoningEffort: config.reasoningEffort,
+      maxOutputTokens: config.maxOutputTokens,
+      reusePrefix: config.reusePrefix,
+    };
+    onTrace?.("面试评价 LLM 请求（提纲修复）", {
+      config: it_maskLlmConfig(callConfig),
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
     const content = await it_callLlmChat(
-      {
-        provider: config.provider,
-        apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
-        model: config.model,
-        temperature: config.temperature,
-        topP: config.topP,
-        timeoutSec: config.timeoutSec,
-        maxRetries: Math.max(0, Number(config.maxRetries ?? 1)),
-        antiRepeat: config.antiRepeat,
-        useResponses: config.useResponses,
-        webSearch: config.webSearch,
-        reasoningEffort: config.reasoningEffort,
-        maxOutputTokens: config.maxOutputTokens,
-        reusePrefix: config.reusePrefix,
-      },
+      callConfig,
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
     );
+    onTrace?.("面试评价 LLM 返回（提纲修复）", { text: content });
     const parsed = it_extractJsonPayload(content);
     const outlineList = Array.isArray(parsed?.outlines)
       ? parsed.outlines
@@ -470,7 +500,10 @@ async function it_generateOutlines(
         entry?.outlineRevised ?? entry?.outline_revised ?? entry?.outlineDemo,
       ),
     }));
-  } catch {
+  } catch (error) {
+    onTrace?.("面试评价 LLM 失败（提纲修复）", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }
@@ -803,6 +836,7 @@ export async function it_evaluateAnswer(
   contextQuestions?: string[],
   customSystemPrompt?: string,
   customDemoPrompt?: string,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<ItEvaluation> {
   const lowSpeech =
     (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
@@ -949,6 +983,13 @@ export async function it_evaluateAnswer(
         let responseId = it_getPrefixCache(prefixKey);
         if (!responseId) {
           const prefixPrompt = `${staticPrompt}\n\n仅用于前缀缓存，请回复OK。`;
+          onTrace?.("面试评价 LLM 请求（前缀缓存）", {
+            config: it_maskLlmConfig(callConfig),
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: prefixPrompt },
+            ],
+          });
           const prefixResp = await it_callDoubaoResponses(
             callConfig,
             [
@@ -961,6 +1002,7 @@ export async function it_evaluateAnswer(
               webSearch: false,
             },
           );
+          onTrace?.("面试评价 LLM 返回（前缀缓存）", { text: prefixResp.text });
           if (prefixResp.responseId) {
             responseId = prefixResp.responseId;
             it_setPrefixCache(prefixKey, prefixResp.responseId);
@@ -970,6 +1012,11 @@ export async function it_evaluateAnswer(
           const dynamicPayload = config.antiRepeat
             ? it_appendNonce(attemptDynamicPrompt)
             : attemptDynamicPrompt;
+          onTrace?.("面试评价 LLM 请求（评审-复用前缀）", {
+            config: it_maskLlmConfig(callConfig),
+            messages: [{ role: "user", content: dynamicPayload }],
+            previousResponseId: responseId,
+          });
           const resp = await it_callDoubaoResponses(
             callConfig,
             [{ role: "user", content: dynamicPayload }],
@@ -978,7 +1025,15 @@ export async function it_evaluateAnswer(
             },
           );
           content = resp.text;
+          onTrace?.("面试评价 LLM 返回（评审-复用前缀）", { text: content });
         } else {
+          onTrace?.("面试评价 LLM 请求（评审）", {
+            config: it_maskLlmConfig(callConfig),
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: attemptPrompt },
+            ],
+          });
           content = await it_callLlmChat(
             callConfig,
             [
@@ -986,8 +1041,16 @@ export async function it_evaluateAnswer(
               { role: "user", content: attemptPrompt },
             ],
           );
+          onTrace?.("面试评价 LLM 返回（评审）", { text: content });
         }
       } else {
+        onTrace?.("面试评价 LLM 请求（评审）", {
+          config: it_maskLlmConfig(callConfig),
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: attemptPrompt },
+          ],
+        });
         content = await it_callLlmChat(
           callConfig,
           [
@@ -995,9 +1058,11 @@ export async function it_evaluateAnswer(
             { role: "user", content: attemptPrompt },
           ],
         );
+        onTrace?.("面试评价 LLM 返回（评审）", { text: content });
       }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
+      onTrace?.("面试评价 LLM 失败（评审）", { error: lastError });
       continue;
     }
     parsed = it_extractJsonPayload(content);
@@ -1105,6 +1170,7 @@ export async function it_evaluateAnswer(
           original: item.original,
           revised: item.revised,
         })),
+        onTrace,
       );
       if (regenerated && regenerated.length) {
         regenerated.forEach((entry, idx) => {
@@ -1136,6 +1202,7 @@ export async function it_evaluateAnswer(
         demoPrompt,
         material,
         backgroundQuestions,
+        onTrace,
       );
       if (regeneratedRevised && regeneratedRevised.length) {
         regeneratedRevised.forEach((text, idx) => {

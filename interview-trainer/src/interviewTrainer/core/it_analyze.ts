@@ -2301,6 +2301,7 @@ export async function it_runAnalysis(
           ]
             .filter(Boolean)
             .join("\n\n") || undefined,
+          deps.onCorpusTrace,
         );
         completed += 1;
         const progress = Math.min(
