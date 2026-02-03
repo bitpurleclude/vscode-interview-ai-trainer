@@ -22,6 +22,10 @@ evaluation:
 topics:
   title_mode: llm
   max_title_len: 18
+streaming:
+  enabled: true
+  auto_collapse: true
+  preview_chars: 200
 llm_tasks:
   question_parse: ""
   segment: ""

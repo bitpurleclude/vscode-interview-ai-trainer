@@ -3,7 +3,12 @@
   ItEvaluation,
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
-import { it_callDoubaoResponses, it_callLlmChat, ItLlmConfig } from "../api/it_llm";
+import {
+  it_callDoubaoResponses,
+  it_callLlmChat,
+  it_callLlmChatStreaming,
+  ItLlmConfig,
+} from "../api/it_llm";
 import { it_hashText } from "../utils/it_text";
 
 export interface ItEvaluationConfig extends ItLlmConfig {
@@ -321,6 +326,7 @@ async function it_generateRevisedByOutline(
   materialText?: string,
   backgroundQuestions?: string[],
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+  onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<string[] | null> {
   if (!items.length || !config.apiKey) {
     return null;
@@ -382,6 +388,7 @@ async function it_generateRevisedByOutline(
       reasoningEffort: config.reasoningEffort,
       maxOutputTokens: config.maxOutputTokens,
       reusePrefix: config.reusePrefix,
+      stream: config.stream,
     };
     onTrace?.("面试评价 LLM 请求（按提纲生成示范）", {
       config: it_maskLlmConfig(callConfig),
@@ -390,13 +397,19 @@ async function it_generateRevisedByOutline(
         { role: "user", content: userPrompt },
       ],
     });
-    const content = await it_callLlmChat(
+    onStream?.({ text: "", reset: true });
+    const content = await it_callLlmChatStreaming(
       callConfig,
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      {
+        onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+        stream: callConfig.stream,
+      },
     );
+    onStream?.({ text: content, done: true });
     onTrace?.("面试评价 LLM 返回（按提纲生成示范）", { text: content });
     const parsed = it_extractJsonPayload(content);
     const list = Array.isArray(parsed?.answers)
@@ -422,6 +435,7 @@ async function it_generateOutlines(
   config: ItEvaluationConfig,
   items: Array<{ question: string; original: string; revised: string }>,
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+  onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<Array<{ outlineOriginal?: string[]; outlineRevised?: string[] }> | null> {
   if (!items.length) {
     return null;
@@ -465,6 +479,7 @@ async function it_generateOutlines(
       reasoningEffort: config.reasoningEffort,
       maxOutputTokens: config.maxOutputTokens,
       reusePrefix: config.reusePrefix,
+      stream: config.stream,
     };
     onTrace?.("面试评价 LLM 请求（提纲修复）", {
       config: it_maskLlmConfig(callConfig),
@@ -473,13 +488,19 @@ async function it_generateOutlines(
         { role: "user", content: userPrompt },
       ],
     });
-    const content = await it_callLlmChat(
+    onStream?.({ text: "", reset: true });
+    const content = await it_callLlmChatStreaming(
       callConfig,
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      {
+        onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+        stream: callConfig.stream,
+      },
     );
+    onStream?.({ text: content, done: true });
     onTrace?.("面试评价 LLM 返回（提纲修复）", { text: content });
     const parsed = it_extractJsonPayload(content);
     const outlineList = Array.isArray(parsed?.outlines)
@@ -837,6 +858,7 @@ export async function it_evaluateAnswer(
   customSystemPrompt?: string,
   customDemoPrompt?: string,
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+  onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<ItEvaluation> {
   const lowSpeech =
     (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
@@ -978,7 +1000,9 @@ export async function it_evaluateAnswer(
         reasoningEffort: config.reasoningEffort,
         maxOutputTokens: config.maxOutputTokens,
         reusePrefix: config.reusePrefix,
+        stream: config.stream,
       };
+      onStream?.({ text: "", reset: true });
       if (usePrefixReuse) {
         let responseId = it_getPrefixCache(prefixKey);
         if (!responseId) {
@@ -1025,6 +1049,7 @@ export async function it_evaluateAnswer(
             },
           );
           content = resp.text;
+          onStream?.({ text: content, done: true });
           onTrace?.("面试评价 LLM 返回（评审-复用前缀）", { text: content });
         } else {
           onTrace?.("面试评价 LLM 请求（评审）", {
@@ -1034,13 +1059,18 @@ export async function it_evaluateAnswer(
               { role: "user", content: attemptPrompt },
             ],
           });
-          content = await it_callLlmChat(
+          content = await it_callLlmChatStreaming(
             callConfig,
             [
               { role: "system", content: systemPrompt },
               { role: "user", content: attemptPrompt },
             ],
+            {
+              onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+              stream: callConfig.stream,
+            },
           );
+          onStream?.({ text: content, done: true });
           onTrace?.("面试评价 LLM 返回（评审）", { text: content });
         }
       } else {
@@ -1051,13 +1081,18 @@ export async function it_evaluateAnswer(
             { role: "user", content: attemptPrompt },
           ],
         });
-        content = await it_callLlmChat(
+        content = await it_callLlmChatStreaming(
           callConfig,
           [
             { role: "system", content: systemPrompt },
             { role: "user", content: attemptPrompt },
           ],
+          {
+            onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+            stream: callConfig.stream,
+          },
         );
+        onStream?.({ text: content, done: true });
         onTrace?.("面试评价 LLM 返回（评审）", { text: content });
       }
     } catch (err) {
@@ -1171,6 +1206,7 @@ export async function it_evaluateAnswer(
           revised: item.revised,
         })),
         onTrace,
+        onStream,
       );
       if (regenerated && regenerated.length) {
         regenerated.forEach((entry, idx) => {
@@ -1203,6 +1239,7 @@ export async function it_evaluateAnswer(
         material,
         backgroundQuestions,
         onTrace,
+        onStream,
       );
       if (regeneratedRevised && regeneratedRevised.length) {
         regeneratedRevised.forEach((text, idx) => {

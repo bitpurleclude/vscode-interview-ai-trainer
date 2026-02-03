@@ -311,6 +311,21 @@ const InterviewTrainer: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<ItAnalyzeResponse | null>(
     null,
   );
+  const [streamingSettings, setStreamingSettings] = useState({
+    enabled: true,
+    autoCollapse: true,
+    previewChars: 200,
+  });
+  const [stepStreams, setStepStreams] = useState<
+    Record<
+      string,
+      {
+        text: string;
+        collapsed: boolean;
+        done?: boolean;
+      }
+    >
+  >({});
   const [historyItems, setHistoryItems] = useState<ItHistoryItem[]>([]);
   const [showNoteHits, setShowNoteHits] = useState(false);
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
@@ -347,6 +362,7 @@ const InterviewTrainer: React.FC = () => {
       reasoningEffort: "medium",
       maxOutputTokens: 800,
       reusePrefix: false,
+      stream: true,
     },
     asr: {
       provider: "baidu_vop",
@@ -417,6 +433,10 @@ const InterviewTrainer: React.FC = () => {
   const [topicTitleLen, setTopicTitleLen] = useState(18);
   const [savingTopicSettings, setSavingTopicSettings] = useState(false);
   const [topicSaveMessage, setTopicSaveMessage] = useState<string | null>(null);
+  const [savingStreamingSettings, setSavingStreamingSettings] = useState(false);
+  const [streamingSaveMessage, setStreamingSaveMessage] = useState<string | null>(
+    null,
+  );
   const [showRawOutput, setShowRawOutput] = useState(false);
   const [creatingProvider, setCreatingProvider] = useState(false);
   const [providerCreateMessage, setProviderCreateMessage] = useState<string | null>(null);
@@ -452,6 +472,7 @@ const InterviewTrainer: React.FC = () => {
               reasoningEffort: "medium",
               maxOutputTokens: 800,
               reusePrefix: true,
+              stream: true,
             }
           : {
               baseUrl: "https://qianfan.baidubce.com/v2",
@@ -461,6 +482,7 @@ const InterviewTrainer: React.FC = () => {
               reasoningEffort: "medium",
               maxOutputTokens: 800,
               reusePrefix: false,
+              stream: true,
             };
       const asrDefaults = {
         baseUrl: "https://vop.baidu.com/server_api",
@@ -511,6 +533,11 @@ const InterviewTrainer: React.FC = () => {
             llmProfile?.reuse_prefix ??
               llmProfile?.reusePrefix ??
               llmDefaults.reusePrefix,
+          ),
+          stream: Boolean(
+            llmProfile?.stream ??
+              llmProfile?.stream_enabled ??
+              llmDefaults.stream,
           ),
         },
         asr: {
@@ -746,6 +773,14 @@ const InterviewTrainer: React.FC = () => {
     setTopicTitleMode(nextTitleMode === "simple" ? "simple" : "llm");
     const nextTitleLen = Number(config.topics?.maxTitleLen ?? 18);
     setTopicTitleLen(Number.isFinite(nextTitleLen) ? nextTitleLen : 18);
+    if (config.streaming) {
+      const nextPreview = Number(config.streaming.previewChars ?? 200);
+      setStreamingSettings({
+        enabled: config.streaming.enabled !== false,
+        autoCollapse: config.streaming.autoCollapse !== false,
+        previewChars: Number.isFinite(nextPreview) ? Math.max(50, nextPreview) : 200,
+      });
+    }
   }, [config, applyProfileToForm, applyRetrievalToForm]);
 
   useEffect(() => {
@@ -760,6 +795,43 @@ const InterviewTrainer: React.FC = () => {
       disposeConfig();
     };
   }, []);
+
+  useEffect(() => {
+    const disposeStream = on("it/stepStreamUpdate", (data) => {
+      if (!streamingSettings.enabled) {
+        return;
+      }
+      const step = String(data?.step || "");
+      if (!step) {
+        return;
+      }
+      setStepStreams((prev) => {
+        const current = prev[step] || { text: "", collapsed: false, done: false };
+        const reset = Boolean(data?.reset);
+        const done = Boolean(data?.done);
+        const nextText = typeof data?.text === "string"
+          ? data.text
+          : reset
+            ? ""
+            : current.text;
+        let collapsed = reset ? false : current.collapsed;
+        if (done && streamingSettings.autoCollapse) {
+          collapsed = true;
+        }
+        return {
+          ...prev,
+          [step]: {
+            text: nextText,
+            collapsed,
+            done,
+          },
+        };
+      });
+    });
+    return () => {
+      disposeStream();
+    };
+  }, [on, streamingSettings.enabled, streamingSettings.autoCollapse]);
 
   useEffect(() => {
     setShowRawOutput(false);
@@ -1179,6 +1251,7 @@ const InterviewTrainer: React.FC = () => {
       }));
       return;
     }
+    setStepStreams({});
     setIsProcessing(true);
     setShowNoteHits(false);
     analysisCancelledRef.current = false;
@@ -1389,24 +1462,26 @@ const InterviewTrainer: React.FC = () => {
         const providerProfile = providerProfiles?.[provider]?.llm || {};
         const defaults =
           provider === "volc_doubao"
-            ? {
-                baseUrl: "https://ark.cn-beijing.volces.com",
-                model: "doubao-seed-1-8-251228",
-                useResponses: true,
-                webSearch: true,
-                reasoningEffort: "medium",
-                maxOutputTokens: 800,
-                reusePrefix: true,
-              }
-            : {
-                baseUrl: "https://qianfan.baidubce.com/v2",
-                model: "ernie-4.5-turbo-128k",
-                useResponses: false,
-                webSearch: false,
-                reasoningEffort: "medium",
-                maxOutputTokens: 800,
-                reusePrefix: false,
-              };
+              ? {
+                  baseUrl: "https://ark.cn-beijing.volces.com",
+                  model: "doubao-seed-1-8-251228",
+                  useResponses: true,
+                  webSearch: true,
+                  reasoningEffort: "medium",
+                  maxOutputTokens: 800,
+                  reusePrefix: true,
+                  stream: true,
+                }
+              : {
+                  baseUrl: "https://qianfan.baidubce.com/v2",
+                  model: "ernie-4.5-turbo-128k",
+                  useResponses: false,
+                  webSearch: false,
+                  reasoningEffort: "medium",
+                  maxOutputTokens: 800,
+                  reusePrefix: false,
+                  stream: true,
+                };
         const nextProfile =
           (provider === prev.llm.provider ? prev.llm : undefined) ||
           (prev.llmProfiles && prev.llmProfiles[provider]) ||
@@ -1464,6 +1539,12 @@ const InterviewTrainer: React.FC = () => {
                 nextProfile.reusePrefix ??
                 defaults.reusePrefix ??
                 prev.llm.reusePrefix,
+            ),
+            stream: Boolean(
+              nextProfile.stream ??
+                nextProfile.stream_enabled ??
+                defaults.stream ??
+                prev.llm.stream,
             ),
           },
         };
@@ -1551,6 +1632,7 @@ const InterviewTrainer: React.FC = () => {
         reasoningEffort: apiForm.llm.reasoningEffort,
         maxOutputTokens: Number(apiForm.llm.maxOutputTokens),
         reusePrefix: Boolean(apiForm.llm.reusePrefix),
+        stream: Boolean(apiForm.llm.stream),
       },
       asr: {
         provider: apiForm.asr.provider,
@@ -1582,6 +1664,7 @@ const InterviewTrainer: React.FC = () => {
           reasoning_effort: apiForm.llm.reasoningEffort,
           max_output_tokens: Number(apiForm.llm.maxOutputTokens),
           reuse_prefix: Boolean(apiForm.llm.reusePrefix),
+          stream: Boolean(apiForm.llm.stream),
         },
       },
       asrProfiles: {
@@ -1753,6 +1836,37 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingTopicSettings(false);
+  };
+  const handleSaveStreamingSettings = async () => {
+    setSavingStreamingSettings(true);
+    setStreamingSaveMessage(null);
+    try {
+      const resp = await request("it/updateStreamingSettings", {
+        streaming: {
+          enabled: Boolean(streamingSettings.enabled),
+          autoCollapse: Boolean(streamingSettings.autoCollapse),
+          previewChars: Number(streamingSettings.previewChars),
+        },
+      });
+      if (resp?.status === "success") {
+        if (resp.content?.streaming) {
+          const preview = Number(resp.content.streaming.previewChars ?? 200);
+          setStreamingSettings({
+            enabled: resp.content.streaming.enabled !== false,
+            autoCollapse: resp.content.streaming.autoCollapse !== false,
+            previewChars: Number.isFinite(preview) ? Math.max(50, preview) : 200,
+          });
+        }
+        setStreamingSaveMessage("实时输出设置已保存");
+      } else {
+        setStreamingSaveMessage("实时输出设置保存失败，请重试。");
+      }
+    } catch (err) {
+      setStreamingSaveMessage(
+        `实时输出设置保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingStreamingSettings(false);
   };
   const handleRetrievalFieldChange = (
     key:
@@ -2045,8 +2159,15 @@ const InterviewTrainer: React.FC = () => {
   const renderSteps = (steps: ItStepState[]) => {
     return (
       <div className="it-steps">
-        {steps.map((step) => (
-          <div key={step.id} className={`it-step it-step--${step.status}`}>
+        {steps.map((step) => {
+          const stream = stepStreams[step.id];
+          const showStream = streamingSettings.enabled && stream?.text;
+          const previewChars = Math.max(50, streamingSettings.previewChars || 200);
+          const previewText = showStream
+            ? String(stream?.text || "").slice(-previewChars)
+            : "";
+          return (
+            <div key={step.id} className={`it-step it-step--${step.status}`}>
             <div className="it-step__content">
               <div className="it-step__dot" />
               <div className="it-step__label">{STEP_LABELS[step.id]}</div>
@@ -2057,8 +2178,41 @@ const InterviewTrainer: React.FC = () => {
             {step.message && (
               <div className="it-step__meta">{step.message}</div>
             )}
+            {showStream && (
+              <div className="it-step__stream">
+                <div className="it-step__stream-header">
+                  <span>实时输出</span>
+                  <button
+                    className="it-link-button it-step__stream-toggle"
+                    onClick={() =>
+                      setStepStreams((prev) => {
+                        const current = prev[step.id];
+                        if (!current) {
+                          return prev;
+                        }
+                        return {
+                          ...prev,
+                          [step.id]: {
+                            ...current,
+                            collapsed: !current.collapsed,
+                          },
+                        };
+                      })
+                    }
+                  >
+                    {stream?.collapsed ? "展开" : "收起"}
+                  </button>
+                </div>
+                {stream?.collapsed ? (
+                  <div className="it-step__stream-preview">{previewText}</div>
+                ) : (
+                  <div className="it-step__stream-text">{stream?.text}</div>
+                )}
+              </div>
+            )}
           </div>
-        ))}
+        );
+        })}
       </div>
     );
   };
@@ -2905,6 +3059,19 @@ const InterviewTrainer: React.FC = () => {
                         </label>
                       </div>
                       <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>流式输出</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(apiForm.llm.stream)}
+                            onChange={(event) =>
+                              handleApiFieldChange("llm", "stream", event.target.checked)
+                            }
+                          />
+                          <span>启用流式</span>
+                        </label>
+                      </div>
+                      <div className="it-input-row">
                         <div style={{ minWidth: 80 }}>前缀复用</div>
                         <label className="it-toggle">
                           <input
@@ -2972,6 +3139,72 @@ const InterviewTrainer: React.FC = () => {
                       </div>
                       {llmTestMessage && (
                         <div className="it-settings__hint">{llmTestMessage}</div>
+                      )}
+                    </div>
+
+                    <div className="it-question">
+                      <div className="it-settings__title">实时输出</div>
+                      <div className="it-settings__desc">
+                        在题目解析/多题分段/面试评价时显示当前输出内容
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>显示</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(streamingSettings.enabled)}
+                            onChange={(event) =>
+                              setStreamingSettings((prev) => ({
+                                ...prev,
+                                enabled: event.target.checked,
+                              }))
+                            }
+                          />
+                          <span>启用实时输出</span>
+                        </label>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>自动折叠</div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(streamingSettings.autoCollapse)}
+                            onChange={(event) =>
+                              setStreamingSettings((prev) => ({
+                                ...prev,
+                                autoCollapse: event.target.checked,
+                              }))
+                            }
+                          />
+                          <span>完成后自动收起</span>
+                        </label>
+                      </div>
+                      <div className="it-input-row">
+                        <div style={{ minWidth: 80 }}>预览字数</div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          min={50}
+                          value={streamingSettings.previewChars}
+                          onChange={(event) =>
+                            setStreamingSettings((prev) => ({
+                              ...prev,
+                              previewChars: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="it-settings__actions">
+                        <button
+                          className="it-button it-button--secondary it-button--compact"
+                          disabled={uiLocked || savingStreamingSettings}
+                          onClick={handleSaveStreamingSettings}
+                        >
+                          {savingStreamingSettings ? "保存中..." : "保存设置"}
+                        </button>
+                      </div>
+                      {streamingSaveMessage && (
+                        <div className="it-settings__hint">{streamingSaveMessage}</div>
                       )}
                     </div>
 

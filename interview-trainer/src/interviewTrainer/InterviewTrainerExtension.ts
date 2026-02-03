@@ -155,6 +155,53 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.outputChannel.show(true);
   }
 
+  private logLlmTestFailure(
+    error: unknown,
+    detail?: Record<string, unknown>,
+  ): void {
+    const stamp = new Date().toISOString();
+    this.outputChannel.appendLine(`[${stamp}] LLM test failed.`);
+    if (detail) {
+      try {
+        this.outputChannel.appendLine(JSON.stringify(detail, null, 2));
+      } catch {
+        this.outputChannel.appendLine(String(detail));
+      }
+    }
+    const debug = (error as { itDebug?: unknown })?.itDebug;
+    if (debug) {
+      this.outputChannel.appendLine("Request/Response:");
+      try {
+        this.outputChannel.appendLine(JSON.stringify(debug, null, 2));
+      } catch {
+        this.outputChannel.appendLine(String(debug));
+      }
+    }
+    const response = (error as any)?.response;
+    if (response?.status || response?.data) {
+      try {
+        this.outputChannel.appendLine(
+          JSON.stringify(
+            {
+              status: response?.status,
+              data: response?.data,
+            },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        this.outputChannel.appendLine(String(response?.status ?? ""));
+      }
+    }
+    if (error instanceof Error) {
+      this.outputChannel.appendLine(`Message: ${error.message}`);
+    } else if (error) {
+      this.outputChannel.appendLine(`Message: ${String(error)}`);
+    }
+    this.outputChannel.show(true);
+  }
+
   private logCorpusTrace(message: string, detail?: Record<string, unknown>): void {
     if (!this.traceLogsEnabled) {
       return;
@@ -167,6 +214,18 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     } else {
       this.outputChannel.appendLine(`[${stamp}] ${message}`);
     }
+  }
+
+  private emitStreamUpdate(update: {
+    step: ItWorkflowStep;
+    text: string;
+    done?: boolean;
+    reset?: boolean;
+  }): void {
+    if (this.configSnapshot?.streaming?.enabled === false) {
+      return;
+    }
+    this.webviewProtocol.send("it/stepStreamUpdate", update);
   }
 
   private requireWorkspaceRoot(): string {
@@ -185,6 +244,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     const asrConfig = envConfig.asr ?? {};
     const evaluationCfg = this.configBundle.skill.evaluation ?? {};
     const topicCfg = this.configBundle.skill.topics ?? {};
+    const streamingCfg = this.configBundle.skill.streaming ?? {};
     const llmProfiles = envConfig.llm_profiles || {};
     const asrProfiles = envConfig.asr_profiles || {};
     const resolvedLlmProvider =
@@ -228,6 +288,12 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       batch_size: 16,
       query_max_chars: 1500,
     };
+    const streamingEnabled = streamingCfg.enabled !== false;
+    const streamingAutoCollapse =
+      streamingCfg.auto_collapse ?? streamingCfg.autoCollapse ?? true;
+    const streamingPreviewChars = Number(
+      streamingCfg.preview_chars ?? streamingCfg.previewChars ?? 200,
+    );
     return {
       activeEnvironment: env,
       envList: Object.keys(apiConfig.environments || {}),
@@ -290,6 +356,14 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         reusePrefix: Boolean(
           llmConfig.reuse_prefix ?? llmConfig.reusePrefix ?? (isDoubao ? true : false),
         ),
+        stream: Boolean(llmConfig.stream ?? llmConfig.stream_enabled ?? true),
+      },
+      streaming: {
+        enabled: streamingEnabled,
+        autoCollapse: Boolean(streamingAutoCollapse),
+        previewChars: Number.isFinite(streamingPreviewChars)
+          ? streamingPreviewChars
+          : 200,
       },
       asr: {
         provider: asrConfig.provider || apiConfig.active?.asr || "baidu_vop",
@@ -477,6 +551,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       reusePrefix: Boolean(
         llm.reuse_prefix ?? llm.reusePrefix ?? (isDoubao ? true : false),
       ),
+      stream: Boolean(llm.stream ?? llm.stream_enabled ?? true),
     };
   }
 
@@ -1804,6 +1879,30 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         perQuestionDemoPrompts,
       };
     });
+    this.webviewProtocol.on("it/updateStreamingSettings", async (msg) => {
+      const payload = msg.data || {};
+      const streaming = payload.streaming || {};
+      const enabled = streaming.enabled !== false;
+      const autoCollapse =
+        streaming.autoCollapse ?? streaming.auto_collapse ?? true;
+      const previewRaw = Number(streaming.previewChars ?? streaming.preview_chars ?? 200);
+      const previewChars = Number.isFinite(previewRaw) ? Math.max(50, previewRaw) : 200;
+      this.configBundle = it_loadConfigBundle(this.context);
+      const current = this.configBundle.skill.streaming || {};
+      this.configBundle.skill = {
+        ...this.configBundle.skill,
+        streaming: {
+          ...current,
+          enabled,
+          auto_collapse: autoCollapse,
+          preview_chars: previewChars,
+        },
+      };
+      it_saveSkillConfig(this.context, this.configBundle.skill);
+      this.configSnapshot = await this.refreshConfigSnapshot();
+      this.webviewProtocol.send("it/configUpdate", this.configSnapshot);
+      return { streaming: this.configSnapshot.streaming };
+    });
     this.webviewProtocol.on("it/testLlm", async (msg) => {
       const payload = msg.data || {};
       const llmForm = payload.llm || {};
@@ -1832,15 +1931,23 @@ export class InterviewTrainerExtension implements vscode.Disposable {
         reasoningEffort: llmForm.reasoningEffort,
         maxOutputTokens: Number(llmForm.maxOutputTokens ?? 0),
         reusePrefix: Boolean(llmForm.reusePrefix ?? false),
+        stream: Boolean(llmForm.stream ?? llmForm.stream_enabled ?? true),
       };
       if (!cfg.apiKey) {
         throw new Error("缺少 LLM API Key");
       }
-      const content = await it_callLlmChat(cfg, [
-        { role: "system", content: "你是健康检查助手，请用12个字内回复“接口可用”" },
-        { role: "user", content: "ping" },
-      ]);
-      return { ok: true, content };
+      try {
+        const content = await it_callLlmChat(cfg, [
+          { role: "system", content: "你是健康检查助手，请用12个字内回复“接口可用”" },
+          { role: "user", content: "ping" },
+        ]);
+        return { ok: true, content };
+      } catch (error) {
+        this.logLlmTestFailure(error, {
+          config: { ...cfg, apiKey: cfg.apiKey ? "***" : "" },
+        });
+        throw error;
+      }
     });
     this.webviewProtocol.on("it/testAsr", async (msg) => {
       const asrForm = msg.data?.asr || {};
@@ -2519,6 +2626,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
           corpusDirty: this.corpusDirty,
           corpusDirtyFiles: Array.from(this.corpusDirtyFiles),
           onCorpusTrace: (message, detail) => this.logCorpusTrace(message, detail),
+          onStream: (update) => this.emitStreamUpdate(update),
           abortSignal: this.analysisAbort ?? undefined,
         },
         request,

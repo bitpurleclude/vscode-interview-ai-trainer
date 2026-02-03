@@ -17,7 +17,7 @@ import { v4 as uuidv4 } from "uuid";
 import { it_callBaiduAsr } from "../api/it_baidu";
 import { it_callVolcAsr } from "../api/it_volc_asr";
 import { ItApiConfig } from "../api/it_apiConfig";
-import { it_callLlmChat, ItLlmConfig } from "../api/it_llm";
+import { it_callLlmChat, it_callLlmChatStreaming, ItLlmConfig } from "../api/it_llm";
 import { it_evaluateAnswer } from "./it_evaluation";
 import {
   ItCorpusItem,
@@ -67,6 +67,12 @@ interface ItAnalyzeDeps {
     questionTimings?: ItQuestionTiming[];
     questionTimingNote?: string;
     evaluation?: ItEvaluation;
+  }) => void;
+  onStream?: (update: {
+    step: ItWorkflowStep;
+    text: string;
+    done?: boolean;
+    reset?: boolean;
   }) => void;
   onCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
   corpusDirty?: boolean;
@@ -441,6 +447,7 @@ function it_getLlmConfig(
     reusePrefix: Boolean(
       llm.reuse_prefix ?? llm.reusePrefix ?? (isDoubao ? true : false),
     ),
+    stream: Boolean(llm.stream ?? llm.stream_enabled ?? true),
   };
 }
 
@@ -487,6 +494,7 @@ async function it_assignSegmentsWithLlm(
   questions: string[],
   segments: ItAudioSegment[],
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+  onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<
   | {
       timings: ItQuestionTiming[];
@@ -524,6 +532,7 @@ async function it_assignSegmentsWithLlm(
   ].join("\n");
 
   try {
+    onStream?.({ text: "", reset: true });
     onTrace?.("多题分段 LLM 请求（远程对齐）", {
       config: it_maskLlmConfig(llmConfig),
       messages: [
@@ -531,10 +540,18 @@ async function it_assignSegmentsWithLlm(
         { role: "user", content: userPrompt },
       ],
     });
-    const content = await it_callLlmChat(llmConfig, [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
+    const content = await it_callLlmChatStreaming(
+      llmConfig,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+        stream: llmConfig.stream,
+      },
+    );
+    onStream?.({ text: content, done: true });
     onTrace?.("多题分段 LLM 返回（远程对齐）", { text: content });
     const parsed = it_extractJson(content);
     const assignments = Array.isArray(parsed?.assignments)
@@ -598,6 +615,7 @@ async function it_splitAnswersWithLlm(
   questions: string[],
   transcript: string,
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
+  onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<Array<{ question: string; answer: string }> | null> {
   if (!questions.length || !transcript.trim()) {
     return null;
@@ -620,6 +638,7 @@ async function it_splitAnswersWithLlm(
   ].join("\n");
 
   try {
+    onStream?.({ text: "", reset: true });
     onTrace?.("多题分段 LLM 请求（逐题拆分）", {
       config: it_maskLlmConfig(llmConfig),
       messages: [
@@ -627,10 +646,18 @@ async function it_splitAnswersWithLlm(
         { role: "user", content: userPrompt },
       ],
     });
-    const content = await it_callLlmChat(llmConfig, [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
+    const content = await it_callLlmChatStreaming(
+      llmConfig,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+        stream: llmConfig.stream,
+      },
+    );
+    onStream?.({ text: content, done: true });
     onTrace?.("多题分段 LLM 返回（逐题拆分）", { text: content });
     const parsed = it_extractJson(content);
     const answers = Array.isArray(parsed?.answers) ? parsed.answers : [];
@@ -1546,7 +1573,13 @@ export async function it_runAnalysis(
           : "题目解析 5% · 本地";
       reportProgress("question", 5, prefix, "running");
       parsePromise = (async () => {
-        const parsed = await it_parseQuestions(questionText, llmConfig);
+        const parsed = await it_parseQuestions(
+          questionText,
+          llmConfig,
+          deps.onStream
+            ? (update) => deps.onStream?.({ step: "question", ...update })
+            : undefined,
+        );
         const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
         const sourceLabel = parsed.source === "llm" ? "API" : "本地";
         if (deps.onCorpusTrace) {
@@ -1753,6 +1786,9 @@ export async function it_runAnalysis(
         questionList,
         transcript,
         deps.onCorpusTrace,
+        deps.onStream
+          ? (update) => deps.onStream?.({ step: "segment", ...update })
+          : undefined,
       );
       reportProgress(
         "segment",
@@ -1794,6 +1830,9 @@ export async function it_runAnalysis(
             questionList,
             audioSegments,
             deps.onCorpusTrace,
+            deps.onStream
+              ? (update) => deps.onStream?.({ step: "segment", ...update })
+              : undefined,
           );
           if (assigned) {
             questionTimings = assigned.timings;
@@ -1817,6 +1856,9 @@ export async function it_runAnalysis(
         questionList,
         audioSegments,
         deps.onCorpusTrace,
+        deps.onStream
+          ? (update) => deps.onStream?.({ step: "segment", ...update })
+          : undefined,
       );
         if (assigned) {
           questionTimings = assigned.timings;
@@ -2222,6 +2264,11 @@ export async function it_runAnalysis(
         envConfig.llm?.reusePrefix ??
         (evalIsDoubao ? true : false),
     ),
+    stream:
+      evaluationLlmConfig?.stream ??
+      envConfig.llm?.stream ??
+      envConfig.llm?.stream_enabled ??
+      true,
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
     answerMode:
@@ -2276,48 +2323,97 @@ export async function it_runAnalysis(
     `面试评价 ${baseProgress}% · 生成中 · ${evalLabel} · ${evalModeLabel}`,
     "running",
   );
-  const evaluations = await Promise.all(
-    evalQuestions.map((question, idx) =>
-      (async () => {
-        const result = await it_evaluateAnswer(
-          question,
-          evalAnswers[idx]?.answer || "",
-          evalAcoustics[idx],
-          evalNotes[idx] || [],
-          evaluationConfig,
-          [question],
-          [{ question, answer: evalAnswers[idx]?.answer || "" }],
-          questionText,
-          evalQuestions,
-          [
-            request.systemPrompt?.trim(),
-            request.perQuestionSystemPrompts?.[idx]?.trim(),
-          ]
-            .filter(Boolean)
-            .join("\n\n") || undefined,
-          [
-            request.demoPrompt?.trim(),
-            request.perQuestionDemoPrompts?.[idx]?.trim(),
-          ]
-            .filter(Boolean)
-            .join("\n\n") || undefined,
-          deps.onCorpusTrace,
-        );
-        completed += 1;
-        const progress = Math.min(
-          95,
-          baseProgress + Math.round((spanProgress * completed) / totalQuestions),
-        );
-        reportProgress(
-          "evaluation",
-          progress,
-          `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
-          "running",
-        );
-        return result;
-      })(),
-    ),
-  );
+  const evaluations: ItEvaluation[] = [];
+  const streamEnabled = Boolean(deps.onStream);
+  if (streamEnabled) {
+    for (let idx = 0; idx < evalQuestions.length; idx += 1) {
+      const question = evalQuestions[idx];
+      const result = await it_evaluateAnswer(
+        question,
+        evalAnswers[idx]?.answer || "",
+        evalAcoustics[idx],
+        evalNotes[idx] || [],
+        evaluationConfig,
+        [question],
+        [{ question, answer: evalAnswers[idx]?.answer || "" }],
+        questionText,
+        evalQuestions,
+        [
+          request.systemPrompt?.trim(),
+          request.perQuestionSystemPrompts?.[idx]?.trim(),
+        ]
+          .filter(Boolean)
+          .join("\n\n") || undefined,
+        [
+          request.demoPrompt?.trim(),
+          request.perQuestionDemoPrompts?.[idx]?.trim(),
+        ]
+          .filter(Boolean)
+          .join("\n\n") || undefined,
+        deps.onCorpusTrace,
+        deps.onStream
+          ? (update) => deps.onStream?.({ step: "evaluation", ...update })
+          : undefined,
+      );
+      evaluations.push(result);
+      completed += 1;
+      const progress = Math.min(
+        95,
+        baseProgress + Math.round((spanProgress * completed) / totalQuestions),
+      );
+      reportProgress(
+        "evaluation",
+        progress,
+        `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
+        "running",
+      );
+    }
+  } else {
+    const parallel = await Promise.all(
+      evalQuestions.map((question, idx) =>
+        (async () => {
+          const result = await it_evaluateAnswer(
+            question,
+            evalAnswers[idx]?.answer || "",
+            evalAcoustics[idx],
+            evalNotes[idx] || [],
+            evaluationConfig,
+            [question],
+            [{ question, answer: evalAnswers[idx]?.answer || "" }],
+            questionText,
+            evalQuestions,
+            [
+              request.systemPrompt?.trim(),
+              request.perQuestionSystemPrompts?.[idx]?.trim(),
+            ]
+              .filter(Boolean)
+              .join("\n\n") || undefined,
+            [
+              request.demoPrompt?.trim(),
+              request.perQuestionDemoPrompts?.[idx]?.trim(),
+            ]
+              .filter(Boolean)
+              .join("\n\n") || undefined,
+            deps.onCorpusTrace,
+            undefined,
+          );
+          completed += 1;
+          const progress = Math.min(
+            95,
+            baseProgress + Math.round((spanProgress * completed) / totalQuestions),
+          );
+          reportProgress(
+            "evaluation",
+            progress,
+            `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
+            "running",
+          );
+          return result;
+        })(),
+      ),
+    );
+    evaluations.push(...parallel);
+  }
 
   const evaluation: ItEvaluation = it_mergeEvaluations({
     topicTitle: questionText || topicTitle,

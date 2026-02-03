@@ -12,6 +12,7 @@ export interface ItLlmConfig extends ItQianfanConfig {
   reasoningEffort?: ItLlmReasoningEffort;
   maxOutputTokens?: number;
   reusePrefix?: boolean;
+  stream?: boolean;
 }
 
 export type ItLlmMessage = ItQianfanMessage;
@@ -130,6 +131,154 @@ async function it_callOpenAiCompatibleChat(
   throw lastError instanceof Error
     ? lastError
     : new Error("OpenAI compatible chat request failed.");
+}
+
+function it_extractStreamDelta(payload: any): string {
+  const delta =
+    payload?.choices?.[0]?.delta?.content ??
+    payload?.choices?.[0]?.message?.content ??
+    payload?.choices?.[0]?.text ??
+    payload?.output_text ??
+    payload?.text ??
+    "";
+  return typeof delta === "string" ? delta : "";
+}
+
+async function it_consumeSseStream(
+  stream: NodeJS.ReadableStream,
+  onDelta?: (delta: string, full: string) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    let fullText = "";
+    const flush = (delta: string) => {
+      if (!delta) {
+        return;
+      }
+      fullText += delta;
+      onDelta?.(delta, fullText);
+    };
+    stream.on("data", (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) {
+          continue;
+        }
+        const data = trimmed.slice(5).trim();
+        if (!data) {
+          continue;
+        }
+        if (data === "[DONE]") {
+          resolve(fullText);
+          return;
+        }
+        try {
+          const payload = JSON.parse(data);
+          const delta = it_extractStreamDelta(payload);
+          flush(delta);
+        } catch {
+          // ignore parse errors
+        }
+      }
+    });
+    stream.on("end", () => resolve(fullText));
+    stream.on("error", (err) => reject(err));
+  });
+}
+
+async function it_callOpenAiCompatibleChatStream(
+  cfg: ItLlmConfig,
+  messages: ItLlmMessage[],
+  onDelta?: (delta: string, full: string) => void,
+): Promise<string> {
+  const base = (cfg.baseUrl || "https://api.openai.com/v1").trim().replace(/\/$/, "");
+  const lower = base.toLowerCase();
+  const url = lower.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+  const headers = {
+    Authorization: `Bearer ${cfg.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  const payload: any = {
+    model: cfg.model || "gpt-4.1-mini",
+    messages,
+    temperature: cfg.temperature,
+    top_p: cfg.topP,
+    stream: true,
+  };
+  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
+    payload.max_tokens = Number(cfg.maxOutputTokens);
+  }
+
+  let lastError: unknown = undefined;
+  for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+    try {
+      const response = await axios.post(url, payload, {
+        headers,
+        timeout: cfg.timeoutSec * 1000,
+        responseType: "stream",
+      });
+      return await it_consumeSseStream(response.data, onDelta);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("OpenAI compatible chat stream failed.");
+}
+
+async function it_callDoubaoChatStream(
+  cfg: ItLlmConfig,
+  messages: ItLlmMessage[],
+  onDelta?: (delta: string, full: string) => void,
+): Promise<string> {
+  const base = (cfg.baseUrl || "https://ark.cn-beijing.volces.com").trim().replace(/\/$/, "");
+  const lower = base.toLowerCase();
+  const url =
+    lower.includes("/api/v3/chat/completions") || lower.endsWith("/chat/completions")
+      ? base
+      : lower.endsWith("/api/v3")
+        ? `${base}/chat/completions`
+        : lower.endsWith("/api/v3/chat")
+          ? `${base}/completions`
+          : `${base}/api/v3/chat/completions`;
+  const headers = {
+    Authorization: `Bearer ${cfg.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  const payload: any = {
+    model: cfg.model || "doubao-seed-1-8-251228",
+    messages,
+    temperature: cfg.temperature,
+    top_p: cfg.topP,
+    stream: true,
+  };
+  if (cfg.reasoningEffort) {
+    payload.reasoning_effort = cfg.reasoningEffort;
+  }
+  if (Number.isFinite(cfg.maxOutputTokens) && Number(cfg.maxOutputTokens) > 0) {
+    payload.max_completion_tokens = Number(cfg.maxOutputTokens);
+  }
+
+  let lastError: unknown = undefined;
+  for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+    try {
+      const response = await axios.post(url, payload, {
+        headers,
+        timeout: cfg.timeoutSec * 1000,
+        responseType: "stream",
+      });
+      return await it_consumeSseStream(response.data, onDelta);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Doubao chat stream failed.");
 }
 
 function it_buildDoubaoResponsesUrl(base: string): string {
@@ -274,6 +423,34 @@ export async function it_callLlmChat(
   if (provider === "openai_compatible") {
     return it_callOpenAiCompatibleChat(cfg, resolvedMessages);
   }
-  throw new Error(`????????? LLM ??????? ${provider}`);
+  throw new Error(`Unsupported LLM provider: ${provider}`);
+}
+
+export async function it_callLlmChatStreaming(
+  cfg: ItLlmConfig,
+  messages: ItLlmMessage[],
+  options?: {
+    onDelta?: (delta: string, full: string) => void;
+    stream?: boolean;
+  },
+): Promise<string> {
+  const resolvedMessages = cfg.antiRepeat ? it_withNonce(messages) : messages;
+  const provider = cfg.provider || "baidu_qianfan";
+  const streamEnabled = options?.stream ?? cfg.stream ?? true;
+  if (streamEnabled) {
+    if (provider === "openai_compatible") {
+      return it_callOpenAiCompatibleChatStream(cfg, resolvedMessages, options?.onDelta);
+    }
+    if (provider === "volc_doubao") {
+      const streamCfg = cfg.useResponses ? { ...cfg, useResponses: false } : cfg;
+      return it_callDoubaoChatStream(streamCfg, resolvedMessages, options?.onDelta);
+    }
+  }
+  const nonStreamCfg = cfg.antiRepeat ? { ...cfg, antiRepeat: false } : cfg;
+  const text = await it_callLlmChat(nonStreamCfg, resolvedMessages);
+  if (options?.onDelta) {
+    options.onDelta(text, text);
+  }
+  return text;
 }
 

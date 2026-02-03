@@ -199,6 +199,12 @@ export interface ItConfigSnapshot {
     reasoningEffort?: string;
     maxOutputTokens?: number;
     reusePrefix?: boolean;
+    stream?: boolean;
+  };
+  streaming?: {
+    enabled: boolean;
+    autoCollapse: boolean;
+    previewChars: number;
   };
   asr: {
     provider: string;

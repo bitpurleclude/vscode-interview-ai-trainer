@@ -1,4 +1,4 @@
-import { ItLlmConfig, it_callLlmChat } from "../api/it_llm";
+import { ItLlmConfig, it_callLlmChatStreaming } from "../api/it_llm";
 
 export interface ItParsedQuestions {
   material: string;
@@ -82,6 +82,7 @@ function it_extractJson(text: string): any | null {
 export async function it_parseQuestions(
   text: string,
   llmConfig?: ItLlmConfig | null,
+  onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<ItParsedQuestions> {
   const fallback = it_parseQuestionsHeuristic(text);
   if (!llmConfig || !text.trim()) {
@@ -115,6 +116,7 @@ export async function it_parseQuestions(
     reasoningEffort: "minimal",
     maxOutputTokens: undefined,
     antiRepeat: false,
+    stream: llmConfig.stream ?? true,
   };
   const debugRequest = {
     provider: parseConfig.provider,
@@ -128,6 +130,7 @@ export async function it_parseQuestions(
     webSearch: parseConfig.webSearch,
     reasoningEffort: parseConfig.reasoningEffort,
     maxOutputTokens: parseConfig.maxOutputTokens,
+    stream: parseConfig.stream,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -137,10 +140,19 @@ export async function it_parseQuestions(
   let parseError: string | undefined;
   let responseText: string | undefined;
   try {
-    const content = await it_callLlmChat(parseConfig, [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
+    onStream?.({ text: "", reset: true });
+    const content = await it_callLlmChatStreaming(
+      parseConfig,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        stream: parseConfig.stream,
+        onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+      },
+    );
+    onStream?.({ text: content, done: true });
     responseText = content;
     const parsed = it_extractJson(content);
     if (parsed && Array.isArray(parsed.questions)) {
