@@ -479,6 +479,17 @@
   gap: 10px;
 }
 
+.it-evaluation__stream-inline {
+  margin: 8px 0 4px;
+  border: 1px solid var(--vscode-sideBar-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--vscode-editorWidget-background);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .it-status__evaluation {
   margin-top: 12px;
 }
@@ -535,6 +546,11 @@
   white-space: pre-wrap;
   overflow-y: auto;
   flex: 1;
+}
+
+.it-evaluation__stream-inline .it-evaluation__stream-text,
+.it-evaluation__stream-inline .it-evaluation__stream-preview {
+  max-height: 140px;
 }
 
 .it-evaluation__stream-preview {

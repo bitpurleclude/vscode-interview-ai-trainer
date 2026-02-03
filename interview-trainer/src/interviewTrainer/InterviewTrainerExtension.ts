@@ -28,6 +28,7 @@ import {
   it_scheduleEmbeddingWarmup,
 } from "./core/it_embeddingWarmup";
 import {
+  it_emitEvaluationStreamUpdate,
   it_emitStreamUpdate,
   it_logCorpusTrace,
   it_logEmbeddingTestFailure,
@@ -110,6 +111,15 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     reset?: boolean;
   }): void {
     it_emitStreamUpdate(this, update);
+  }
+
+  public emitEvaluationStreamUpdate(update: {
+    questionIndex: number;
+    text: string;
+    done?: boolean;
+    reset?: boolean;
+  }): void {
+    it_emitEvaluationStreamUpdate(this, update);
   }
 
   public requireWorkspaceRoot(): string {

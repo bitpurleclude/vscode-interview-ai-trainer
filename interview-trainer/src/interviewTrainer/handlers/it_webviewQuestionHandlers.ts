@@ -68,6 +68,9 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
     if (!question) {
       throw new Error("题目为空，无法重新生成示范回答。");
     }
+    const rawIndex = Number(payload.questionIndex ?? 0);
+    const questionIndex =
+      Number.isFinite(rawIndex) && rawIndex >= 0 ? rawIndex : 0;
     const answer = String(payload.answer || "");
     const questionText = String(payload.questionText || "");
     const contextQuestions = Array.isArray(payload.contextQuestions)
@@ -163,6 +166,19 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
         host.configBundle.skill.evaluation?.answerMode ??
         "two-step",
     };
+    const streamHandler = (update: {
+      text: string;
+      done?: boolean;
+      reset?: boolean;
+    }) => {
+      if (host.configSnapshot?.streaming?.enabled === false) {
+        return;
+      }
+      host.webviewProtocol.send("it/evaluationStreamUpdate", {
+        questionIndex,
+        ...update,
+      });
+    };
 
     const evaluation = await it_evaluateAnswer(
       question,
@@ -176,6 +192,8 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
       contextQuestions,
       payload.systemPrompt,
       payload.demoPrompt,
+      undefined,
+      streamHandler,
     );
     const revised: ItRevisedAnswer | undefined = evaluation.revisedAnswers?.[0];
     if (!revised) {

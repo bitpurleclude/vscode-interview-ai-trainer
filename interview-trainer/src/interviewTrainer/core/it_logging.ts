@@ -109,3 +109,18 @@ export function it_emitStreamUpdate(
   }
   host.webviewProtocol.send("it/stepStreamUpdate", update);
 }
+
+export function it_emitEvaluationStreamUpdate(
+  host: ItLogHost,
+  update: {
+    questionIndex: number;
+    text: string;
+    done?: boolean;
+    reset?: boolean;
+  },
+): void {
+  if (host.configSnapshot?.streaming?.enabled === false) {
+    return;
+  }
+  host.webviewProtocol.send("it/evaluationStreamUpdate", update);
+}

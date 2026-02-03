@@ -26,6 +26,12 @@ export type ItAnalysisHost = {
     done?: boolean;
     reset?: boolean;
   }) => void;
+  emitEvaluationStreamUpdate: (update: {
+    questionIndex: number;
+    text: string;
+    done?: boolean;
+    reset?: boolean;
+  }) => void;
   logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
   requireWorkspaceRoot: () => string;
   resolveApiConfigWithProviders: (apiConfig: import("../api/it_apiConfig").ItApiConfig) => import("../api/it_apiConfig").ItApiConfig;
@@ -100,6 +106,7 @@ export async function it_handleAnalyze(
         corpusDirtyFiles: Array.from(host.corpusDirtyFiles),
         onCorpusTrace: (message, detail) => host.logCorpusTrace(message, detail),
         onStream: (update) => host.emitStreamUpdate(update),
+        onEvalStream: (update) => host.emitEvaluationStreamUpdate(update),
         abortSignal: host.analysisAbort ?? undefined,
       },
       request,
