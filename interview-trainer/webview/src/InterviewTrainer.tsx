@@ -394,6 +394,8 @@ const InterviewTrainer: React.FC = () => {
   const [clearingCorpusCache, setClearingCorpusCache] = useState(false);
   const [corpusCacheMessage, setCorpusCacheMessage] = useState<string | null>(null);
   const [traceLogEnabled, setTraceLogEnabled] = useState(false);
+  const [savingResult, setSavingResult] = useState(false);
+  const [saveResultMessage, setSaveResultMessage] = useState<string | null>(null);
   const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
   const [promptSaveScope, setPromptSaveScope] = useState<
     "evaluation" | "demo" | "per-question" | null
@@ -1307,9 +1309,31 @@ const InterviewTrainer: React.FC = () => {
     }
   };
 
-  const handleOpenReport = async () => {
-    if (!analysisResult?.reportPath) return;
-    await request("openFile", { path: analysisResult.reportPath });
+  const handleSaveResult = async () => {
+    if (!analysisResult) {
+      setSaveResultMessage("暂无可保存的结果");
+      return;
+    }
+    setSavingResult(true);
+    setSaveResultMessage(null);
+    try {
+      const resp = await request("it/saveCurrentResult", {
+        response: analysisResult,
+        questionText: questionText.trim(),
+        questionList: parsedQuestionList,
+        topicTitle: analysisResult.evaluation?.topicTitle || "",
+      });
+      if (resp?.status === "success") {
+        setSaveResultMessage("结果已写入");
+      } else {
+        setSaveResultMessage("保存失败，请重试");
+      }
+    } catch (err) {
+      setSaveResultMessage(
+        `保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingResult(false);
   };
 
   const handleLoadHistory = useCallback(async () => {
@@ -1973,10 +1997,10 @@ const InterviewTrainer: React.FC = () => {
             </button>
             <button
               className="it-button"
-              disabled={uiLocked}
-              onClick={handleOpenReport}
+              disabled={uiLocked || savingResult}
+              onClick={handleSaveResult}
             >
-              保存结果
+              {savingResult ? "保存中..." : "保存结果"}
             </button>
             <button
               className="it-button"
@@ -1991,6 +2015,9 @@ const InterviewTrainer: React.FC = () => {
 
       <div className="it-status">
         <span>{uiLocked ? "界面初始化中..." : itState.statusMessage}</span>
+        {saveResultMessage && (
+          <span className="it-status__hint">{saveResultMessage}</span>
+        )}
         {itState.recordingState === "recording" && (
           <span className="it-status__timer">
             {it_formatSeconds(recordingTime)}

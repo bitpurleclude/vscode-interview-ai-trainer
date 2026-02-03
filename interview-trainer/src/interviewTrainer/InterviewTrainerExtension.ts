@@ -33,6 +33,7 @@ import { it_callBaiduAsr } from "./api/it_baidu";
 import { it_callVolcAsr } from "./api/it_volc_asr";
 import { it_callEmbedding } from "./api/it_embedding";
 import { it_runAnalysis } from "./core/it_analyze";
+import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "./core/it_report";
 import { it_evaluateAnswer } from "./core/it_evaluation";
 import {
   it_buildCorpusAsync,
@@ -41,12 +42,19 @@ import {
 } from "./core/it_notes";
 import { it_listHistoryItems } from "./storage/it_history";
 import {
+  it_appendAttemptDataAsync,
+  it_buildQuestionFingerprint,
+  it_nextAttemptIndexAsync,
+  it_readTopicMetaAsync,
+  it_writeTopicMetaAsync,
+} from "./storage/it_sessions";
+import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
 } from "./storage/it_questionCache";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_parseQuestions } from "./core/it_questionParser";
-import { it_hashText } from "./utils/it_text";
+import { it_hashText, it_normalizeText } from "./utils/it_text";
 import { it_pcm16ToWavBuffer } from "./utils/it_wav";
 
 const IT_STATUS_INIT: ItState = {
@@ -1891,6 +1899,67 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     });
     this.webviewProtocol.on("it/analyzeAudio", async (msg) => {
       return await this.handleAnalyze(msg.data);
+    });
+    this.webviewProtocol.on("it/saveCurrentResult", async (msg) => {
+      const payload = msg.data || {};
+      const response = payload.response as ItAnalyzeResponse | undefined;
+      if (!response || !response.reportPath || !response.topicDir) {
+        throw new Error("缺少可保存的结果");
+      }
+      const questionText = String(
+        payload.questionText ?? response.questionText ?? "",
+      );
+      const questionList = Array.isArray(payload.questionList)
+        ? payload.questionList.map((item: any) => String(item)).filter(Boolean)
+        : Array.isArray(response.questionList)
+          ? response.questionList.map((item: any) => String(item)).filter(Boolean)
+          : [];
+      const topicTitle = String(
+        payload.topicTitle || response.evaluation?.topicTitle || "未命名",
+      );
+      const attemptIndex = await it_nextAttemptIndexAsync(response.reportPath);
+      await it_appendReportAsync(
+        response.reportPath,
+        topicTitle,
+        questionText || undefined,
+        questionList.length ? questionList : undefined,
+        attemptIndex,
+        response,
+        {
+          attemptHeading: "第{n}次作答",
+          segmentHeading: "小题{n}",
+          attemptNote: "评分仅供参考，请结合标准文件自评。",
+        },
+      );
+      await it_updateReferenceNotesFileAsync(response.topicDir, response.evaluation);
+      const attemptData = {
+        attemptIndex,
+        timestamp: new Date().toISOString(),
+        audioPath: response.audioPath,
+        durationSec: response.acoustic.durationSec,
+        transcript: response.transcript,
+        detailedTranscript: response.detailedTranscript,
+        evaluation: response.evaluation,
+        notes: response.notes,
+        audioSegments: response.audioSegments,
+        questionTimings: response.questionTimings,
+      };
+      await it_appendAttemptDataAsync(response.topicDir, attemptData);
+
+      const meta = await it_readTopicMetaAsync(response.topicDir);
+      const fingerprint = it_buildQuestionFingerprint(questionText, questionList);
+      const normalized = fingerprint || it_normalizeText(questionText || topicTitle);
+      const now = new Date().toISOString();
+      await it_writeTopicMetaAsync(response.topicDir, {
+        topicTitle: meta.topicTitle || topicTitle,
+        questionText: questionText || meta.questionText || "",
+        questionList: questionList.length ? questionList : meta.questionList || [],
+        questionHash: meta.questionHash || it_hashText(normalized),
+        createdAt: meta.createdAt || now,
+        updatedAt: now,
+        overallScore: response.evaluation.overallScore,
+      });
+      return { ok: true, attemptIndex, reportPath: response.reportPath };
     });
     this.webviewProtocol.on("it/cancelAnalyze", () => {
       if (this.analysisAbort) {
