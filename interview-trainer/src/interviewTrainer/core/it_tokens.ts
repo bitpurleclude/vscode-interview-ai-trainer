@@ -37,6 +37,7 @@ const TOKEN_STATUS_ERROR: ItTokenState["status"] = "error";
 
 const DEFAULT_REFRESH_BEFORE_SEC = 300;
 const DEFAULT_ERROR_RETRY_SEC = 60;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 function it_isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -244,16 +245,29 @@ export class ItTokenService {
     } else {
       const expiresAtMs = Date.parse(state.expiresAt);
       if (!Number.isNaN(expiresAtMs)) {
-        const refreshBeforeSec = Number(
+        const nowMs = Date.now();
+        const remainingSec = Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000));
+        let refreshBeforeSec = Number(
           item.template.token?.refreshBeforeSec ?? DEFAULT_REFRESH_BEFORE_SEC,
         );
+        if (!Number.isFinite(refreshBeforeSec) || refreshBeforeSec < 0) {
+          refreshBeforeSec = DEFAULT_REFRESH_BEFORE_SEC;
+        }
+        if (remainingSec > 0 && refreshBeforeSec >= remainingSec) {
+          refreshBeforeSec = Math.max(0, remainingSec - 1);
+        }
         const refreshAt = expiresAtMs - refreshBeforeSec * 1000;
-        delayMs = Math.max(1000, refreshAt - Date.now());
+        delayMs = Math.max(1000, refreshAt - nowMs);
       }
     }
+    const shouldRecalculate = delayMs > MAX_TIMER_DELAY_MS;
     const timer = setTimeout(() => {
-      void this.refreshToken(env, item);
-    }, delayMs);
+      if (shouldRecalculate) {
+        this.scheduleRefresh(env, item);
+      } else {
+        void this.refreshToken(env, item);
+      }
+    }, Math.min(delayMs, MAX_TIMER_DELAY_MS));
     this.timers.set(key, timer);
   }
 
