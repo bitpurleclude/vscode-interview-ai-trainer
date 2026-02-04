@@ -1,10 +1,46 @@
 import { it_callLlmChat } from "../api/it_llm";
-import type { ItLlmConfig } from "../api/it_llmTypes";
+import type { ItLlmConfig, ItLlmMessage } from "../api/it_llmTypes";
+import {
+  it_buildDoubaoChatRequest,
+  it_buildDoubaoResponsesRequest,
+  it_buildOpenAiChatRequest,
+  it_buildOpenAiResponsesRequest,
+} from "../api/it_requestBuilder";
 import { it_callBaiduAsr } from "../api/it_baidu";
 import { it_callVolcAsr } from "../api/it_volc_asr";
 import { it_callEmbedding } from "../api/it_embedding";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+
+function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
+  const masked: Record<string, string> = { ...headers };
+  Object.keys(masked).forEach((key) => {
+    const lower = key.toLowerCase();
+    if (lower === "authorization") {
+      const value = masked[key] || "";
+      masked[key] = value.startsWith("Bearer ") ? "Bearer ***" : "***";
+      return;
+    }
+    if (lower === "x-api-key" || lower === "x-goog-api-key" || lower === "api-key") {
+      masked[key] = "***";
+    }
+  });
+  return masked;
+}
+
+function it_emitLlmTestRequest(
+  host: ItWebviewHandlersHost,
+  detail: Record<string, unknown>,
+): void {
+  const stamp = new Date().toISOString();
+  host.outputChannel.appendLine(`[${stamp}] LLM test request`);
+  try {
+    host.outputChannel.appendLine(JSON.stringify(detail, null, 2));
+  } catch {
+    host.outputChannel.appendLine(String(detail));
+  }
+  host.outputChannel.show(true);
+}
 
 export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
   host.webviewProtocol.on("it/testLlm", async (msg) => {
@@ -31,6 +67,13 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
       maxRetries: Number(llmForm.maxRetries ?? 0),
       antiRepeat: Boolean(llmForm.antiRepeat ?? false),
       useResponses: Boolean(llmForm.useResponses ?? false),
+      apiMode: llmForm.apiMode,
+      responsesPath: llmForm.responsesPath,
+      toolsPreset: llmForm.toolsPreset,
+      tools: llmForm.tools,
+      include: llmForm.include,
+      store: typeof llmForm.store === "boolean" ? llmForm.store : undefined,
+      promptCacheKey: llmForm.promptCacheKey,
       webSearch: Boolean(llmForm.webSearch ?? false),
       reasoningEffort: llmForm.reasoningEffort,
       maxOutputTokens: Number(llmForm.maxOutputTokens ?? 0),
@@ -41,10 +84,42 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
       throw new Error("缺少 LLM API Key");
     }
     try {
-      const content = await it_callLlmChat(cfg, [
+      const messages: ItLlmMessage[] = [
         { role: "system", content: "你是健康检查助手，请用12个字内回复“接口可用”" },
         { role: "user", content: "ping" },
-      ]);
+      ];
+      const apiMode = cfg.apiMode || (cfg.useResponses ? "responses" : "chat");
+      let requestDetail: Record<string, unknown> | null = null;
+      if (provider === "openai_compatible") {
+        const spec =
+          apiMode === "responses"
+            ? it_buildOpenAiResponsesRequest(cfg, messages, undefined, false)
+            : it_buildOpenAiChatRequest(cfg, messages, false);
+        requestDetail = {
+          url: spec.url,
+          headers: it_maskHeaders(spec.headers),
+          payload: spec.payload,
+        };
+      } else if (provider === "volc_doubao") {
+        const spec =
+          apiMode === "responses"
+            ? it_buildDoubaoResponsesRequest(cfg, messages)
+            : it_buildDoubaoChatRequest(cfg, messages, false);
+        requestDetail = {
+          url: spec.url,
+          headers: it_maskHeaders(spec.headers),
+          payload: spec.payload,
+        };
+      } else {
+        requestDetail = {
+          provider,
+          baseUrl: cfg.baseUrl,
+          model: cfg.model,
+          messages,
+        };
+      }
+      it_emitLlmTestRequest(host, requestDetail);
+      const content = await it_callLlmChat(cfg, messages);
       return { ok: true, content };
     } catch (error) {
       host.logLlmTestFailure(error, {
