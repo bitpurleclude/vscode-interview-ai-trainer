@@ -24,6 +24,7 @@ import { useQuestionInput } from "./hooks/useQuestionInput";
 import { useTemplateEditor } from "./hooks/useTemplateEditor";
 import { useTemplateBindings } from "./hooks/useTemplateBindings";
 import { useEnvironmentSettings } from "./hooks/useEnvironmentSettings";
+import { useRetrievalSettings } from "./hooks/useRetrievalSettings";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -105,14 +106,6 @@ const InterviewTrainer: React.FC = () => {
       queryMaxChars: 1500,
     },
   });
-  const [savingRetrieval, setSavingRetrieval] = useState(false);
-  const [retrievalSaveMessage, setRetrievalSaveMessage] = useState<string | null>(null);
-  const [clearingEmbeddingCache, setClearingEmbeddingCache] = useState(false);
-  const [embeddingCacheMessage, setEmbeddingCacheMessage] = useState<string | null>(
-    null,
-  );
-  const [clearingCorpusCache, setClearingCorpusCache] = useState(false);
-  const [corpusCacheMessage, setCorpusCacheMessage] = useState<string | null>(null);
   const [traceLogEnabled, setTraceLogEnabled] = useState(false);
   const [topicTitleMode, setTopicTitleMode] = useState<"llm" | "simple">("llm");
   const [topicTitleLen, setTopicTitleLen] = useState(18);
@@ -309,6 +302,29 @@ const InterviewTrainer: React.FC = () => {
     topicTitleLen,
   });
 
+  const {
+    savingRetrieval,
+    retrievalSaveMessage,
+    clearingEmbeddingCache,
+    embeddingCacheMessage,
+    clearingCorpusCache,
+    corpusCacheMessage,
+    handleRetrievalFieldChange,
+    handleRetrievalVectorChange,
+    handleSaveRetrievalSettings,
+    handleClearEmbeddingCache,
+    handleClearCorpusCache,
+    handleToggleRetrieval,
+    handleEnableTraceLogs,
+  } = useRetrievalSettings({
+    config,
+    setConfig,
+    retrievalForm,
+    setRetrievalForm,
+    applyRetrievalToForm,
+    setTraceLogEnabled,
+  });
+
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
       (step) =>
@@ -420,118 +436,6 @@ const InterviewTrainer: React.FC = () => {
     analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
   );
   const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
-  const handleRetrievalFieldChange = (
-    key:
-      | "mode"
-      | "topK"
-      | "topKNotes"
-      | "topKKnowledge"
-      | "topKRubrics"
-      | "topKExamples"
-      | "maxConcurrency"
-      | "embeddingMaxConcurrency"
-      | "minScore",
-    value: any,
-  ) => {
-    setRetrievalForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-  const handleRetrievalVectorChange = (key: keyof typeof retrievalForm.vector, value: any) => {
-    setRetrievalForm((prev) => ({
-      ...prev,
-      vector: {
-        ...prev.vector,
-        [key]: value,
-      },
-    }));
-  };
-  const handleSaveRetrievalSettings = async () => {
-    setSavingRetrieval(true);
-    setRetrievalSaveMessage(null);
-    try {
-      const payload = {
-        retrieval: {
-          enabled: config?.retrievalEnabled ?? true,
-          mode: retrievalForm.mode,
-          topK: Number(retrievalForm.topK),
-          topKNotes: Number(retrievalForm.topKNotes),
-          topKKnowledge: Number(retrievalForm.topKKnowledge),
-          topKRubrics: Number(retrievalForm.topKRubrics),
-          topKExamples: Number(retrievalForm.topKExamples),
-          maxConcurrency: Number(retrievalForm.maxConcurrency),
-          embeddingMaxConcurrency: Number(retrievalForm.embeddingMaxConcurrency),
-          minScore: Number(retrievalForm.minScore),
-          vector: {
-            batchSize: Number(retrievalForm.vector.batchSize),
-            queryMaxChars: Number(retrievalForm.vector.queryMaxChars),
-          },
-        },
-      };
-      const resp = await request("it/updateRetrievalSettings", payload);
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-          applyRetrievalToForm(resp.content);
-        }
-        setRetrievalSaveMessage("检索配置已保存。");
-      } else {
-        setRetrievalSaveMessage("检索配置保存失败，请检查输入。");
-      }
-    } catch (err) {
-      setRetrievalSaveMessage(
-        `检索配置保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingRetrieval(false);
-  };
-  const handleClearEmbeddingCache = async () => {
-    setClearingEmbeddingCache(true);
-    setEmbeddingCacheMessage(null);
-    try {
-      const resp = await request("it/clearEmbeddingCache", undefined);
-      if (resp?.status === "success") {
-        const cleared = Boolean(resp.content?.cleared);
-        setEmbeddingCacheMessage(cleared ? "已清理缓存" : "缓存为空，无需清理");
-      } else {
-        setEmbeddingCacheMessage("清理缓存失败，请重试。");
-      }
-    } catch (err) {
-      setEmbeddingCacheMessage(
-        `清理缓存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setClearingEmbeddingCache(false);
-  };
-  const handleEnableTraceLogs = async () => {
-    try {
-      const resp = await request("it/enableTraceLogs", {});
-      if (resp?.status === "success") {
-        setTraceLogEnabled(true);
-      }
-    } catch {
-      // ignore
-    }
-  };
-  const handleClearCorpusCache = async () => {
-    setClearingCorpusCache(true);
-    setCorpusCacheMessage(null);
-    try {
-      const resp = await request("it/clearCorpusCache", undefined);
-      if (resp?.status === "success") {
-        const cleared = Boolean(resp.content?.cleared);
-        setCorpusCacheMessage(cleared ? "已清理语料缓存" : "语料缓存为空");
-      } else {
-        setCorpusCacheMessage("清理语料缓存失败，请重试。");
-      }
-    } catch (err) {
-      setCorpusCacheMessage(
-        `清理语料缓存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setClearingCorpusCache(false);
-  };
   const handleReloadConfig = async () => {
     await reloadConfig();
   };
@@ -540,9 +444,6 @@ const InterviewTrainer: React.FC = () => {
   };
   const handleSelectSessionsDir = () => {
     request("it/selectSessionsDir", undefined);
-  };
-  const handleToggleRetrieval = async (enabled: boolean) => {
-    await request("it/setRetrievalEnabled", { enabled });
   };
   const handleSelectWorkspaceDir = async (kind: string) => {
     await request("it/selectWorkspaceDir", { kind });
