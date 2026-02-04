@@ -1,4 +1,4 @@
-import { it_callLlmChatStreaming } from "../api/it_llm";
+import { it_requestLlmChatStreaming } from "./clients/llmClient";
 import { ItLlmConfig } from "../api/it_llmTypes";
 
 export interface ItParsedQuestions {
@@ -146,7 +146,7 @@ export async function it_parseQuestions(
   let responseText: string | undefined;
   try {
     onStream?.({ text: "", reset: true });
-    const content = await it_callLlmChatStreaming(
+    const content = await it_requestLlmChatStreaming(
       parseConfig,
       [
         { role: "system", content: systemPrompt },

@@ -5,7 +5,7 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
-import { it_callLlmChat } from "../../api/it_llm";
+import { it_requestLlmChat } from "../clients/llmClient";
 import type { ItLlmConfig } from "../../api/it_llmTypes";
 import {
   it_appendAttemptDataAsync,
@@ -55,7 +55,7 @@ export async function it_generateTopicTitleWithLlm(
     .filter(Boolean)
     .join("\n\n");
   try {
-    const content = await it_callLlmChat(
+    const content = await it_requestLlmChat(
       {
         ...llmConfig,
         maxRetries: Math.max(0, Number(llmConfig.maxRetries ?? 1)),

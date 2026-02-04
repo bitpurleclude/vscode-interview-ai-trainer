@@ -1,6 +1,6 @@
 ﻿import fs from "fs";
 import path from "path";
-import { it_callEmbedding } from "../../api/it_embedding";
+import { it_requestEmbeddings } from "../clients/embeddingClient";
 import { it_hashText } from "../../utils/it_text";
 import type {
   ItCorpusItem,
@@ -236,7 +236,7 @@ export async function it_embedTexts(
   if (!texts.length) {
     return [];
   }
-  return it_callEmbedding(cfg, texts);
+  return it_requestEmbeddings(cfg, texts);
 }
 
 async function it_ensureEmbeddings(

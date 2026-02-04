@@ -2,7 +2,7 @@ import type {
   ItAudioSegment,
   ItQuestionTiming,
 } from "../../../protocol/interviewTrainer";
-import { it_callLlmChatStreaming } from "../../api/it_llm";
+import { it_requestLlmChatStreaming } from "../clients/llmClient";
 import type { ItLlmConfig } from "../../api/it_llmTypes";
 import { it_formatSeconds, it_normalizeText } from "../../utils/it_text";
 import { it_extractJson } from "./shared";
@@ -226,7 +226,7 @@ export async function it_assignSegmentsWithLlm(
         { role: "user", content: userPrompt },
       ],
     });
-    const content = await it_callLlmChatStreaming(
+    const content = await it_requestLlmChatStreaming(
       llmConfig,
       [
         { role: "system", content: systemPrompt },
@@ -332,7 +332,7 @@ export async function it_splitAnswersWithLlm(
         { role: "user", content: userPrompt },
       ],
     });
-    const content = await it_callLlmChatStreaming(
+    const content = await it_requestLlmChatStreaming(
       llmConfig,
       [
         { role: "system", content: systemPrompt },

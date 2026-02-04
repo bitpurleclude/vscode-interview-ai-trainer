@@ -102,10 +102,6 @@ interface ItAnalyzeProgress {
   status?: ItStepStatus;
 }
 
-function it_getEnvConfig(apiConfig: ItApiConfig, env: string): any {
-  return apiConfig.environments?.[env] ?? {};
-}
-
 function it_buildTemplateRuntime(
   deps: ItAnalyzeDeps,
   template: ItTemplateRuntime["template"] | null,
@@ -121,20 +117,22 @@ function it_buildTemplateRuntime(
   };
 }
 
-function it_attachTemplateToLlmConfig(
-  base: ItLlmConfig | null,
+function it_buildTemplateLlmConfig(
   runtime: ItTemplateRuntime,
   overrides?: Partial<ItLlmConfig>,
 ): ItLlmConfig {
-  const fallback: ItLlmConfig = {
-    provider: "openai_compatible",
+  const streamEnabled =
+    runtime.template.request?.stream === true ||
+    runtime.template.response?.mode === "sse";
+  const base: ItLlmConfig = {
+    provider: "template",
     apiKey: "",
     baseUrl: "",
     model: "",
     temperature: 0.8,
     topP: 0.8,
-    timeoutSec: 60,
-    maxRetries: 0,
+    timeoutSec: Number(runtime.template.request?.timeoutSec ?? 60),
+    maxRetries: 1,
     antiRepeat: false,
     useResponses: false,
     apiMode: "chat",
@@ -144,98 +142,15 @@ function it_attachTemplateToLlmConfig(
     reasoningEffort: undefined,
     maxOutputTokens: 0,
     reusePrefix: false,
-    stream: true,
-  };
-  const merged = {
-    ...(base || fallback),
-    ...(overrides || {}),
+    stream: streamEnabled,
   };
   return {
-    ...merged,
+    ...base,
+    ...(overrides || {}),
     template: runtime.template,
     templateEnv: runtime.environment,
     templateContext: runtime.context,
   };
-}
-
-function it_getLlmConfig(
-  envConfig: any,
-  override?: Record<string, any>,
-): ItLlmConfig | null {
-  const base = envConfig?.llm ?? {};
-  const llm = {
-    ...base,
-    ...(override || {}),
-  };
-  const provider = llm.provider || base.provider;
-  const apiKey = llm.api_key || llm.apiKey || base.api_key || "";
-  if (!provider || !apiKey) {
-    return null;
-  }
-  const isDoubao = provider === "volc_doubao";
-  const defaultBase = isDoubao
-    ? "https://ark.cn-beijing.volces.com"
-    : "https://qianfan.baidubce.com/v2";
-  const retryValue = Number(llm.max_retries ?? 1);
-  const resolvedRetries = Number.isFinite(retryValue) ? Math.max(0, retryValue) : 1;
-  const useResponses = Boolean(
-    llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false),
-  );
-  const apiModeRaw = llm.api_mode ?? llm.apiMode;
-  const apiMode = apiModeRaw
-    ? String(apiModeRaw).toLowerCase() === "responses"
-      ? "responses"
-      : "chat"
-    : useResponses
-      ? "responses"
-      : "chat";
-  const responsesPath = llm.responses_path ?? llm.responsesPath ?? "";
-  const toolsPreset = llm.tools_preset ?? llm.toolsPreset ?? "";
-  return {
-    provider,
-    apiKey,
-    baseUrl: llm.base_url || llm.baseUrl || defaultBase,
-    model:
-      llm.model ||
-      (isDoubao ? "doubao-seed-1-8-251228" : "ernie-4.5-turbo-128k"),
-    temperature: Number(llm.temperature ?? 0.2),
-    topP: Number(llm.top_p ?? 0.8),
-    timeoutSec: Number(llm.timeout_sec ?? 60),
-    maxRetries: resolvedRetries,
-    antiRepeat: Boolean(llm.anti_repeat ?? llm.antiRepeat ?? false),
-    useResponses,
-    apiMode,
-    responsesPath: responsesPath ? String(responsesPath) : "",
-    toolsPreset: toolsPreset ? String(toolsPreset) : "",
-    webSearch: Boolean(
-      llm.web_search ?? llm.webSearch ?? (isDoubao ? true : false),
-    ),
-    reasoningEffort:
-      llm.reasoning_effort ?? llm.reasoningEffort ?? (isDoubao ? "medium" : undefined),
-    maxOutputTokens: Number(llm.max_output_tokens ?? llm.maxOutputTokens ?? 800),
-    reusePrefix: Boolean(
-      llm.reuse_prefix ?? llm.reusePrefix ?? (isDoubao ? true : false),
-    ),
-    stream: Boolean(llm.stream ?? llm.stream_enabled ?? true),
-  };
-}
-
-function it_resolveTaskProfile(
-  envConfig: any,
-  skillConfig: Record<string, any>,
-  taskKey: "question_parse" | "segment" | "evaluation",
-): Record<string, any> | null {
-  const tasks = skillConfig?.llm_tasks || {};
-  const profileId = String(
-    tasks[taskKey] ||
-      (taskKey === "question_parse" ? tasks.questionParse : "") ||
-      "",
-  ).trim();
-  if (!profileId) {
-    return null;
-  }
-  const profiles = envConfig?.llm_profiles || {};
-  return profiles[profileId] || null;
 }
 
 export async function it_runAnalysis(
@@ -261,7 +176,6 @@ export async function it_runAnalysis(
     });
   };
   const env = deps.apiConfig.active?.environment || "prod";
-  const envConfig = it_getEnvConfig(deps.apiConfig, env);
   const templatesConfig = deps.templatesConfig || { version: 1, environments: {} };
   const questionParseTemplate = it_resolveBindingTemplate(
     templatesConfig,
@@ -270,15 +184,6 @@ export async function it_runAnalysis(
     "questionParse",
   );
   const questionParseRuntime = it_buildTemplateRuntime(deps, questionParseTemplate);
-  const questionParseProfile = it_resolveTaskProfile(
-    envConfig,
-    deps.skillConfig,
-    "question_parse",
-  );
-  const llmConfigBase = it_getLlmConfig(envConfig, questionParseProfile || undefined);
-  const llmConfig = questionParseRuntime
-    ? it_attachTemplateToLlmConfig(llmConfigBase, questionParseRuntime)
-    : null;
   const asrTemplate = it_resolveBindingTemplate(
     templatesConfig,
     env,
@@ -286,6 +191,26 @@ export async function it_runAnalysis(
     "transcription",
   );
   const asrRuntime = it_buildTemplateRuntime(deps, asrTemplate);
+  if (!asrRuntime) {
+    throw new Error("ASR 模板未绑定：请在设置中绑定转写模板。");
+  }
+  const evaluationTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "llm",
+    "evaluation",
+  );
+  const evaluationRuntime = it_buildTemplateRuntime(deps, evaluationTemplate);
+  if (!evaluationRuntime) {
+    throw new Error("LLM 模板未绑定：请在设置中绑定评价模板。");
+  }
+  const segmentTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "llm",
+    "segment",
+  );
+  const segmentRuntime = it_buildTemplateRuntime(deps, segmentTemplate);
   const embeddingTemplate = it_resolveBindingTemplate(
     templatesConfig,
     env,
@@ -296,6 +221,16 @@ export async function it_runAnalysis(
   const cacheRoot = deps.context.globalStorageUri?.fsPath;
   let questionText = request.questionText?.trim() || "";
   let questionList = (request.questionList ?? []).filter((q) => q.trim());
+  const needsQuestionParse = questionList.length === 0;
+  if (needsQuestionParse && questionText && !questionParseRuntime) {
+    throw new Error("LLM 模板未绑定：请在设置中绑定题目解析模板。");
+  }
+  const questionParseLlmConfig = questionParseRuntime
+    ? it_buildTemplateLlmConfig(questionParseRuntime)
+    : null;
+  const titleLlmConfig = questionParseRuntime
+    ? questionParseLlmConfig
+    : it_buildTemplateLlmConfig(evaluationRuntime);
   if (!questionText && !questionList.length) {
     throw new Error("请先填写题干或导入题干文件。");
   }
@@ -336,7 +271,7 @@ export async function it_runAnalysis(
       parsePromise = (async () => {
         const parsed = await it_parseQuestions(
           questionText,
-          llmConfig,
+          questionParseLlmConfig,
           deps.onStream
             ? (update) => deps.onStream?.({ step: "question", ...update })
             : undefined,
@@ -403,6 +338,11 @@ export async function it_runAnalysis(
   const retrievalCfg = deps.skillConfig.retrieval ?? {};
   const retrievalEnabled = retrievalCfg.enabled !== false;
   const retrievalMode = String(retrievalCfg.mode || "vector");
+  if (retrievalEnabled && retrievalMode !== "keyword" && !embeddingRuntime) {
+    throw new Error(
+      "Embedding 模板未绑定：请在设置中绑定检索模板或关闭向量检索。",
+    );
+  }
   const retrievalLabel = retrievalMode === "keyword" ? "词面" : "向量";
   const corpusCacheMb = Number(
     retrievalCfg.corpus_cache_mb ?? retrievalCfg.corpus_cache_max_mb ?? 25,
@@ -464,7 +404,7 @@ export async function it_runAnalysis(
     });
   }
 
-  const asrCfg = envConfig.asr ?? {};
+  const asrCfg = deps.skillConfig.asr ?? {};
   const transcript = await it_transcribeAudio(
     request,
     asrCfg,
@@ -520,27 +460,13 @@ export async function it_runAnalysis(
     ensureNotAborted();
   }
 
-  const segmentProfile = it_resolveTaskProfile(
-    envConfig,
-    deps.skillConfig,
-    "segment",
-  );
-  const segmentTemplate = it_resolveBindingTemplate(
-    templatesConfig,
-    env,
-    "llm",
-    "segment",
-  );
-  const segmentRuntime = it_buildTemplateRuntime(deps, segmentTemplate);
-  const segmentLlmBase = it_getLlmConfig(envConfig, segmentProfile || undefined);
   const segmentLlmConfig = segmentRuntime
-    ? it_attachTemplateToLlmConfig(segmentLlmBase, segmentRuntime)
+    ? it_buildTemplateLlmConfig(segmentRuntime, { maxOutputTokens: 0 })
     : null;
-  if (segmentLlmConfig) {
-    segmentLlmConfig.maxOutputTokens = 0;
-  }
-
   const multiQuestion = questionList.length > 1;
+  if (multiQuestion && !segmentLlmConfig) {
+    throw new Error("LLM 模板未绑定：请在设置中绑定分段模板。");
+  }
   if (multiQuestion) {
     reportProgress("segment", 5, "多题分段 5% · 准备中", "running");
   } else {
@@ -566,12 +492,7 @@ export async function it_runAnalysis(
           ? (update) => deps.onStream?.({ step: "segment", ...update })
           : undefined,
       );
-      reportProgress(
-        "segment",
-        45,
-        splitAnswers ? "多题分段 45% · 正在本地对齐" : "多题分段 45% · 正在本地对齐",
-        "running",
-      );
+      reportProgress("segment", 45, "多题分段 45% · 正在本地对齐", "running");
       if (splitAnswers) {
         questionAnswers = splitAnswers;
         const alignedTimings: ItQuestionTiming[] = [];
@@ -626,16 +547,16 @@ export async function it_runAnalysis(
         }
       }
       if (!questionTimings.length) {
-      reportProgress("segment", 80, "多题分段 80% · 正在远程兜底", "running");
-      const assigned = await it_assignSegmentsWithLlm(
-        segmentLlmConfig,
-        questionList,
-        audioSegments,
-        deps.onCorpusTrace,
-        deps.onStream
-          ? (update) => deps.onStream?.({ step: "segment", ...update })
-          : undefined,
-      );
+        reportProgress("segment", 80, "多题分段 80% · 正在远程兜底", "running");
+        const assigned = await it_assignSegmentsWithLlm(
+          segmentLlmConfig,
+          questionList,
+          audioSegments,
+          deps.onCorpusTrace,
+          deps.onStream
+            ? (update) => deps.onStream?.({ step: "segment", ...update })
+            : undefined,
+        );
         if (assigned) {
           questionTimings = assigned.timings;
           if (!questionAnswers) {
@@ -708,27 +629,17 @@ export async function it_runAnalysis(
       }
     }
     if (notesError) {
-      reportProgress(
-        "notes",
-        100,
-        `笔记加载失败：${notesError}`,
-        "error",
-      );
+      reportProgress("notes", 100, `笔记加载失败：${notesError}`, "error");
     }
     const notesStart = Date.now();
     const vectorCfg = retrievalCfg.vector ?? {};
-    const providerProfiles = deps.skillConfig.providers ?? {};
-    const embeddingProvider =
-      retrievalCfg.embedding_provider || vectorCfg.provider || "";
-    const providerEmbedding =
-      (embeddingProvider && providerProfiles[embeddingProvider]?.embedding) || {};
     const resolvedVector = {
-      provider: providerEmbedding.provider || vectorCfg.provider || embeddingProvider,
-      base_url: providerEmbedding.base_url || vectorCfg.base_url,
-      api_key: providerEmbedding.api_key || vectorCfg.api_key,
-      model: providerEmbedding.model || vectorCfg.model,
-      timeout_sec: Number(providerEmbedding.timeout_sec ?? vectorCfg.timeout_sec ?? 30),
-      max_retries: Number(providerEmbedding.max_retries ?? vectorCfg.max_retries ?? 1),
+      provider: "template",
+      base_url: "",
+      api_key: "",
+      model: vectorCfg.model || "",
+      timeout_sec: Number(vectorCfg.timeout_sec ?? 30),
+      max_retries: Number(vectorCfg.max_retries ?? 1),
       batch_size: Number(vectorCfg.batch_size ?? 16),
       query_max_chars: Number(vectorCfg.query_max_chars ?? 1500),
       template: embeddingRuntime?.template,
@@ -739,6 +650,7 @@ export async function it_runAnalysis(
       notesError = "Embedding 模板未绑定";
       notesErrorStage = "retrieve";
     }
+
     const notesTopK = Number(retrievalCfg.top_k ?? 5);
     const notesTopKNotes = Number(retrievalCfg.top_k_notes ?? notesTopK);
     const notesTopKKnowledge = Number(retrievalCfg.top_k_knowledge ?? notesTopK);
@@ -952,7 +864,7 @@ export async function it_runAnalysis(
   );
   if (titleMode === "llm") {
     const generatedTitle = await it_generateTopicTitleWithLlm(
-      llmConfig,
+      titleLlmConfig,
       questionText,
       questionList,
       maxTitleLen,
@@ -991,59 +903,39 @@ export async function it_runAnalysis(
     request.audio,
   );
 
-  const evaluationProfile = it_resolveTaskProfile(
-    envConfig,
-    deps.skillConfig,
-    "evaluation",
-  );
-  const evaluationTemplate = it_resolveBindingTemplate(
-    templatesConfig,
-    env,
-    "llm",
-    "evaluation",
-  );
-  const evaluationRuntime = it_buildTemplateRuntime(deps, evaluationTemplate);
-  const evaluationLlmBase = it_getLlmConfig(envConfig, evaluationProfile || undefined);
-  const evaluationLlmConfig = evaluationRuntime
-    ? it_attachTemplateToLlmConfig(evaluationLlmBase, evaluationRuntime)
-    : null;
-  if (evaluationLlmConfig) {
-    evaluationLlmConfig.maxOutputTokens = 0;
-  }
-  const evalProvider = evaluationLlmConfig?.provider || "heuristic";
-  const evalDefaultBase = evaluationLlmConfig?.baseUrl || "";
-  const evalDefaultModel = evaluationLlmConfig?.model || "";
+  const evaluationLlmConfig = it_buildTemplateLlmConfig(evaluationRuntime, {
+    maxOutputTokens: 0,
+  });
+  const evalProvider = evaluationLlmConfig.provider || "template";
   const evaluationConfig = {
     provider: evalProvider,
-    model: evaluationLlmConfig?.model || evalDefaultModel,
-    baseUrl: evaluationLlmConfig?.baseUrl || evalDefaultBase,
-    apiKey: evaluationLlmConfig?.apiKey || "",
-    temperature: Number(evaluationLlmConfig?.temperature ?? 0.8),
-    topP: Number(evaluationLlmConfig?.topP ?? 0.8),
-    timeoutSec: Number(evaluationLlmConfig?.timeoutSec ?? 60),
+    model: evaluationLlmConfig.model || "",
+    baseUrl: evaluationLlmConfig.baseUrl || "",
+    apiKey: "",
+    temperature: Number(evaluationLlmConfig.temperature ?? 0.8),
+    topP: Number(evaluationLlmConfig.topP ?? 0.8),
+    timeoutSec: Number(evaluationLlmConfig.timeoutSec ?? 60),
     maxRetries: Math.max(
       5,
-      Number(evaluationLlmConfig?.maxRetries ?? 1),
+      Number(evaluationLlmConfig.maxRetries ?? 1),
     ),
-    antiRepeat: Boolean(evaluationLlmConfig?.antiRepeat ?? false),
-    useResponses: Boolean(evaluationLlmConfig?.useResponses ?? false),
+    antiRepeat: Boolean(evaluationLlmConfig.antiRepeat ?? false),
+    useResponses: Boolean(evaluationLlmConfig.useResponses ?? false),
     apiMode:
-      evaluationLlmConfig?.apiMode ??
-      ((evaluationLlmConfig?.useResponses ?? false) ? "responses" : "chat"),
-    responsesPath: evaluationLlmConfig?.responsesPath ?? "",
-    toolsPreset: evaluationLlmConfig?.toolsPreset ?? "",
-    webSearch: Boolean(evaluationLlmConfig?.webSearch ?? false),
-    reasoningEffort: evaluationLlmConfig?.reasoningEffort ?? undefined,
+      evaluationLlmConfig.apiMode ??
+      ((evaluationLlmConfig.useResponses ?? false) ? "responses" : "chat"),
+    responsesPath: evaluationLlmConfig.responsesPath ?? "",
+    toolsPreset: evaluationLlmConfig.toolsPreset ?? "",
+    webSearch: Boolean(evaluationLlmConfig.webSearch ?? false),
+    reasoningEffort: evaluationLlmConfig.reasoningEffort ?? undefined,
     maxOutputTokens: 0,
-    reusePrefix: Boolean(evaluationLlmConfig?.reusePrefix ?? false),
-    stream:
-      evaluationLlmConfig?.stream ??
-      true,
-    template: evaluationLlmConfig?.template,
-    templateEnv: evaluationLlmConfig?.templateEnv,
-    templateContext: evaluationLlmConfig?.templateContext,
-    templateVars: evaluationLlmConfig?.templateVars,
-    templateMaxRetries: evaluationLlmConfig?.templateMaxRetries,
+    reusePrefix: Boolean(evaluationLlmConfig.reusePrefix ?? false),
+    stream: evaluationLlmConfig.stream ?? true,
+    template: evaluationLlmConfig.template,
+    templateEnv: evaluationLlmConfig.templateEnv,
+    templateContext: evaluationLlmConfig.templateContext,
+    templateVars: evaluationLlmConfig.templateVars,
+    templateMaxRetries: evaluationLlmConfig.templateMaxRetries,
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
     answerMode:
@@ -1052,11 +944,7 @@ export async function it_runAnalysis(
       "two-step",
   };
 
-  const evalUsesApi = Boolean(
-    evaluationLlmConfig?.provider &&
-      evaluationLlmConfig?.provider !== "heuristic" &&
-      (evaluationLlmConfig?.template || evaluationLlmConfig?.apiKey),
-  );
+  const evalUsesApi = Boolean(evaluationLlmConfig?.template);
   const evalLabel = evalUsesApi ? "API" : "LLM不可用";
   const evalModeLabel = evaluationConfig.answerMode === "two-step" ? "两步法" : "单次";
   reportProgress(

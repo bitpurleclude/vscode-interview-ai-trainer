@@ -3,7 +3,6 @@ import type {
   ItNoteHit,
   ItRevisedAnswer,
 } from "../../protocol/interviewTrainer";
-import { it_applySecretOverrides } from "../api/it_apiConfig";
 import type { ItLlmConfig } from "../api/it_llmTypes";
 import { it_resolveBindingTemplate, ItTemplateRuntime } from "../api/it_templateExecutor";
 import { it_evaluateAnswer } from "../core/it_evaluation";
@@ -15,10 +14,7 @@ import {
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
-  const buildTemplateLlmConfig = (
-    base: ItLlmConfig | null,
-    runtime: ItTemplateRuntime,
-  ): ItLlmConfig => {
+  const buildTemplateLlmConfig = (runtime: ItTemplateRuntime): ItLlmConfig => {
     const fallback: ItLlmConfig = {
       provider: "openai_compatible",
       apiKey: "",
@@ -39,11 +35,8 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
       reusePrefix: false,
       stream: true,
     };
-    const merged = {
-      ...(base || fallback),
-    };
     return {
-      ...merged,
+      ...fallback,
       template: runtime.template,
       templateEnv: runtime.environment,
       templateContext: runtime.context,
@@ -54,10 +47,6 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
     host.configBundle = host.configService.loadBundle();
     host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
-    host.configBundle.api = await it_applySecretOverrides(
-      host.context,
-      host.configBundle.api,
-    );
     const env = host.configBundle.api.active?.environment || "prod";
     const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
     const cacheRoot = host.context.globalStorageUri?.fsPath;
@@ -71,9 +60,6 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
         };
       }
     }
-    const taskCfg = host.configBundle.skill.llm_tasks || {};
-    const taskProfile =
-      String(taskCfg.question_parse || taskCfg.questionParse || "").trim() || undefined;
     const parseTemplate = it_resolveBindingTemplate(
       templatesConfig,
       env,
@@ -87,8 +73,10 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
           context: host.context,
         }
       : null;
-    const llmBase = host.it_getLlmConfig(taskProfile);
-    const llmConfig = parseRuntime ? buildTemplateLlmConfig(llmBase, parseRuntime) : null;
+    if (!parseRuntime) {
+      throw new Error("LLM 模板未绑定：请在设置中绑定题目解析模板。");
+    }
+    const llmConfig = buildTemplateLlmConfig(parseRuntime);
     const parsed = await it_parseQuestions(text, llmConfig);
     if (parsed.debug?.request) {
       host.logCorpusTrace("题目解析 LLM 请求", parsed.debug.request);
@@ -157,15 +145,8 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
     host.configBundle = host.configService.loadBundle();
     host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
-    host.configBundle.api = await it_applySecretOverrides(
-      host.context,
-      host.configBundle.api,
-    );
     const env = host.configBundle.api.active?.environment || "prod";
-    const envConfig = host.configBundle.api.environments?.[env] ?? {};
     const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
-    const taskCfg = host.configBundle.skill.llm_tasks || {};
-    const evalProfileId = String(taskCfg.evaluation || taskCfg.evaluate || "").trim() || undefined;
     const evaluationTemplate = it_resolveBindingTemplate(
       templatesConfig,
       env,
@@ -179,36 +160,36 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
           context: host.context,
         }
       : null;
-    const evalBase = host.it_getLlmConfig(evalProfileId);
-    const evalLlmConfig = evaluationRuntime ? buildTemplateLlmConfig(evalBase, evaluationRuntime) : null;
+    if (!evaluationRuntime) {
+      throw new Error("LLM 模板未绑定：请在设置中绑定评估模板。");
+    }
+    const evalLlmConfig = buildTemplateLlmConfig(evaluationRuntime);
     if (evalLlmConfig) {
       evalLlmConfig.maxOutputTokens = 0;
     }
-    const evalProvider = evalLlmConfig?.provider || "heuristic";
-    const evalDefaultBase = evalLlmConfig?.baseUrl || "";
-    const evalDefaultModel = evalLlmConfig?.model || "";
+    const evalProvider = evalLlmConfig.provider || "template";
     const evaluationConfig = {
       provider: evalProvider,
-      model: evalLlmConfig?.model || evalDefaultModel,
-      baseUrl: evalLlmConfig?.baseUrl || evalDefaultBase,
-      apiKey: evalLlmConfig?.apiKey || "",
-      temperature: Number(evalLlmConfig?.temperature ?? 0.8),
-      topP: Number(evalLlmConfig?.topP ?? 0.8),
-      timeoutSec: Number(evalLlmConfig?.timeoutSec ?? 60),
+      model: evalLlmConfig.model || "",
+      baseUrl: evalLlmConfig.baseUrl || "",
+      apiKey: "",
+      temperature: Number(evalLlmConfig.temperature ?? 0.8),
+      topP: Number(evalLlmConfig.topP ?? 0.8),
+      timeoutSec: Number(evalLlmConfig.timeoutSec ?? 60),
       maxRetries: Math.max(
         5,
-        Number(evalLlmConfig?.maxRetries ?? 1),
+        Number(evalLlmConfig.maxRetries ?? 1),
       ),
-      useResponses: Boolean(evalLlmConfig?.useResponses ?? false),
-      webSearch: Boolean(evalLlmConfig?.webSearch ?? false),
-      reasoningEffort: evalLlmConfig?.reasoningEffort ?? undefined,
+      useResponses: Boolean(evalLlmConfig.useResponses ?? false),
+      webSearch: Boolean(evalLlmConfig.webSearch ?? false),
+      reasoningEffort: evalLlmConfig.reasoningEffort ?? undefined,
       maxOutputTokens: 0,
-      reusePrefix: Boolean(evalLlmConfig?.reusePrefix ?? false),
-      template: evalLlmConfig?.template,
-      templateEnv: evalLlmConfig?.templateEnv,
-      templateContext: evalLlmConfig?.templateContext,
-      templateVars: evalLlmConfig?.templateVars,
-      templateMaxRetries: evalLlmConfig?.templateMaxRetries,
+      reusePrefix: Boolean(evalLlmConfig.reusePrefix ?? false),
+      template: evalLlmConfig.template,
+      templateEnv: evalLlmConfig.templateEnv,
+      templateContext: evalLlmConfig.templateContext,
+      templateVars: evalLlmConfig.templateVars,
+      templateMaxRetries: evalLlmConfig.templateMaxRetries,
       language: host.configBundle.skill.evaluation?.language || "zh-CN",
       dimensions: host.configBundle.skill.evaluation?.dimensions ?? [],
       answerMode:

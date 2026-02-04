@@ -4,7 +4,7 @@ import type {
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
 import type { ItTemplateRuntime } from "../../api/it_templateExecutor";
-import { it_executeTemplate } from "../../api/it_templateExecutor";
+import { it_requestAsrTemplate } from "../clients/asrClient";
 import { it_splitPcmBase64 } from "./audio";
 
 function it_isBaiduContentTooLong(error: unknown): boolean {
@@ -59,9 +59,9 @@ async function it_transcribePcmWithChunks(
     let done = 0;
     try {
       await runWithLimit(chunks, resolvedConcurrency, async (chunk, idx) => {
-        const result = await it_executeTemplate({
+        const part = await it_requestAsrTemplate(
           runtime,
-          variables: {
+          {
             audioFile: chunk.speech,
             audio: {
               format: "pcm",
@@ -77,15 +77,11 @@ async function it_transcribePcmWithChunks(
               devPid: asrConfig.devPid,
             },
           },
-          maxRetries: asrConfig.maxRetries,
-          timeoutSec: asrConfig.timeoutSec,
-          stream: false,
-        });
-        const part = typeof result.text === "string"
-          ? result.text
-          : typeof result.value === "string"
-            ? result.value
-            : "";
+          {
+            maxRetries: asrConfig.maxRetries,
+            timeoutSec: asrConfig.timeoutSec,
+          },
+        );
         parts[idx] = part;
         done += 1;
         onProgress?.(done, chunks.length);
@@ -150,9 +146,9 @@ export async function it_transcribeAudio(
   let transcript = "";
   if (audioUrl) {
     reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    const result = await it_executeTemplate({
-      runtime: templateRuntime,
-      variables: {
+    transcript = await it_requestAsrTemplate(
+      templateRuntime,
+      {
         audioFile: request.audio.base64,
         audioUrl,
         audio: audioMeta,
@@ -163,15 +159,11 @@ export async function it_transcribeAudio(
           devPid,
         },
       },
-      maxRetries,
-      timeoutSec,
-      stream: false,
-    });
-    transcript = typeof result.text === "string"
-      ? result.text
-      : typeof result.value === "string"
-        ? result.value
-        : "";
+      {
+        maxRetries,
+        timeoutSec,
+      },
+    );
   } else if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
     transcript = await it_transcribePcmWithChunks(
       templateRuntime,
@@ -197,9 +189,9 @@ export async function it_transcribeAudio(
     );
   } else {
     reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    const result = await it_executeTemplate({
-      runtime: templateRuntime,
-      variables: {
+    transcript = await it_requestAsrTemplate(
+      templateRuntime,
+      {
         audioFile: request.audio.base64,
         audio: audioMeta,
         asr: {
@@ -209,15 +201,11 @@ export async function it_transcribeAudio(
           devPid,
         },
       },
-      maxRetries,
-      timeoutSec,
-      stream: false,
-    });
-    transcript = typeof result.text === "string"
-      ? result.text
-      : typeof result.value === "string"
-        ? result.value
-        : "";
+      {
+        maxRetries,
+        timeoutSec,
+      },
+    );
   }
 
   reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");

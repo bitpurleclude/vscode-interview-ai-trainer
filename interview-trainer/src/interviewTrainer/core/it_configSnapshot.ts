@@ -3,7 +3,6 @@ import * as vscode from "vscode";
 import {
   ItApiConfig,
   ItConfigBundle,
-  it_applySecretOverrides,
 } from "../api/it_apiConfig";
 import { ItConfigService } from "../api/it_configService";
 import {
@@ -385,33 +384,6 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
   host.corpusDirtyFiles.clear();
 }
 
-export async function it_applyEmbeddingSecretOverrides(
-  host: ItConfigSnapshotHost,
-): Promise<void> {
-  const env = host.configBundle.api.active?.environment || "prod";
-  const secret =
-    (await host.context.secrets.get(`interviewTrainer.${env}.embedding.apiKey`)) ||
-    "";
-  if (!secret) {
-    return;
-  }
-  const current = host.configBundle.skill.retrieval || {};
-  const currentVector = current.vector || {};
-  host.configBundle = {
-    ...host.configBundle,
-    skill: {
-      ...host.configBundle.skill,
-      retrieval: {
-        ...current,
-        vector: {
-          ...currentVector,
-          api_key: secret,
-        },
-      },
-    },
-  };
-}
-
 export async function it_refreshConfigSnapshot(
   host: ItConfigSnapshotHost,
 ): Promise<ItConfigSnapshot> {
@@ -419,11 +391,6 @@ export async function it_refreshConfigSnapshot(
   host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
   host.tokenService?.sync();
   host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
-  host.configBundle.api = await it_applySecretOverrides(
-    host.context,
-    host.configBundle.api,
-  );
-  await it_applyEmbeddingSecretOverrides(host);
   host.configSnapshot = it_buildConfigSnapshot(host, host.configBundle.api);
   it_updateCorpusWatchers(host);
   return host.configSnapshot;

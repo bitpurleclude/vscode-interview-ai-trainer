@@ -1,5 +1,4 @@
 import { ItAnalyzeRequest, ItAnalyzeResponse, ItStepStatus } from "../../protocol/interviewTrainer";
-import { it_applySecretOverrides } from "../api/it_apiConfig";
 import { it_runAnalysis } from "./it_analyze";
 
 export type ItAnalysisHost = {
@@ -74,10 +73,6 @@ export async function it_handleAnalyze(
     host.configBundle = host.configService.loadBundle();
     host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
-    host.configBundle.api = await it_applySecretOverrides(
-      host.context,
-      host.configBundle.api,
-    );
     const workspaceRoot = host.requireWorkspaceRoot();
     const response = await it_runAnalysis(
       {

@@ -190,36 +190,3 @@ export function it_saveProviderConfig(
   const providerDir = it_getUserProviderDir(context);
   it_writeProviderConfig(providerDir, providerId, payload);
 }
-
-export async function it_applySecretOverrides(
-  context: vscode.ExtensionContext,
-  apiConfig: ItApiConfig,
-): Promise<ItApiConfig> {
-  const env = apiConfig.active?.environment || "prod";
-  const envConfig = apiConfig.environments?.[env] ?? {};
-
-  const llmKey =
-    (await context.secrets.get(`interviewTrainer.${env}.llm.apiKey`)) ||
-    envConfig.llm?.api_key ||
-    "";
-  const asrKey =
-    (await context.secrets.get(`interviewTrainer.${env}.asr.apiKey`)) ||
-    envConfig.asr?.api_key ||
-    "";
-  const asrSecret =
-    (await context.secrets.get(`interviewTrainer.${env}.asr.secretKey`)) ||
-    envConfig.asr?.secret_key ||
-    "";
-
-  return {
-    ...apiConfig,
-    environments: {
-      ...apiConfig.environments,
-      [env]: {
-        ...envConfig,
-        llm: { ...envConfig.llm, api_key: llmKey },
-        asr: { ...envConfig.asr, api_key: asrKey, secret_key: asrSecret },
-      },
-    },
-  };
-}

@@ -3,7 +3,7 @@
   ItEvaluation,
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
-import { it_callLlmChatStreaming } from "../api/it_llm";
+import { it_requestLlmChatStreaming } from "./clients/llmClient";
 import type { ItEvaluationConfig } from "./evaluation/types";
 import {
   it_buildSummary,
@@ -229,7 +229,7 @@ export async function it_evaluateAnswer(
           { role: "user", content: attemptPrompt },
         ],
       });
-      content = await it_callLlmChatStreaming(
+      content = await it_requestLlmChatStreaming(
         callConfig,
         [
           { role: "system", content: systemPrompt },

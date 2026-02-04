@@ -16,7 +16,6 @@ import { ItLlmConfig } from "./api/it_llmTypes";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
 import { it_handleAnalyze } from "./core/it_analysisFlow";
 import {
-  it_applyEmbeddingSecretOverrides,
   it_buildConfigSnapshot,
   it_normalizeWorkspaceKey,
   it_refreshConfigSnapshot,
@@ -147,9 +146,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     return await it_refreshConfigSnapshot(this);
   }
 
-  public async applyEmbeddingSecretOverrides(): Promise<void> {
-    await it_applyEmbeddingSecretOverrides(this);
-  }
+
 
   public it_getLlmConfig(
     profileId?: string,

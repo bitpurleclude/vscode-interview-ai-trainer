@@ -1,5 +1,5 @@
 import { ItAcousticMetrics, ItNoteHit } from "../../../protocol/interviewTrainer";
-import { it_callLlmChatStreaming } from "../../api/it_llm";
+import { it_requestLlmChatStreaming } from "../clients/llmClient";
 import type { ItLlmConfig } from "../../api/it_llmTypes";
 import type { ItEvaluationConfig } from "./types";
 import {
@@ -219,7 +219,7 @@ async function it_generateRevisedByOutline(
       ],
     });
     onStream?.({ text: "", reset: true });
-    const content = await it_callLlmChatStreaming(
+    const content = await it_requestLlmChatStreaming(
       callConfig,
       [
         { role: "system", content: systemPrompt },
@@ -323,7 +323,7 @@ async function it_generateOutlines(
       ],
     });
     onStream?.({ text: "", reset: true });
-    const content = await it_callLlmChatStreaming(
+    const content = await it_requestLlmChatStreaming(
       callConfig,
       [
         { role: "system", content: systemPrompt },
