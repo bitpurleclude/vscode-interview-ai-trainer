@@ -1,7 +1,7 @@
 import { ItQianfanConfig, ItQianfanMessage } from "./it_qianfan";
 
 export type ItLlmProvider = "baidu_qianfan" | "volc_doubao" | "openai_compatible" | string;
-export type ItLlmReasoningEffort = "minimal" | "low" | "medium" | "high";
+export type ItLlmReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export interface ItLlmConfig extends ItQianfanConfig {
   provider: ItLlmProvider;

@@ -3411,6 +3411,7 @@ const InterviewTrainer: React.FC = () => {
                           <option value="low">low</option>
                           <option value="medium">medium</option>
                           <option value="high">high</option>
+                          <option value="xhigh">xhigh</option>
                         </select>
                         <div style={{ minWidth: 90 }}>输出上限</div>
                         <input

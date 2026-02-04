@@ -134,7 +134,7 @@ function it_buildOpenAiResponsesPayload(
   }
   const reasoningEffort = options?.reasoningEffort ?? cfg.reasoningEffort;
   if (reasoningEffort) {
-    payload.reasoning = { effort: reasoningEffort };
+    payload.reasoning = { effort: reasoningEffort, summary: "auto" };
   }
   const maxOutputTokens = options?.maxOutputTokens ?? cfg.maxOutputTokens;
   if (Number.isFinite(maxOutputTokens) && Number(maxOutputTokens) > 0) {
