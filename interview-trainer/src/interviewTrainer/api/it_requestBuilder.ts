@@ -123,8 +123,6 @@ function it_buildOpenAiResponsesPayload(
   const payload: any = {
     model: cfg.model || "gpt-4.1-mini",
     input,
-    temperature: cfg.temperature,
-    top_p: cfg.topP,
   };
   if (instructions) {
     payload.instructions = instructions;
