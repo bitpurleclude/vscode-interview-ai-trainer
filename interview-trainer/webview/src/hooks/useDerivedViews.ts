@@ -14,7 +14,7 @@ type UseDerivedViewsOptions = {
   templateCategory: ItTemplateCategory;
   selectedTemplateId: string;
   questionText: string;
-  questionList: string;
+  parsedQuestionList: string[];
   streamingPreviewChars: number;
   analysisResult: ItAnalyzeResponse | null;
 };
@@ -25,7 +25,7 @@ export function useDerivedViews({
   templateCategory,
   selectedTemplateId,
   questionText,
-  questionList,
+  parsedQuestionList,
   streamingPreviewChars,
   analysisResult,
 }: UseDerivedViewsOptions) {
@@ -86,19 +86,6 @@ export function useDerivedViews({
         ["question", "acoustic", "asr", "notes", "evaluation"].includes(step.id),
     );
   }, [itState]);
-
-  const parsedQuestionList = useMemo(
-    () =>
-      questionList
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
-    [questionList],
-  );
-  const hasQuestion = useMemo(
-    () => questionText.trim().length > 0 || parsedQuestionList.length > 0,
-    [questionText, parsedQuestionList],
-  );
 
   const evaluationStreamQuestions = useMemo(() => {
     const list =
@@ -167,8 +154,6 @@ export function useDerivedViews({
     embeddingWarmup,
     showEmbeddingWarmup,
     thinkingVisible,
-    parsedQuestionList,
-    hasQuestion,
     evaluationStreamQuestions,
     retrievalDirs,
     transcriptPreview,

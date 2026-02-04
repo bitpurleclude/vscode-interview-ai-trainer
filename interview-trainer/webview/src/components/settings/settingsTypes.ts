@@ -65,6 +65,8 @@ export type RetrievalForm = {
   };
 };
 
+export type RetrievalField = Exclude<keyof RetrievalForm, "vector">;
+
 export type SecretDraft = {
   name: string;
   value: string;
@@ -99,8 +101,8 @@ export type SettingsCommonTemplateProps = {
   handleCancelTemplateDraft: () => void;
   handleSaveTemplate: () => void;
   updateTemplateRequest: (payload: Partial<ItApiTemplate["request"]>) => void;
-  updateTemplateResponse: (payload: Partial<ItApiTemplate["response"]>) => void;
-  updateTemplateStreaming: (payload: Partial<ItApiTemplate["streaming"]>) => void;
+  updateTemplateResponse: (payload: Partial<NonNullable<ItApiTemplate["response"]>>) => void;
+  updateTemplateStreaming: (payload: Partial<NonNullable<ItApiTemplate["streaming"]>>) => void;
   paramCatalogList: string[];
   templateUsageSets: TemplateUsageSets;
   templateSecrets: string[];
@@ -193,7 +195,7 @@ export type SettingsRetrievalProps = {
   retrievalEnabled: boolean;
   handleToggleRetrieval: (enabled: boolean) => void;
   retrievalForm: RetrievalForm;
-  handleRetrievalFieldChange: (field: string, value: string | number | boolean) => void;
+  handleRetrievalFieldChange: (field: RetrievalField, value: string | number | boolean) => void;
   handleRetrievalVectorChange: (field: "batchSize" | "queryMaxChars", value: number) => void;
   savingRetrieval: boolean;
   retrievalSaveMessage: string | null;
