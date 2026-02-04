@@ -4,6 +4,7 @@ import { on, request } from "./messenger";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "./constants/prompts";
 import { DEFAULT_STATE } from "./constants/defaultState";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import type { SettingsPageProps } from "./components/settings/SettingsPage";
 import { InterviewHeader } from "./components/practice/InterviewHeader";
 import { InterviewStatus } from "./components/practice/InterviewStatus";
 import { PracticeFlow } from "./components/practice/PracticeFlow";
@@ -408,6 +409,130 @@ const InterviewTrainer: React.FC = () => {
     };
   }, [handleLoadHistory]);
 
+  const settingsProps: SettingsPageProps = {
+    uiLocked,
+    config,
+    streamingSettings,
+    setStreamingSettings,
+    savingStreamingSettings,
+    streamingSaveMessage,
+    handleSaveStreamingSettings,
+    envDraftName,
+    setEnvDraftName,
+    envMessage,
+    savingEnvironment,
+    handleSetActiveEnvironment,
+    handleCreateEnvironment,
+    handleDeleteEnvironment,
+    handleReloadConfig,
+    handleOpenSettings,
+    handleSelectSessionsDir,
+    traceLogEnabled,
+    handleEnableTraceLogs,
+    templateCategory,
+    setTemplateCategory,
+    templatesByCategory,
+    selectedTemplateId,
+    setSelectedTemplateId,
+    selectedTemplate,
+    templateDraft,
+    setTemplateDraft,
+    templateJsonDraft,
+    setTemplateJsonDraft,
+    templateJsonErrors,
+    setTemplateJsonErrors,
+    templateSaveMessage,
+    savingTemplate,
+    isCreatingTemplate,
+    handleCreateTemplate,
+    handleDuplicateTemplate,
+    handleDeleteTemplate,
+    handleCancelTemplateDraft,
+    handleSaveTemplate,
+    updateTemplateRequest,
+    updateTemplateResponse,
+    updateTemplateStreaming,
+    paramCatalogList,
+    templateUsageSets,
+    templateSecrets: bindingSecrets,
+    secretDraft,
+    setSecretDraft,
+    savingSecret,
+    secretMessage,
+    handleSaveSecret,
+    handleDeleteSecret,
+    templateParamOptions: bindingParamOptions,
+    templateParamInput,
+    setTemplateParamInput,
+    savingParamOptions,
+    handleAddParamOption,
+    handleSaveParamOptions,
+    templateBindings,
+    setTemplateBindings,
+    llmTemplates,
+    asrTemplates,
+    embeddingTemplates,
+    savingBindings,
+    handleSaveBindings,
+    apiForm,
+    handleApiFieldChange,
+    llmParamsMessage,
+    savingLlmParams,
+    handleSaveLlmParams,
+    asrParamsMessage,
+    savingAsrParams,
+    handleSaveAsrParams,
+    customPrompt,
+    setCustomPrompt,
+    demoPrompt,
+    setDemoPrompt,
+    answerMode,
+    setAnswerMode,
+    perQuestionSystemPrompts,
+    setPerQuestionSystemPrompts,
+    perQuestionDemoPrompts,
+    setPerQuestionDemoPrompts,
+    promptSaveMessage,
+    promptSaveScope,
+    handleSavePrompts,
+    nativeInputs,
+    selectedInput,
+    setSelectedInput,
+    handleRefreshInputs,
+    retrievalEnabled: config?.retrievalEnabled ?? true,
+    handleToggleRetrieval,
+    retrievalForm,
+    handleRetrievalFieldChange,
+    handleRetrievalVectorChange,
+    savingRetrieval,
+    retrievalSaveMessage,
+    handleSaveRetrievalSettings,
+    clearingEmbeddingCache,
+    embeddingCacheMessage,
+    handleClearEmbeddingCache,
+    clearingCorpusCache,
+    corpusCacheMessage,
+    handleClearCorpusCache,
+    showEmbeddingWarmup,
+    embeddingWarmup,
+    retrievalCacheInfo,
+    corpusCachePath,
+    embeddingCachePath,
+    corpusCacheMb,
+    queryCacheSize,
+    sessionsDir: config?.sessionsDir || "sessions",
+    maxConcurrency,
+    topicTitleMode,
+    setTopicTitleMode,
+    topicTitleLen,
+    setTopicTitleLen,
+    savingTopicSettings,
+    handleSaveTopicSettings,
+    topicSaveMessage,
+    retrievalDirs,
+    handleSelectWorkspaceDir,
+  };
+
   return (
     <div className="it-root">
       <InterviewHeader
@@ -505,130 +630,7 @@ const InterviewTrainer: React.FC = () => {
         </>
       )}
 
-      {activePage === "settings" && (
-        <SettingsPage
-          uiLocked={uiLocked}
-          config={config}
-          streamingSettings={streamingSettings}
-          setStreamingSettings={setStreamingSettings}
-          savingStreamingSettings={savingStreamingSettings}
-          streamingSaveMessage={streamingSaveMessage}
-          handleSaveStreamingSettings={handleSaveStreamingSettings}
-          envDraftName={envDraftName}
-          setEnvDraftName={setEnvDraftName}
-          envMessage={envMessage}
-          savingEnvironment={savingEnvironment}
-          handleSetActiveEnvironment={handleSetActiveEnvironment}
-          handleCreateEnvironment={handleCreateEnvironment}
-          handleDeleteEnvironment={handleDeleteEnvironment}
-          handleReloadConfig={handleReloadConfig}
-          handleOpenSettings={handleOpenSettings}
-          handleSelectSessionsDir={handleSelectSessionsDir}
-          traceLogEnabled={traceLogEnabled}
-          handleEnableTraceLogs={handleEnableTraceLogs}
-          templateCategory={templateCategory}
-          setTemplateCategory={setTemplateCategory}
-          templatesByCategory={templatesByCategory}
-          selectedTemplateId={selectedTemplateId}
-          setSelectedTemplateId={setSelectedTemplateId}
-          selectedTemplate={selectedTemplate}
-          templateDraft={templateDraft}
-          setTemplateDraft={setTemplateDraft}
-          templateJsonDraft={templateJsonDraft}
-          setTemplateJsonDraft={setTemplateJsonDraft}
-          templateJsonErrors={templateJsonErrors}
-          setTemplateJsonErrors={setTemplateJsonErrors}
-          templateSaveMessage={templateSaveMessage}
-          savingTemplate={savingTemplate}
-          isCreatingTemplate={isCreatingTemplate}
-          handleCreateTemplate={handleCreateTemplate}
-          handleDuplicateTemplate={handleDuplicateTemplate}
-          handleDeleteTemplate={handleDeleteTemplate}
-          handleCancelTemplateDraft={handleCancelTemplateDraft}
-          handleSaveTemplate={handleSaveTemplate}
-          updateTemplateRequest={updateTemplateRequest}
-          updateTemplateResponse={updateTemplateResponse}
-          updateTemplateStreaming={updateTemplateStreaming}
-          paramCatalogList={paramCatalogList}
-          templateUsageSets={templateUsageSets}
-          templateSecrets={bindingSecrets}
-          secretDraft={secretDraft}
-          setSecretDraft={setSecretDraft}
-          savingSecret={savingSecret}
-          secretMessage={secretMessage}
-          handleSaveSecret={handleSaveSecret}
-          handleDeleteSecret={handleDeleteSecret}
-          templateParamOptions={bindingParamOptions}
-          templateParamInput={templateParamInput}
-          setTemplateParamInput={setTemplateParamInput}
-          savingParamOptions={savingParamOptions}
-          handleAddParamOption={handleAddParamOption}
-          handleSaveParamOptions={handleSaveParamOptions}
-          templateBindings={templateBindings}
-          setTemplateBindings={setTemplateBindings}
-          llmTemplates={llmTemplates}
-          asrTemplates={asrTemplates}
-          embeddingTemplates={embeddingTemplates}
-          savingBindings={savingBindings}
-          handleSaveBindings={handleSaveBindings}
-          apiForm={apiForm}
-          handleApiFieldChange={handleApiFieldChange}
-          llmParamsMessage={llmParamsMessage}
-          savingLlmParams={savingLlmParams}
-          handleSaveLlmParams={handleSaveLlmParams}
-          asrParamsMessage={asrParamsMessage}
-          savingAsrParams={savingAsrParams}
-          handleSaveAsrParams={handleSaveAsrParams}
-          customPrompt={customPrompt}
-          setCustomPrompt={setCustomPrompt}
-          demoPrompt={demoPrompt}
-          setDemoPrompt={setDemoPrompt}
-          answerMode={answerMode}
-          setAnswerMode={setAnswerMode}
-          perQuestionSystemPrompts={perQuestionSystemPrompts}
-          setPerQuestionSystemPrompts={setPerQuestionSystemPrompts}
-          perQuestionDemoPrompts={perQuestionDemoPrompts}
-          setPerQuestionDemoPrompts={setPerQuestionDemoPrompts}
-          promptSaveMessage={promptSaveMessage}
-          promptSaveScope={promptSaveScope}
-          handleSavePrompts={handleSavePrompts}
-          nativeInputs={nativeInputs}
-          selectedInput={selectedInput}
-          setSelectedInput={setSelectedInput}
-          handleRefreshInputs={handleRefreshInputs}
-          retrievalEnabled={config?.retrievalEnabled ?? true}
-          retrievalForm={retrievalForm}
-          handleRetrievalFieldChange={handleRetrievalFieldChange}
-          handleRetrievalVectorChange={handleRetrievalVectorChange}
-          savingRetrieval={savingRetrieval}
-          retrievalSaveMessage={retrievalSaveMessage}
-          handleSaveRetrievalSettings={handleSaveRetrievalSettings}
-          clearingEmbeddingCache={clearingEmbeddingCache}
-          embeddingCacheMessage={embeddingCacheMessage}
-          handleClearEmbeddingCache={handleClearEmbeddingCache}
-          clearingCorpusCache={clearingCorpusCache}
-          corpusCacheMessage={corpusCacheMessage}
-          handleClearCorpusCache={handleClearCorpusCache}
-          showEmbeddingWarmup={showEmbeddingWarmup}
-          embeddingWarmup={embeddingWarmup}
-          retrievalCacheInfo={retrievalCacheInfo}
-          corpusCachePath={corpusCachePath}
-          embeddingCachePath={embeddingCachePath}
-          corpusCacheMb={corpusCacheMb}
-          queryCacheSize={queryCacheSize}
-          sessionsDir={config?.sessionsDir || "sessions"}
-          maxConcurrency={maxConcurrency}
-          topicTitleMode={topicTitleMode}
-          setTopicTitleMode={setTopicTitleMode}
-          topicTitleLen={topicTitleLen}
-          setTopicTitleLen={setTopicTitleLen}
-          savingTopicSettings={savingTopicSettings}
-          handleSaveTopicSettings={handleSaveTopicSettings}
-          topicSaveMessage={topicSaveMessage}
-          retrievalDirs={retrievalDirs}
-          handleSelectWorkspaceDir={handleSelectWorkspaceDir}
-        />
-      )}
+      {activePage === "settings" && <SettingsPage {...settingsProps} />}
 
     </div>
   );

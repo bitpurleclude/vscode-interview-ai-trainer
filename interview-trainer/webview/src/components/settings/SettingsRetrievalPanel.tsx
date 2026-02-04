@@ -206,13 +206,6 @@ export const SettingsRetrievalPanel: React.FC<SettingsRetrievalProps> = (props) 
         >
           {clearingCorpusCache ? "清理中..." : "清理语料索引缓存"}
         </button>
-        <button
-          className="it-button it-button--secondary it-button--compact"
-          disabled={uiLocked || traceLogEnabled}
-          onClick={handleEnableTraceLogs}
-        >
-          {traceLogEnabled ? "日志已开启" : "开启日志输出"}
-        </button>
       </div>
       {retrievalSaveMessage && <div className="it-settings__hint">{retrievalSaveMessage}</div>}
       {embeddingCacheMessage && <div className="it-settings__hint">{embeddingCacheMessage}</div>}
@@ -234,9 +227,6 @@ export const SettingsRetrievalPanel: React.FC<SettingsRetrievalProps> = (props) 
         </div>
       )}
       <div className="it-settings__hint">索引与向量缓存会落盘保存，目录变更后会自动重新索引。</div>
-      <div className="it-settings__hint">
-        需要排查笔记学习时，点击“开启日志输出”后会在输出面板显示相关日志。
-      </div>
       {retrievalCacheInfo && (
         <>
           <div className="it-input-row">
