@@ -10,6 +10,8 @@ export type {
   ItTemplateCategory,
   ItTemplateParamCatalog,
   ItTemplateParamUsage,
+  ItTokenState,
+  ItTokenStoreSnapshot,
   ItTemplatesSnapshot,
   ItAudioPayload,
   ItAnalyzeRequest,
