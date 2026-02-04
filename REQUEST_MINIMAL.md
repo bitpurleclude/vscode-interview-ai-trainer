@@ -1,0 +1,29 @@
+﻿# Responses 最小可用请求结构（gmn.chuangzuoli.com/responses）
+
+## 必需字段
+- `model`
+- `input`（必须是 Responses 规范的 message 结构，不能是纯字符串或 Chat 结构）
+
+## 最小可用 JSON（已验证 200）
+```json
+{
+  "model": "gpt-5.2-codex",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        { "type": "input_text", "text": "ping" }
+      ]
+    }
+  ]
+}
+```
+
+## 请求头（最小）
+- `Authorization: Bearer <API_KEY>`
+- `Content-Type: application/json`
+
+## 备注
+- `input` 为字符串或 Chat 结构（`{role, content}` 但缺少 `type: message`/`input_text`）会返回 400。
+- 需要流式输出时可加：`Accept: text/event-stream` + `stream: true`。
