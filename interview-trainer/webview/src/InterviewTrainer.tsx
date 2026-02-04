@@ -1,11 +1,5 @@
-﻿import React, { useMemo, useState, useEffect } from "react";
-import {
-  ItState,
-  ItTemplateBindings,
-  ItTemplateCategory,
-  ItTemplateParamCatalog,
-  ItTemplateParamUsage,
-} from "./types";
+﻿import React, { useState, useEffect } from "react";
+import { ItState, ItTemplateBindings, ItTemplateCategory } from "./types";
 import { on, request } from "./messenger";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "./constants/prompts";
 import { DEFAULT_STATE } from "./constants/defaultState";
@@ -25,6 +19,7 @@ import { useTemplateEditor } from "./hooks/useTemplateEditor";
 import { useTemplateBindings } from "./hooks/useTemplateBindings";
 import { useEnvironmentSettings } from "./hooks/useEnvironmentSettings";
 import { useRetrievalSettings } from "./hooks/useRetrievalSettings";
+import { useDerivedViews } from "./hooks/useDerivedViews";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -146,8 +141,8 @@ const InterviewTrainer: React.FC = () => {
     questionParsing,
     questionError,
     setQuestionError,
-    parsedQuestionList,
-    hasQuestion,
+    parsedQuestionList: inputQuestionList,
+    hasQuestion: inputHasQuestion,
     handleQuestionTextChange,
     handleQuestionListChange,
     handleImportQuestions,
@@ -156,56 +151,6 @@ const InterviewTrainer: React.FC = () => {
 
   const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
   const uiLocked = !config;
-
-  const templatesSnapshot = config?.templates;
-  const templatesList = useMemo(() => templatesSnapshot?.templates ?? [], [templatesSnapshot]);
-  const templatesByCategory = useMemo(
-    () => templatesList.filter((template) => template.category === templateCategory),
-    [templatesList, templateCategory],
-  );
-  const selectedTemplate = useMemo(
-    () => templatesList.find((item) => item.id === selectedTemplateId) || null,
-    [templatesList, selectedTemplateId],
-  );
-  const templateParamCatalog: ItTemplateParamCatalog | undefined =
-    templatesSnapshot?.paramCatalog;
-  const templateParamUsage: ItTemplateParamUsage | undefined =
-    templatesSnapshot?.paramUsage?.[selectedTemplate?.id || ""];
-  const paramCatalogList = useMemo(() => {
-    const common = templateParamCatalog?.common ?? [];
-    const scoped =
-      templateCategory === "llm"
-        ? templateParamCatalog?.llm ?? []
-        : templateCategory === "asr"
-          ? templateParamCatalog?.asr ?? []
-          : templateCategory === "embedding"
-            ? templateParamCatalog?.embedding ?? []
-            : [];
-    return Array.from(new Set([...common, ...scoped]));
-  }, [templateParamCatalog, templateCategory]);
-  const templateUsageSets = useMemo(
-    () => ({
-      used: new Set(templateParamUsage?.used ?? []),
-      unused: new Set(templateParamUsage?.unused ?? []),
-      unknown: new Set(templateParamUsage?.unknown ?? []),
-      empty: new Set(templateParamUsage?.empty ?? []),
-    }),
-    [templateParamUsage],
-  );
-  const llmTemplates = useMemo(
-    () => templatesList.filter((template) => template.category === "llm"),
-    [templatesList],
-  );
-  const asrTemplates = useMemo(
-    () => templatesList.filter((template) => template.category === "asr"),
-    [templatesList],
-  );
-  const embeddingTemplates = useMemo(
-    () => templatesList.filter((template) => template.category === "embedding"),
-    [templatesList],
-  );
-  const embeddingWarmup = itState.embeddingWarmup;
-  const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
 
   const {
     templateDraft,
@@ -260,6 +205,49 @@ const InterviewTrainer: React.FC = () => {
     setTemplateSecrets,
     setTemplateSaveMessage,
     setConfig,
+  });
+
+  const {
+    templatesList,
+    templatesByCategory,
+    selectedTemplate,
+    paramCatalogList,
+    templateUsageSets,
+    llmTemplates,
+    asrTemplates,
+    embeddingTemplates,
+    embeddingWarmup,
+    showEmbeddingWarmup,
+    thinkingVisible,
+    parsedQuestionList: derivedQuestionList,
+    hasQuestion: derivedHasQuestion,
+    evaluationStreamQuestions,
+    retrievalDirs,
+    transcriptPreview,
+    detailedTranscriptPreview,
+    acousticPreview,
+    notesPreview,
+    questionTimingsPreview,
+    questionTimingNotePreview,
+    evaluationPreview,
+    retrievalCacheInfo,
+    corpusCachePath,
+    embeddingCachePath,
+    corpusCacheMb,
+    queryCacheSize,
+    maxConcurrency,
+    hasAnyResult,
+    hasTranscriptContent,
+    streamPreviewChars,
+  } = useDerivedViews({
+    config,
+    itState,
+    templateCategory,
+    selectedTemplateId,
+    questionText,
+    questionList,
+    streamingPreviewChars: streamingSettings.previewChars,
+    analysisResult,
   });
 
   const {
@@ -325,14 +313,6 @@ const InterviewTrainer: React.FC = () => {
     setTraceLogEnabled,
   });
 
-  const thinkingVisible = useMemo(() => {
-    return itState.steps.some(
-      (step) =>
-        step.status === "running" &&
-        ["question", "acoustic", "asr", "notes", "evaluation"].includes(step.id),
-    );
-  }, [itState]);
-
   const {
     audioPayload,
     isImporting,
@@ -342,7 +322,7 @@ const InterviewTrainer: React.FC = () => {
     handleImportAudio,
   } = useAudioCapture({
     selectedInput,
-    hasQuestion,
+    hasQuestion: inputHasQuestion,
     setItState,
   });
 
@@ -360,9 +340,9 @@ const InterviewTrainer: React.FC = () => {
     handleLoadHistory,
   } = useAnalysisFlow({
     audioPayload,
-    hasQuestion,
+    hasQuestion: derivedHasQuestion,
     questionText,
-    parsedQuestionList,
+    parsedQuestionList: derivedQuestionList,
     perQuestionSystemPrompts,
     perQuestionDemoPrompts,
     customPrompt,
@@ -384,58 +364,6 @@ const InterviewTrainer: React.FC = () => {
     setShowRawOutput(false);
   }, [analysisResult]);
 
-  const evaluationStreamQuestions = useMemo(() => {
-    const list =
-      (analysisResult?.questionList && analysisResult.questionList.length
-        ? analysisResult.questionList
-        : parsedQuestionList) || [];
-    if (list.length) {
-      return list.slice(0, 3);
-    }
-    const fallback = questionText.trim();
-    return fallback ? [fallback] : [];
-  }, [analysisResult, parsedQuestionList, questionText]);
-  const retrievalDirs = useMemo(() => {
-    if (!config) {
-      return [];
-    }
-    return [
-      { key: "notes", label: "笔记", value: config.workspaceDirs.notesDir },
-      { key: "prompts", label: "题干材料", value: config.workspaceDirs.promptsDir },
-      { key: "rubrics", label: "评分标准", value: config.workspaceDirs.rubricsDir },
-      { key: "knowledge", label: "知识库", value: config.workspaceDirs.knowledgeDir },
-      { key: "examples", label: "示例答案", value: config.workspaceDirs.examplesDir },
-    ];
-  }, [config]);
-  const transcriptPreview = analysisResult?.transcript || itState.draftTranscript || "";
-  const detailedTranscriptPreview =
-    analysisResult?.detailedTranscript || itState.draftDetailedTranscript;
-  const acousticPreview = analysisResult?.acoustic || itState.draftAcoustic;
-  const notesPreview = analysisResult?.notes ?? itState.draftNotes;
-  const questionTimingsPreview =
-    analysisResult?.questionTimings ?? itState.draftQuestionTimings;
-  const questionTimingNotePreview =
-    analysisResult?.questionTimingNote ?? itState.draftQuestionTimingNote;
-  const evaluationPreview = analysisResult?.evaluation || itState.draftEvaluation || null;
-  const retrievalCacheInfo = config?.retrievalCache;
-  const corpusCachePath = retrievalCacheInfo?.corpusCacheDir || "";
-  const embeddingCachePath = retrievalCacheInfo?.embeddingCacheDir || "";
-  const corpusCacheMb = retrievalCacheInfo?.corpusCacheMb;
-  const queryCacheSize = retrievalCacheInfo?.queryCacheSize;
-  const maxConcurrency = retrievalCacheInfo?.maxConcurrency;
-  const hasAnyResult =
-    Boolean(analysisResult) ||
-    Boolean(itState.draftTranscript) ||
-    Boolean(itState.draftDetailedTranscript) ||
-    Boolean(itState.draftEvaluation) ||
-    Boolean(itState.draftAcoustic) ||
-    typeof itState.draftNotes !== "undefined" ||
-    Boolean(itState.draftQuestionTimings) ||
-    Boolean(itState.draftQuestionTimingNote);
-  const hasTranscriptContent = Boolean(
-    analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
-  );
-  const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
   const handleReloadConfig = async () => {
     await reloadConfig();
   };
@@ -490,7 +418,7 @@ const InterviewTrainer: React.FC = () => {
         isProcessing={isProcessing}
         isImporting={isImporting}
         hasAudio={Boolean(audioPayload)}
-        hasQuestion={hasQuestion}
+        hasQuestion={inputHasQuestion}
         savingResult={savingResult}
         onStartRecording={handleStartRecording}
         onStopRecording={handleStopRecording}
@@ -532,7 +460,7 @@ const InterviewTrainer: React.FC = () => {
             questionError={questionError}
             questionParsing={questionParsing}
             questionParsed={questionParsed}
-            hasQuestion={hasQuestion}
+            hasQuestion={inputHasQuestion}
             onQuestionTextChange={handleQuestionTextChange}
             onQuestionListChange={handleQuestionListChange}
             onParseQuestions={handleParseQuestions}
@@ -551,7 +479,7 @@ const InterviewTrainer: React.FC = () => {
             detailedTranscriptPreview={detailedTranscriptPreview}
             acousticPreview={acousticPreview}
             questionText={questionText}
-            parsedQuestionList={parsedQuestionList}
+            parsedQuestionList={inputQuestionList}
             questionTimingsPreview={questionTimingsPreview}
             questionTimingNotePreview={questionTimingNotePreview}
             evaluationPreview={evaluationPreview}
@@ -707,4 +635,5 @@ const InterviewTrainer: React.FC = () => {
 };
 
 export default InterviewTrainer;
+
 
