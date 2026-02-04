@@ -22,6 +22,7 @@ import { useAnalysisFlow } from "./hooks/useAnalysisFlow";
 import { useConfigSync } from "./hooks/useConfigSync";
 import { useQuestionInput } from "./hooks/useQuestionInput";
 import { useTemplateEditor } from "./hooks/useTemplateEditor";
+import { useTemplateBindings } from "./hooks/useTemplateBindings";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -63,15 +64,9 @@ const InterviewTrainer: React.FC = () => {
     embedding: {},
   });
   const [templateParamOptions, setTemplateParamOptions] = useState<string[]>([]);
-  const [templateParamInput, setTemplateParamInput] = useState("");
   const [templateSecrets, setTemplateSecrets] = useState<string[]>([]);
-  const [secretDraft, setSecretDraft] = useState({ name: "", value: "" });
-  const [secretMessage, setSecretMessage] = useState<string | null>(null);
   const [envDraftName, setEnvDraftName] = useState("");
   const [envMessage, setEnvMessage] = useState<string | null>(null);
-  const [savingBindings, setSavingBindings] = useState(false);
-  const [savingParamOptions, setSavingParamOptions] = useState(false);
-  const [savingSecret, setSavingSecret] = useState(false);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
   const [savingLlmParams, setSavingLlmParams] = useState(false);
   const [savingAsrParams, setSavingAsrParams] = useState(false);
@@ -263,6 +258,33 @@ const InterviewTrainer: React.FC = () => {
     setConfig,
   });
 
+  const {
+    templateParamOptions: bindingParamOptions,
+    templateParamInput,
+    setTemplateParamInput,
+    templateSecrets: bindingSecrets,
+    secretDraft,
+    setSecretDraft,
+    secretMessage,
+    savingBindings,
+    savingParamOptions,
+    savingSecret,
+    handleSaveBindings,
+    handleSaveParamOptions,
+    handleAddParamOption,
+    handleSaveSecret,
+    handleDeleteSecret,
+  } = useTemplateBindings({
+    templateBindings,
+    setTemplateBindings,
+    templateParamOptions,
+    setTemplateParamOptions,
+    templateSecrets,
+    setTemplateSecrets,
+    setTemplateSaveMessage,
+    setConfig,
+  });
+
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
       (step) =>
@@ -374,107 +396,6 @@ const InterviewTrainer: React.FC = () => {
     analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
   );
   const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
-  const handleSaveTemplateBindings = async () => {
-    setSavingBindings(true);
-    try {
-      const resp = await request("it/saveTemplateBindings", { bindings: templateBindings });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setTemplateSaveMessage("绑定已保存。");
-      } else {
-        setTemplateSaveMessage("绑定保存失败，请重试。");
-      }
-    } catch (err) {
-      setTemplateSaveMessage(
-        `绑定保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingBindings(false);
-  };
-  const handleSaveParamOptions = async () => {
-    setSavingParamOptions(true);
-    try {
-      const options = Array.from(new Set(templateParamOptions.map((item) => String(item).trim())))
-        .filter(Boolean);
-      const resp = await request("it/saveTemplateParamOptions", {
-        options: { reasoning_effort: options },
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setTemplateSaveMessage("参数选项已保存。");
-      } else {
-        setTemplateSaveMessage("参数选项保存失败，请重试。");
-      }
-    } catch (err) {
-      setTemplateSaveMessage(
-        `参数选项保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingParamOptions(false);
-  };
-  const handleAddParamOption = () => {
-    const raw = templateParamInput.trim();
-    if (!raw) {
-      return;
-    }
-    if (!templateParamOptions.includes(raw)) {
-      setTemplateParamOptions((prev) => [...prev, raw]);
-    }
-    setTemplateParamInput("");
-  };
-  const handleSaveSecret = async () => {
-    const name = secretDraft.name.trim();
-    if (!name) {
-      setSecretMessage("请填写密钥名称。");
-      return;
-    }
-    setSavingSecret(true);
-    setSecretMessage(null);
-    try {
-      const resp = await request("it/saveTemplateSecret", {
-        name,
-        value: secretDraft.value,
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setSecretMessage("密钥已保存。");
-        setSecretDraft({ name: "", value: "" });
-      } else {
-        setSecretMessage("密钥保存失败，请重试。");
-      }
-    } catch (err) {
-      setSecretMessage(`密钥保存失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-    setSavingSecret(false);
-  };
-  const handleDeleteSecret = async (name: string) => {
-    const confirmed = window.confirm(`确认删除密钥 ${name}？`);
-    if (!confirmed) {
-      return;
-    }
-    setSavingSecret(true);
-    setSecretMessage(null);
-    try {
-      const resp = await request("it/deleteTemplateSecret", { name });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setSecretMessage("密钥已删除。");
-      } else {
-        setSecretMessage("密钥删除失败，请重试。");
-      }
-    } catch (err) {
-      setSecretMessage(`密钥删除失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-    setSavingSecret(false);
-  };
   const handleSetActiveEnvironment = async (environment: string) => {
     if (!environment) {
       return;
@@ -907,14 +828,14 @@ const InterviewTrainer: React.FC = () => {
           updateTemplateStreaming={updateTemplateStreaming}
           paramCatalogList={paramCatalogList}
           templateUsageSets={templateUsageSets}
-          templateSecrets={templateSecrets}
+          templateSecrets={bindingSecrets}
           secretDraft={secretDraft}
           setSecretDraft={setSecretDraft}
           savingSecret={savingSecret}
           secretMessage={secretMessage}
           handleSaveSecret={handleSaveSecret}
           handleDeleteSecret={handleDeleteSecret}
-          templateParamOptions={templateParamOptions}
+          templateParamOptions={bindingParamOptions}
           templateParamInput={templateParamInput}
           setTemplateParamInput={setTemplateParamInput}
           savingParamOptions={savingParamOptions}
