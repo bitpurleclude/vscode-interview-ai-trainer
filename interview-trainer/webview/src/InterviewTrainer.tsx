@@ -1,6 +1,5 @@
-﻿import React, { useCallback, useMemo, useState, useEffect } from "react";
+﻿import React, { useMemo, useState, useEffect } from "react";
 import {
-  ItApiTemplate,
   ItState,
   ItTemplateBindings,
   ItTemplateCategory,
@@ -17,12 +16,12 @@ import { PracticeFlow } from "./components/practice/PracticeFlow";
 import { ResultsPanel } from "./components/practice/ResultsPanel";
 import { formatSeconds } from "./utils/format";
 import { buildOutlineTree, renderOutlineTree, renderParagraphs } from "./utils/outline";
-import { cloneTemplate, formatJson, parseJson } from "./utils/template";
 import { useStreaming } from "./hooks/useStreaming";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useAnalysisFlow } from "./hooks/useAnalysisFlow";
 import { useConfigSync } from "./hooks/useConfigSync";
 import { useQuestionInput } from "./hooks/useQuestionInput";
+import { useTemplateEditor } from "./hooks/useTemplateEditor";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -58,18 +57,6 @@ const InterviewTrainer: React.FC = () => {
   });
   const [templateCategory, setTemplateCategory] = useState<ItTemplateCategory>("llm");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [templateDraft, setTemplateDraft] = useState<ItApiTemplate | null>(null);
-  const [templateDraftOrigin, setTemplateDraftOrigin] = useState<string | null>(null);
-  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
-  const [templateJsonDraft, setTemplateJsonDraft] = useState({
-    headers: "{\n  \"Content-Type\": \"application/json\"\n}",
-    query: "{}",
-    body: "{}",
-  });
-  const [templateJsonErrors, setTemplateJsonErrors] = useState<
-    Partial<Record<"headers" | "query" | "body", string>>
-  >({});
-  const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
   const [templateBindings, setTemplateBindings] = useState<ItTemplateBindings>({
     llm: {},
     asr: {},
@@ -82,7 +69,6 @@ const InterviewTrainer: React.FC = () => {
   const [secretMessage, setSecretMessage] = useState<string | null>(null);
   const [envDraftName, setEnvDraftName] = useState("");
   const [envMessage, setEnvMessage] = useState<string | null>(null);
-  const [savingTemplate, setSavingTemplate] = useState(false);
   const [savingBindings, setSavingBindings] = useState(false);
   const [savingParamOptions, setSavingParamOptions] = useState(false);
   const [savingSecret, setSavingSecret] = useState(false);
@@ -249,6 +235,34 @@ const InterviewTrainer: React.FC = () => {
   const embeddingWarmup = itState.embeddingWarmup;
   const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
 
+  const {
+    templateDraft,
+    setTemplateDraft,
+    templateJsonDraft,
+    setTemplateJsonDraft,
+    templateJsonErrors,
+    setTemplateJsonErrors,
+    templateSaveMessage,
+    setTemplateSaveMessage,
+    savingTemplate,
+    isCreatingTemplate,
+    handleCreateTemplate,
+    handleDuplicateTemplate,
+    handleCancelTemplateDraft,
+    handleSaveTemplate,
+    handleDeleteTemplate,
+    updateTemplateRequest,
+    updateTemplateResponse,
+    updateTemplateStreaming,
+  } = useTemplateEditor({
+    templateCategory,
+    templatesByCategory,
+    selectedTemplateId,
+    setSelectedTemplateId,
+    selectedTemplate,
+    setConfig,
+  });
+
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
       (step) =>
@@ -360,210 +374,6 @@ const InterviewTrainer: React.FC = () => {
     analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
   );
   const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
-  const updateTemplateRequest = useCallback(
-    (patch: Partial<ItApiTemplate["request"]>) => {
-      setTemplateDraft((prev) =>
-        prev
-          ? {
-              ...prev,
-              request: {
-                ...(prev.request || { method: "POST", url: "" }),
-                ...patch,
-              },
-            }
-          : prev,
-      );
-    },
-    [],
-  );
-  const updateTemplateResponse = useCallback(
-    (patch: Partial<NonNullable<ItApiTemplate["response"]>>) => {
-      setTemplateDraft((prev) =>
-        prev
-          ? {
-              ...prev,
-              response: {
-                ...(prev.response || { mode: "json" }),
-                ...patch,
-              },
-            }
-          : prev,
-      );
-    },
-    [],
-  );
-  const updateTemplateStreaming = useCallback(
-    (patch: Partial<NonNullable<ItApiTemplate["streaming"]>>) => {
-      setTemplateDraft((prev) =>
-        prev
-          ? {
-              ...prev,
-              streaming: {
-                ...(prev.streaming || {}),
-                ...patch,
-              },
-            }
-          : prev,
-      );
-    },
-    [],
-  );
-  const handleCreateTemplate = useCallback(() => {
-    const next = buildDefaultTemplate(templateCategory);
-    setIsCreatingTemplate(true);
-    setSelectedTemplateId("");
-    setTemplateDraft(next);
-    setTemplateDraftOrigin(null);
-    setTemplateJsonDraft({
-      headers: formatJson(next.request?.headers, "{}"),
-      query: formatJson(next.request?.query, "{}"),
-      body: formatJson(next.request?.body, "{}"),
-    });
-    setTemplateJsonErrors({});
-    setTemplateSaveMessage(null);
-  }, [buildDefaultTemplate, templateCategory]);
-  const handleDuplicateTemplate = useCallback(() => {
-    if (!selectedTemplate) {
-      return;
-    }
-    const next = cloneTemplate(selectedTemplate);
-    next.id = "";
-    next.name = `${next.name || selectedTemplate.id}-copy`;
-    next.updatedAt = new Date().toISOString();
-    setIsCreatingTemplate(true);
-    setSelectedTemplateId("");
-    setTemplateDraft(next);
-    setTemplateDraftOrigin(null);
-    setTemplateJsonDraft({
-      headers: formatJson(next.request?.headers, "{}"),
-      query: formatJson(next.request?.query, "{}"),
-      body: formatJson(next.request?.body, "{}"),
-    });
-    setTemplateJsonErrors({});
-    setTemplateSaveMessage(null);
-  }, [selectedTemplate]);
-  const handleCancelTemplateDraft = useCallback(() => {
-    setIsCreatingTemplate(false);
-    setTemplateSaveMessage(null);
-    if (templatesByCategory.length) {
-      setSelectedTemplateId(templatesByCategory[0].id);
-    } else {
-      setSelectedTemplateId("");
-      setTemplateDraft(null);
-      setTemplateDraftOrigin(null);
-    }
-  }, [templatesByCategory]);
-  const handleSaveTemplate = async () => {
-    if (!templateDraft) {
-      return;
-    }
-    const id = String(templateDraft.id || "").trim();
-    if (!id) {
-      setTemplateSaveMessage("请填写模板 ID。");
-      return;
-    }
-    const headersParsed = parseJson(templateJsonDraft.headers);
-    const queryParsed = parseJson(templateJsonDraft.query);
-    const bodyParsed = parseJson(templateJsonDraft.body);
-    const errors: Partial<Record<"headers" | "query" | "body", string>> = {};
-    if (!headersParsed.ok) {
-      errors.headers = headersParsed.error;
-    }
-    if (!queryParsed.ok) {
-      errors.query = queryParsed.error;
-    }
-    if (!bodyParsed.ok) {
-      errors.body = bodyParsed.error;
-    }
-    setTemplateJsonErrors(errors);
-    if (Object.keys(errors).length) {
-      setTemplateSaveMessage("模板 JSON 格式错误，请修正后再保存。");
-      return;
-    }
-    const responseMode = templateDraft.response?.mode || "json";
-    const nextTemplate: ItApiTemplate = {
-      ...templateDraft,
-      id,
-      name: String(templateDraft.name || id).trim() || id,
-      request: {
-        ...(templateDraft.request || { method: "POST", url: "" }),
-        headers: headersParsed.ok ? headersParsed.value : undefined,
-        query: queryParsed.ok ? queryParsed.value : undefined,
-        body: bodyParsed.ok ? bodyParsed.value : undefined,
-      },
-      response: {
-        mode: responseMode,
-        textPath: templateDraft.response?.textPath || undefined,
-        jsonPath: templateDraft.response?.jsonPath || undefined,
-        errorPath: templateDraft.response?.errorPath || undefined,
-        statusPath: templateDraft.response?.statusPath || undefined,
-        doneSignal: templateDraft.response?.doneSignal || undefined,
-      },
-      streaming:
-        responseMode === "sse"
-          ? {
-              eventDelimiter: templateDraft.streaming?.eventDelimiter || undefined,
-              dataPrefix: templateDraft.streaming?.dataPrefix || undefined,
-              deltaPath: templateDraft.streaming?.deltaPath || undefined,
-              doneSignals:
-                templateDraft.streaming?.doneSignals &&
-                templateDraft.streaming.doneSignals.filter(Boolean).length
-                  ? templateDraft.streaming.doneSignals.filter(Boolean)
-                  : undefined,
-              heartbeatPattern: templateDraft.streaming?.heartbeatPattern || undefined,
-            }
-          : undefined,
-      updatedAt: new Date().toISOString(),
-    };
-    setSavingTemplate(true);
-    setTemplateSaveMessage(null);
-    try {
-      const resp = await request("it/saveTemplate", { template: nextTemplate });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setIsCreatingTemplate(false);
-        setSelectedTemplateId(nextTemplate.id);
-        setTemplateSaveMessage("模板已保存。");
-      } else {
-        setTemplateSaveMessage("模板保存失败，请检查输入。");
-      }
-    } catch (err) {
-      setTemplateSaveMessage(
-        `模板保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingTemplate(false);
-  };
-  const handleDeleteTemplate = async () => {
-    const templateId = selectedTemplate?.id || "";
-    if (!templateId) {
-      return;
-    }
-    const confirmed = window.confirm(`确认删除模板 ${templateId}？`);
-    if (!confirmed) {
-      return;
-    }
-    setSavingTemplate(true);
-    setTemplateSaveMessage(null);
-    try {
-      const resp = await request("it/deleteTemplate", { templateId });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setTemplateSaveMessage("模板已删除。");
-      } else {
-        setTemplateSaveMessage("删除失败，请重试。");
-      }
-    } catch (err) {
-      setTemplateSaveMessage(
-        `删除失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingTemplate(false);
-  };
   const handleSaveTemplateBindings = async () => {
     setSavingBindings(true);
     try {
@@ -1181,3 +991,4 @@ const InterviewTrainer: React.FC = () => {
 };
 
 export default InterviewTrainer;
+
