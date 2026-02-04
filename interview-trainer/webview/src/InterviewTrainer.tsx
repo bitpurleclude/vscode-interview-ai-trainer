@@ -23,6 +23,7 @@ import { useConfigSync } from "./hooks/useConfigSync";
 import { useQuestionInput } from "./hooks/useQuestionInput";
 import { useTemplateEditor } from "./hooks/useTemplateEditor";
 import { useTemplateBindings } from "./hooks/useTemplateBindings";
+import { useEnvironmentSettings } from "./hooks/useEnvironmentSettings";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -65,13 +66,6 @@ const InterviewTrainer: React.FC = () => {
   });
   const [templateParamOptions, setTemplateParamOptions] = useState<string[]>([]);
   const [templateSecrets, setTemplateSecrets] = useState<string[]>([]);
-  const [envDraftName, setEnvDraftName] = useState("");
-  const [envMessage, setEnvMessage] = useState<string | null>(null);
-  const [savingEnvironment, setSavingEnvironment] = useState(false);
-  const [savingLlmParams, setSavingLlmParams] = useState(false);
-  const [savingAsrParams, setSavingAsrParams] = useState(false);
-  const [llmParamsMessage, setLlmParamsMessage] = useState<string | null>(null);
-  const [asrParamsMessage, setAsrParamsMessage] = useState<string | null>(null);
   const [showNoteHits, setShowNoteHits] = useState(false);
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
   const [showNoteUsage, setShowNoteUsage] = useState(false);
@@ -120,18 +114,8 @@ const InterviewTrainer: React.FC = () => {
   const [clearingCorpusCache, setClearingCorpusCache] = useState(false);
   const [corpusCacheMessage, setCorpusCacheMessage] = useState<string | null>(null);
   const [traceLogEnabled, setTraceLogEnabled] = useState(false);
-  const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
-  const [promptSaveScope, setPromptSaveScope] = useState<
-    "evaluation" | "demo" | "per-question" | null
-  >(null);
   const [topicTitleMode, setTopicTitleMode] = useState<"llm" | "simple">("llm");
   const [topicTitleLen, setTopicTitleLen] = useState(18);
-  const [savingTopicSettings, setSavingTopicSettings] = useState(false);
-  const [topicSaveMessage, setTopicSaveMessage] = useState<string | null>(null);
-  const [savingStreamingSettings, setSavingStreamingSettings] = useState(false);
-  const [streamingSaveMessage, setStreamingSaveMessage] = useState<string | null>(
-    null,
-  );
   const [showRawOutput, setShowRawOutput] = useState(false);
   const {
     config,
@@ -285,6 +269,46 @@ const InterviewTrainer: React.FC = () => {
     setConfig,
   });
 
+  const {
+    envDraftName,
+    setEnvDraftName,
+    envMessage,
+    savingEnvironment,
+    handleSetActiveEnvironment,
+    handleCreateEnvironment,
+    handleDeleteEnvironment,
+    handleApiFieldChange,
+    handleSaveLlmParams,
+    handleSaveAsrParams,
+    savingLlmParams,
+    savingAsrParams,
+    llmParamsMessage,
+    asrParamsMessage,
+    handleSavePrompts,
+    promptSaveMessage,
+    promptSaveScope,
+    handleSaveTopicSettings,
+    savingTopicSettings,
+    topicSaveMessage,
+    handleSaveStreamingSettings,
+    savingStreamingSettings,
+    streamingSaveMessage,
+  } = useEnvironmentSettings({
+    config,
+    setConfig,
+    apiForm,
+    setApiForm,
+    streamingSettings,
+    setStreamingSettings,
+    customPrompt,
+    demoPrompt,
+    perQuestionSystemPrompts,
+    perQuestionDemoPrompts,
+    answerMode,
+    topicTitleMode,
+    topicTitleLen,
+  });
+
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
       (step) =>
@@ -396,136 +420,6 @@ const InterviewTrainer: React.FC = () => {
     analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
   );
   const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
-  const handleSetActiveEnvironment = async (environment: string) => {
-    if (!environment) {
-      return;
-    }
-    setSavingEnvironment(true);
-    setEnvMessage(null);
-    try {
-      const resp = await request("it/setActiveEnvironment", { environment });
-      if (resp?.status === "success" && resp.content) {
-        setConfig(resp.content);
-        setEnvMessage(`已切换到 ${environment}`);
-      } else {
-        setEnvMessage("环境切换失败。");
-      }
-    } catch (err) {
-      setEnvMessage(`环境切换失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-    setSavingEnvironment(false);
-  };
-  const handleCreateEnvironment = async (cloneFrom?: string) => {
-    const environment = envDraftName.trim();
-    if (!environment) {
-      setEnvMessage("请填写环境名称。");
-      return;
-    }
-    setSavingEnvironment(true);
-    setEnvMessage(null);
-    try {
-      const resp = await request("it/createTemplateEnvironment", {
-        environment,
-        cloneFrom: cloneFrom || "",
-      });
-      if (resp?.status === "success" && resp.content) {
-        setConfig(resp.content);
-        setEnvDraftName("");
-        setEnvMessage("环境已创建并切换。");
-      } else {
-        setEnvMessage("环境创建失败。");
-      }
-    } catch (err) {
-      setEnvMessage(`环境创建失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-    setSavingEnvironment(false);
-  };
-  const handleDeleteEnvironment = async (environment: string) => {
-    if (!environment) {
-      return;
-    }
-    const confirmed = window.confirm(`确认删除环境 ${environment}？`);
-    if (!confirmed) {
-      return;
-    }
-    setSavingEnvironment(true);
-    setEnvMessage(null);
-    try {
-      const resp = await request("it/deleteTemplateEnvironment", { environment });
-      if (resp?.status === "success" && resp.content) {
-        setConfig(resp.content);
-        setEnvMessage("环境已删除。");
-      } else {
-        setEnvMessage("环境删除失败。");
-      }
-    } catch (err) {
-      setEnvMessage(`环境删除失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-    setSavingEnvironment(false);
-  };
-  const handleSaveLlmParams = async () => {
-    setSavingLlmParams(true);
-    setLlmParamsMessage(null);
-    try {
-      const reasoningEffort = String(apiForm.llm.reasoningEffort || "").trim();
-      const resp = await request("it/updateApiSettings", {
-        environment: config?.activeEnvironment,
-        llm: {
-          model: apiForm.llm.model,
-          reasoningEffort: reasoningEffort || undefined,
-          timeoutSec: Number(apiForm.llm.timeoutSec),
-          maxRetries: Number(apiForm.llm.maxRetries),
-          antiRepeat: Boolean(apiForm.llm.antiRepeat),
-          webSearch: Boolean(apiForm.llm.webSearch),
-          reusePrefix: Boolean(apiForm.llm.reusePrefix),
-          stream: Boolean(apiForm.llm.stream),
-        },
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setLlmParamsMessage("LLM 参数已保存。");
-      } else {
-        setLlmParamsMessage("LLM 参数保存失败，请重试。");
-      }
-    } catch (err) {
-      setLlmParamsMessage(
-        `LLM 参数保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingLlmParams(false);
-  };
-  const handleSaveAsrParams = async () => {
-    setSavingAsrParams(true);
-    setAsrParamsMessage(null);
-    try {
-      const resp = await request("it/updateApiSettings", {
-        environment: config?.activeEnvironment,
-        asr: {
-          language: apiForm.asr.language,
-          devPid: Number(apiForm.asr.devPid),
-          maxChunkSec: Number(apiForm.asr.maxChunkSec),
-          maxConcurrency: Number(apiForm.asr.maxConcurrency),
-          timeoutSec: Number(apiForm.asr.timeoutSec),
-          maxRetries: Number(apiForm.asr.maxRetries),
-        },
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setAsrParamsMessage("ASR 参数已保存。");
-      } else {
-        setAsrParamsMessage("ASR 参数保存失败，请重试。");
-      }
-    } catch (err) {
-      setAsrParamsMessage(
-        `ASR 参数保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingAsrParams(false);
-  };
   const handleRetrievalFieldChange = (
     key:
       | "mode"
