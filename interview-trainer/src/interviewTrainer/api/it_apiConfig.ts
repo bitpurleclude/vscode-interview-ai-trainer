@@ -16,15 +16,26 @@ export interface ItApiConfig {
   ccswitch?: Record<string, any>;
 }
 
+export interface ItTemplatesConfig {
+  version: number;
+  environments: Record<string, any>;
+}
+
 export interface ItConfigBundle {
   api: ItApiConfig;
+  templates: ItTemplatesConfig;
   skill: Record<string, any>;
   app: Record<string, any>;
   providers: Record<string, any>;
 }
 
 const IT_CONFIG_DIR = "config";
-const IT_DEFAULT_FILES = ["api_config.yaml", "skill_config.yaml", "app_config.yaml"];
+const IT_DEFAULT_FILES = [
+  "api_config.yaml",
+  "skill_config.yaml",
+  "app_config.yaml",
+  "templates.yaml",
+];
 const IT_PROVIDER_DIR = "providers";
 
 function it_readYamlFile(filePath: string): any {
@@ -133,12 +144,14 @@ export function it_loadConfigBundle(
   const providerDir = it_getUserProviderDir(context);
 
   const api = it_readYamlFile(path.join(baseDir, "api_config.yaml")) as ItApiConfig;
+  const templates = it_readYamlFile(path.join(baseDir, "templates.yaml")) as ItTemplatesConfig;
   const skill = it_readYamlFile(path.join(baseDir, "skill_config.yaml"));
   const app = it_readYamlFile(path.join(baseDir, "app_config.yaml"));
   const providers = it_readProviderConfigs(providerDir);
 
   return {
     api,
+    templates: templates || { version: 1, environments: {} },
     skill,
     app,
     providers,
@@ -159,6 +172,14 @@ export function it_saveSkillConfig(
 ): void {
   const baseDir = it_getUserConfigDir(context);
   it_writeYamlFile(path.join(baseDir, "skill_config.yaml"), skillConfig);
+}
+
+export function it_saveTemplatesConfig(
+  context: vscode.ExtensionContext,
+  templatesConfig: ItTemplatesConfig,
+): void {
+  const baseDir = it_getUserConfigDir(context);
+  it_writeYamlFile(path.join(baseDir, "templates.yaml"), templatesConfig);
 }
 
 export function it_saveProviderConfig(

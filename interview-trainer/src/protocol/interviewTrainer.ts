@@ -14,6 +14,85 @@ export type ItStepStatus = "pending" | "running" | "success" | "error";
 
 export type ItRecordingState = "idle" | "recording" | "paused";
 
+export type ItTemplateCategory = "llm" | "asr" | "embedding" | "tts" | "vision" | "tools";
+
+export type ItTemplateResponseMode = "json" | "sse" | "ndjson" | "websocket" | "binary";
+
+export interface ItTemplateRequest {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+  timeoutSec?: number;
+  stream?: boolean;
+}
+
+export interface ItTemplateResponse {
+  mode?: ItTemplateResponseMode;
+  textPath?: string;
+  jsonPath?: string;
+  errorPath?: string;
+  statusPath?: string;
+  doneSignal?: string;
+}
+
+export interface ItTemplateStreaming {
+  eventDelimiter?: string;
+  dataPrefix?: string;
+  deltaPath?: string;
+  doneSignals?: string[];
+  heartbeatPattern?: string;
+}
+
+export interface ItApiTemplate {
+  id: string;
+  name: string;
+  category: ItTemplateCategory;
+  request: ItTemplateRequest;
+  response?: ItTemplateResponse;
+  streaming?: ItTemplateStreaming;
+  tags?: string[];
+  updatedAt?: string;
+}
+
+export interface ItTemplateBindings {
+  llm?: {
+    questionParse?: string;
+    segment?: string;
+    evaluation?: string;
+  };
+  asr?: {
+    transcription?: string;
+  };
+  embedding?: {
+    retrieval?: string;
+  };
+}
+
+export interface ItTemplateParamCatalog {
+  common: string[];
+  llm: string[];
+  asr: string[];
+  embedding: string[];
+}
+
+export interface ItTemplateParamUsage {
+  used: string[];
+  unused: string[];
+  unknown: string[];
+  empty: string[];
+}
+
+export interface ItTemplatesSnapshot {
+  templates: ItApiTemplate[];
+  bindings: ItTemplateBindings;
+  paramCatalog: ItTemplateParamCatalog;
+  paramUsage: Record<string, ItTemplateParamUsage>;
+  paramOptions?: {
+    reasoningEffort: string[];
+  };
+}
 export interface ItStepState {
   id: ItWorkflowStep;
   status: ItStepStatus;
@@ -204,6 +283,7 @@ export interface ItConfigSnapshot {
     reusePrefix?: boolean;
     stream?: boolean;
   };
+  templates?: ItTemplatesSnapshot;
   streaming?: {
     enabled: boolean;
     autoCollapse: boolean;

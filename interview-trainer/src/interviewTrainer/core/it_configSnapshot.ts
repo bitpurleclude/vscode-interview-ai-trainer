@@ -6,8 +6,91 @@ import {
   it_applySecretOverrides,
 } from "../api/it_apiConfig";
 import { ItConfigService } from "../api/it_configService";
-import { ItConfigSnapshot } from "../../protocol/interviewTrainer";
+import {
+  ItApiTemplate,
+  ItConfigSnapshot,
+  ItTemplateParamCatalog,
+  ItTemplateParamUsage,
+  ItTemplatesSnapshot,
+} from "../../protocol/interviewTrainer";
 import { it_hashText } from "../utils/it_text";
+
+const IT_TEMPLATE_VAR_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+
+function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
+  return {
+    common: ["apiKey", "secretKey", "timeoutSec", "stream"],
+    llm: [
+      "model",
+      "messages",
+      "input",
+      "instructions",
+      "temperature",
+      "topP",
+      "reasoningEffort",
+      "maxOutputTokens",
+      "webSearch",
+      "reusePrefix",
+    ],
+    asr: ["audioFile", "asr.lang", "asr.dev_pid"],
+    embedding: ["embeddingInput", "model"],
+  };
+}
+
+function it_collectTemplateVars(template: ItApiTemplate): string[] {
+  const raw = JSON.stringify({
+    request: template.request,
+    response: template.response,
+    streaming: template.streaming,
+  });
+  const matches = raw.matchAll(IT_TEMPLATE_VAR_PATTERN);
+  const vars = new Set<string>();
+  for (const match of matches) {
+    if (match[1]) {
+      vars.add(match[1]);
+    }
+  }
+  return Array.from(vars);
+}
+
+function it_buildTemplateParamUsage(
+  templates: ItApiTemplate[],
+  catalog: ItTemplateParamCatalog,
+): Record<string, ItTemplateParamUsage> {
+  const usage: Record<string, ItTemplateParamUsage> = {};
+  templates.forEach((template) => {
+    const used = new Set(it_collectTemplateVars(template));
+    const knownVars = new Set([
+      ...catalog.common,
+      ...(template.category === "llm"
+        ? catalog.llm
+        : template.category === "asr"
+          ? catalog.asr
+          : template.category === "embedding"
+            ? catalog.embedding
+            : []),
+    ]);
+    const unknown: string[] = [];
+    used.forEach((item) => {
+      if (!knownVars.has(item)) {
+        unknown.push(item);
+      }
+    });
+    const unused: string[] = [];
+    knownVars.forEach((item) => {
+      if (!used.has(item)) {
+        unused.push(item);
+      }
+    });
+    usage[template.id] = {
+      used: Array.from(used),
+      unused,
+      unknown,
+      empty: [],
+    };
+  });
+  return usage;
+}
 
 export type ItConfigSnapshotHost = {
   context: vscode.ExtensionContext;
@@ -31,6 +114,30 @@ export function it_buildConfigSnapshot(
 ): ItConfigSnapshot {
   const env = apiConfig.active?.environment || "prod";
   const envConfig = apiConfig.environments?.[env] ?? {};
+  const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+  const templateEnv = templatesConfig.environments?.[env] || {};
+  const templateMap = templateEnv.templates || {};
+  const templates = Object.keys(templateMap)
+    .map((id) => ({
+      ...templateMap[id],
+      id: templateMap[id]?.id || id,
+    }))
+    .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+  const templateBindings = templateEnv.bindings || { llm: {}, asr: {}, embedding: {} };
+  const paramOptions = {
+    reasoningEffort: Array.isArray(templateEnv.param_options?.reasoning_effort)
+      ? templateEnv.param_options.reasoning_effort
+      : ["low", "medium", "high", "xhigh"],
+  };
+  const paramCatalog = it_buildTemplateParamCatalog();
+  const paramUsage = it_buildTemplateParamUsage(templates, paramCatalog);
+  const templatesSnapshot: ItTemplatesSnapshot = {
+    templates,
+    bindings: templateBindings,
+    paramCatalog,
+    paramUsage,
+    paramOptions,
+  };
   const llmConfig = envConfig.llm ?? {};
   const asrConfig = envConfig.asr ?? {};
   const evaluationCfg = host.configBundle.skill.evaluation ?? {};
@@ -152,6 +259,7 @@ export function it_buildConfigSnapshot(
       ),
       stream: Boolean(llmConfig.stream ?? llmConfig.stream_enabled ?? true),
     },
+    templates: templatesSnapshot,
     streaming: {
       enabled: streamingEnabled,
       autoCollapse: Boolean(streamingAutoCollapse),
@@ -286,6 +394,7 @@ export async function it_refreshConfigSnapshot(
   host: ItConfigSnapshotHost,
 ): Promise<ItConfigSnapshot> {
   host.configBundle = host.configService.loadBundle();
+  host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
   host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
   host.configBundle.api = await it_applySecretOverrides(
     host.context,

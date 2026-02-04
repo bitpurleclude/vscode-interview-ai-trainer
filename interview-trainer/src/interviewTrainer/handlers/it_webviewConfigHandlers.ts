@@ -4,6 +4,68 @@ import { it_getUserProviderDir } from "../api/it_apiConfig";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerConfigHandlers(host: ItWebviewHandlersHost): void {
+  host.webviewProtocol.on("it/saveTemplate", async (msg) => {
+    const payload = msg.data || {};
+    const template = payload.template;
+    if (!template || !template.id) {
+      throw new Error("missing template id");
+    }
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    templatesConfig = host.configService.upsertTemplate(templatesConfig, env, template);
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/deleteTemplate", async (msg) => {
+    const templateId = String(msg.data?.templateId || "").trim();
+    if (!templateId) {
+      throw new Error("missing templateId");
+    }
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    templatesConfig = host.configService.removeTemplate(templatesConfig, env, templateId);
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/saveTemplateBindings", async (msg) => {
+    const bindings = msg.data?.bindings || {};
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    templatesConfig = host.configService.saveTemplateBindings(templatesConfig, env, bindings);
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/saveTemplateParamOptions", async (msg) => {
+    const options = msg.data?.options || {};
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    templatesConfig = host.configService.saveTemplateParamOptions(
+      templatesConfig,
+      env,
+      options,
+    );
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
   host.webviewProtocol.on("it/updateTopicSettings", async (msg) => {
     const payload = msg.data || {};
     const incoming = payload.topics || {};
