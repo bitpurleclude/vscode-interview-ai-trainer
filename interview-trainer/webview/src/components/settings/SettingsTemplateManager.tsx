@@ -1,5 +1,5 @@
 import React from "react";
-import type { SettingsCommonTemplateProps } from "./settingsTypes";
+import type { SettingsBindingProps, SettingsCommonTemplateProps } from "./settingsTypes";
 import type { ItTemplateCategory } from "../../types";
 import { InfoTip } from "../common/InfoTip";
 
@@ -25,7 +25,10 @@ const TEMPLATE_RESPONSE_MODES = [
   { value: "binary", label: "Binary" },
 ];
 
-export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (props) => {
+type SettingsTemplateManagerProps = SettingsCommonTemplateProps &
+  Pick<SettingsBindingProps, "templateBindings">;
+
+export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (props) => {
   const {
     uiLocked,
     templateCategory,
@@ -34,6 +37,7 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
     selectedTemplateId,
     setSelectedTemplateId,
     selectedTemplate,
+    templateBindings,
     templateDraft,
     setTemplateDraft,
     templateJsonDraft,
@@ -67,6 +71,15 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
     handleAddParamOption,
     handleSaveParamOptions,
   } = props;
+  const boundIds = new Set(
+    [
+      templateBindings.llm?.questionParse,
+      templateBindings.llm?.segment,
+      templateBindings.llm?.evaluation,
+      templateBindings.asr?.transcription,
+      templateBindings.embedding?.retrieval,
+    ].filter(Boolean) as string[],
+  );
 
   return (
     <div className="it-settings__section it-settings__section--full">
@@ -89,13 +102,6 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
             onClick={handleDuplicateTemplate}
           >
             复制模板
-          </button>
-          <button
-            className="it-button it-button--secondary it-button--compact"
-            disabled={uiLocked || !selectedTemplate}
-            onClick={handleDeleteTemplate}
-          >
-            删除模板
           </button>
         </div>
       </div>
@@ -127,19 +133,42 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
           </div>
           <div className="it-template__list-body">
             {templatesByCategory.length ? (
-              templatesByCategory.map((item) => (
-                <button
-                  key={item.id}
-                  className={`it-template__list-item ${
-                    selectedTemplateId === item.id ? "active" : ""
-                  }`}
-                  type="button"
-                  onClick={() => setSelectedTemplateId(item.id)}
-                >
-                  <div className="it-template__list-name">{item.name || item.id}</div>
-                  <div className="it-template__list-meta">{item.id}</div>
-                </button>
-              ))
+              templatesByCategory.map((item) => {
+                const isSelected = selectedTemplateId === item.id;
+                const isBound = boundIds.has(item.id);
+                return (
+                  <div key={item.id} className="it-template__list-row">
+                    <button
+                      className={`it-template__list-item ${isSelected ? "is-active" : ""}`}
+                      type="button"
+                      onClick={() => setSelectedTemplateId(item.id)}
+                      aria-pressed={isSelected}
+                    >
+                      <div className="it-template__list-name">{item.name || item.id}</div>
+                      <div className="it-template__list-meta">{item.id}</div>
+                    </button>
+                    <div className="it-template__list-actions">
+                      {isSelected && (
+                        <span className="it-template__list-tag">已选中</span>
+                      )}
+                      {isBound && (
+                        <span className="it-template__list-tag it-template__list-tag--bound">
+                          已绑定
+                        </span>
+                      )}
+                      <button
+                        className="it-button it-button--secondary it-button--compact it-template__list-delete"
+                        type="button"
+                        disabled={uiLocked || isBound}
+                        title={isBound ? "已绑定，无法删除" : "删除模板"}
+                        onClick={() => handleDeleteTemplate(item.id)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <div className="it-placeholder">暂无模板，请新建。</div>
             )}

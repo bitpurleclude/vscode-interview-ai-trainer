@@ -1175,6 +1175,7 @@
 
 .it-template__list-title {
   font-weight: 600;
+  color: var(--vscode-foreground);
 }
 
 .it-template__list-body {
@@ -1185,12 +1186,24 @@
   overflow: auto;
 }
 
+.it-template__list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .it-template__list-item {
+  flex: 1;
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: var(--vscode-sideBarSectionHeader-background);
   cursor: pointer;
+  text-align: left;
+  color: var(--vscode-foreground);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .it-template__list-item.is-active {
@@ -1201,11 +1214,34 @@
 .it-template__list-name {
   font-weight: 600;
   font-size: 12px;
+  color: var(--vscode-foreground);
 }
 
 .it-template__list-meta {
   font-size: 10px;
   color: var(--vscode-descriptionForeground);
+}
+
+.it-template__list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.it-template__list-tag {
+  border: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-sideBarSectionHeader-background);
+  color: var(--vscode-foreground);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.it-template__list-tag--bound {
+  background: var(--vscode-editorWarning-background);
+  color: var(--vscode-editorWarning-foreground);
+  border-color: var(--vscode-editorWarning-foreground);
 }
 
 .it-template__json-grid {

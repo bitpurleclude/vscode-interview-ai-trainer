@@ -97,7 +97,7 @@ export type SettingsCommonTemplateProps = {
   isCreatingTemplate: boolean;
   handleCreateTemplate: () => void;
   handleDuplicateTemplate: () => void;
-  handleDeleteTemplate: () => void;
+  handleDeleteTemplate: (templateId?: string) => void;
   handleCancelTemplateDraft: () => void;
   handleSaveTemplate: () => void;
   updateTemplateRequest: (payload: Partial<ItApiTemplate["request"]>) => void;

@@ -290,8 +290,8 @@ export function useTemplateEditor({
     setSavingTemplate(false);
   };
 
-  const handleDeleteTemplate = async () => {
-    const templateId = selectedTemplate?.id || "";
+  const handleDeleteTemplate = async (templateIdOverride?: string) => {
+    const templateId = String(templateIdOverride || selectedTemplate?.id || "").trim();
     if (!templateId) {
       return;
     }
