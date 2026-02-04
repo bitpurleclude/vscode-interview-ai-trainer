@@ -9,6 +9,7 @@ import {
 } from "./types";
 import { on, request } from "./messenger";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "./constants/prompts";
+import { DEFAULT_STATE } from "./constants/defaultState";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { InterviewHeader } from "./components/practice/InterviewHeader";
 import { InterviewStatus } from "./components/practice/InterviewStatus";
@@ -25,37 +26,6 @@ import { useConfigSync } from "./hooks/useConfigSync";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
-
-const DEFAULT_STATE: ItState = {
-  statusMessage: "等待开始面试训练",
-  overallProgress: 0,
-  recordingState: "idle",
-  draftTranscript: undefined,
-  draftDetailedTranscript: undefined,
-  draftAcoustic: undefined,
-  draftNotes: undefined,
-  draftQuestionTimings: undefined,
-  draftQuestionTimingNote: undefined,
-  draftEvaluation: undefined,
-  embeddingWarmup: {
-    status: "idle",
-    progress: 0,
-    total: 0,
-    done: 0,
-  },
-  steps: [
-    { id: "init", status: "success", progress: 100 },
-    { id: "question", status: "pending", progress: 0 },
-    { id: "recording", status: "pending", progress: 0 },
-    { id: "acoustic", status: "pending", progress: 0 },
-    { id: "asr", status: "pending", progress: 0 },
-    { id: "segment", status: "pending", progress: 0 },
-    { id: "notes", status: "pending", progress: 0 },
-    { id: "evaluation", status: "pending", progress: 0 },
-    { id: "report", status: "pending", progress: 0 },
-    { id: "write", status: "pending", progress: 0 },
-  ],
-};
 
 const InterviewTrainer: React.FC = () => {
   const [itState, setItState] = useState<ItState>(DEFAULT_STATE);
@@ -212,6 +182,205 @@ const InterviewTrainer: React.FC = () => {
     setRetrievalForm,
   });
 
+  const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
+  const [questionError, setQuestionError] = useState(false);
+  const uiLocked = !config;
+
+  const templatesSnapshot = config?.templates;
+  const templatesList = useMemo(() => templatesSnapshot?.templates ?? [], [templatesSnapshot]);
+  const templatesByCategory = useMemo(
+    () => templatesList.filter((template) => template.category === templateCategory),
+    [templatesList, templateCategory],
+  );
+  const selectedTemplate = useMemo(
+    () => templatesList.find((item) => item.id === selectedTemplateId) || null,
+    [templatesList, selectedTemplateId],
+  );
+  const templateParamCatalog: ItTemplateParamCatalog | undefined =
+    templatesSnapshot?.paramCatalog;
+  const templateParamUsage: ItTemplateParamUsage | undefined =
+    templatesSnapshot?.paramUsage?.[selectedTemplate?.id || ""];
+  const paramCatalogList = useMemo(() => {
+    const common = templateParamCatalog?.common ?? [];
+    const scoped =
+      templateCategory === "llm"
+        ? templateParamCatalog?.llm ?? []
+        : templateCategory === "asr"
+          ? templateParamCatalog?.asr ?? []
+          : templateCategory === "embedding"
+            ? templateParamCatalog?.embedding ?? []
+            : [];
+    return Array.from(new Set([...common, ...scoped]));
+  }, [templateParamCatalog, templateCategory]);
+  const templateUsageSets = useMemo(
+    () => ({
+      used: new Set(templateParamUsage?.used ?? []),
+      unused: new Set(templateParamUsage?.unused ?? []),
+      unknown: new Set(templateParamUsage?.unknown ?? []),
+      empty: new Set(templateParamUsage?.empty ?? []),
+    }),
+    [templateParamUsage],
+  );
+  const llmTemplates = useMemo(
+    () => templatesList.filter((template) => template.category === "llm"),
+    [templatesList],
+  );
+  const asrTemplates = useMemo(
+    () => templatesList.filter((template) => template.category === "asr"),
+    [templatesList],
+  );
+  const embeddingTemplates = useMemo(
+    () => templatesList.filter((template) => template.category === "embedding"),
+    [templatesList],
+  );
+  const embeddingWarmup = itState.embeddingWarmup;
+  const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
+
+  const thinkingVisible = useMemo(() => {
+    return itState.steps.some(
+      (step) =>
+        step.status === "running" &&
+        ["question", "acoustic", "asr", "notes", "evaluation"].includes(step.id),
+    );
+  }, [itState]);
+
+  const parsedQuestionList = useMemo(
+    () =>
+      questionList
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    [questionList],
+  );
+  const hasQuestion = useMemo(
+    () => questionText.trim().length > 0 || parsedQuestionList.length > 0,
+    [questionText, parsedQuestionList],
+  );
+
+  const {
+    audioPayload,
+    isImporting,
+    recordingTime,
+    handleStartRecording,
+    handleStopRecording,
+    handleImportAudio,
+  } = useAudioCapture({
+    selectedInput,
+    hasQuestion,
+    setItState,
+  });
+
+  const {
+    analysisResult,
+    isProcessing,
+    savingResult,
+    saveResultMessage,
+    historyItems,
+    regeneratingIndex,
+    handleAnalyze,
+    handleRegenerateDemoAnswer,
+    handleCancelAnalyze,
+    handleSaveResult,
+    handleLoadHistory,
+  } = useAnalysisFlow({
+    audioPayload,
+    hasQuestion,
+    questionText,
+    parsedQuestionList,
+    perQuestionSystemPrompts,
+    perQuestionDemoPrompts,
+    customPrompt,
+    demoPrompt,
+    itState,
+    setItState,
+    setQuestionText,
+    setQuestionList,
+    setQuestionParsed,
+    setQuestionError,
+    setActiveTab,
+    setActivePage,
+    setShowNoteHits,
+    resetStreams,
+    resetEvaluationStream,
+  });
+
+  useEffect(() => {
+    setShowRawOutput(false);
+  }, [analysisResult]);
+
+  const evaluationStreamQuestions = useMemo(() => {
+    const list =
+      (analysisResult?.questionList && analysisResult.questionList.length
+        ? analysisResult.questionList
+        : parsedQuestionList) || [];
+    if (list.length) {
+      return list.slice(0, 3);
+    }
+    const fallback = questionText.trim();
+    return fallback ? [fallback] : [];
+  }, [analysisResult, parsedQuestionList, questionText]);
+  const buildQuestionParseInput = useCallback(() => {
+    const text = questionText.trim();
+    const list = questionList.trim();
+    if (text && list) {
+      return `${text}\n\n${list}`;
+    }
+    return text || list;
+  }, [questionText, questionList]);
+  const retrievalDirs = useMemo(() => {
+    if (!config) {
+      return [];
+    }
+    return [
+      { key: "notes", label: "笔记", value: config.workspaceDirs.notesDir },
+      { key: "prompts", label: "题干材料", value: config.workspaceDirs.promptsDir },
+      { key: "rubrics", label: "评分标准", value: config.workspaceDirs.rubricsDir },
+      { key: "knowledge", label: "知识库", value: config.workspaceDirs.knowledgeDir },
+      { key: "examples", label: "示例答案", value: config.workspaceDirs.examplesDir },
+    ];
+  }, [config]);
+  const transcriptPreview = analysisResult?.transcript || itState.draftTranscript || "";
+  const detailedTranscriptPreview =
+    analysisResult?.detailedTranscript || itState.draftDetailedTranscript;
+  const acousticPreview = analysisResult?.acoustic || itState.draftAcoustic;
+  const notesPreview = analysisResult?.notes ?? itState.draftNotes;
+  const questionTimingsPreview =
+    analysisResult?.questionTimings ?? itState.draftQuestionTimings;
+  const questionTimingNotePreview =
+    analysisResult?.questionTimingNote ?? itState.draftQuestionTimingNote;
+  const evaluationPreview = analysisResult?.evaluation || itState.draftEvaluation || null;
+  const retrievalCacheInfo = config?.retrievalCache;
+  const corpusCachePath = retrievalCacheInfo?.corpusCacheDir || "";
+  const embeddingCachePath = retrievalCacheInfo?.embeddingCacheDir || "";
+  const corpusCacheMb = retrievalCacheInfo?.corpusCacheMb;
+  const queryCacheSize = retrievalCacheInfo?.queryCacheSize;
+  const maxConcurrency = retrievalCacheInfo?.maxConcurrency;
+  const hasAnyResult =
+    Boolean(analysisResult) ||
+    Boolean(itState.draftTranscript) ||
+    Boolean(itState.draftDetailedTranscript) ||
+    Boolean(itState.draftEvaluation) ||
+    Boolean(itState.draftAcoustic) ||
+    typeof itState.draftNotes !== "undefined" ||
+    Boolean(itState.draftQuestionTimings) ||
+    Boolean(itState.draftQuestionTimingNote);
+  const hasTranscriptContent = Boolean(
+    analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
+  );
+  const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
+
+  useEffect(() => {
+    if (questionError && hasQuestion) {
+      setQuestionError(false);
+    }
+  }, [questionError, hasQuestion]);
+
+  const handleQuestionTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setQuestionText(event.target.value);
+    if (questionParsed) {
+      setQuestionParsed(false);
+    }
+  };
 
   const handleQuestionListChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setQuestionList(event.target.value);
