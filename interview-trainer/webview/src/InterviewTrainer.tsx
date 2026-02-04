@@ -6,31 +6,21 @@ import {
   ItConfigSnapshot,
   ItHistoryItem,
   ItState,
-  ItStepState,
   ItTemplateBindings,
   ItTemplateCategory,
   ItTemplateParamCatalog,
   ItTemplateParamUsage,
 } from "./types";
 import { on, request } from "./messenger";
-import { StreamCard } from "./components/StreamCard";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import { InterviewHeader } from "./components/practice/InterviewHeader";
+import { InterviewStatus } from "./components/practice/InterviewStatus";
+import { PracticeFlow } from "./components/practice/PracticeFlow";
+import { ResultsPanel } from "./components/practice/ResultsPanel";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
 
-const STEP_LABELS: Record<string, string> = {
-  init: "初始化",
-  question: "题目解析",
-  recording: "录音中",
-  acoustic: "声学分析",
-  asr: "语音转写",
-  segment: "多题分段",
-  notes: "笔记学习",
-  evaluation: "面试评价",
-  report: "结果生成",
-  write: "文件写入",
-};
 
 function it_formatSeconds(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds));
@@ -972,6 +962,10 @@ const InterviewTrainer: React.FC = () => {
     typeof itState.draftNotes !== "undefined" ||
     Boolean(itState.draftQuestionTimings) ||
     Boolean(itState.draftQuestionTimingNote);
+  const hasTranscriptContent = Boolean(
+    analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
+  );
+  const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
 
   useEffect(() => {
     if (questionError && hasQuestion) {
@@ -2203,6 +2197,12 @@ const InterviewTrainer: React.FC = () => {
       setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
     }
   };
+  const handleOpenSettings = () => {
+    request("it/openSettings", undefined);
+  };
+  const handleSelectSessionsDir = () => {
+    request("it/selectSessionsDir", undefined);
+  };
   const handleToggleRetrieval = async (enabled: boolean) => {
     await request("it/setRetrievalEnabled", { enabled });
   };
@@ -2224,6 +2224,54 @@ const InterviewTrainer: React.FC = () => {
       statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
     }));
   };
+  const handleParseQuestions = async () => {
+    const merged = buildQuestionParseInput();
+    await parseQuestionsFromText(merged, {
+      fallbackPrompt: questionText.trim(),
+    });
+  };
+  const handleToggleNoteHits = () => {
+    setShowNoteHits((prev) => !prev);
+  };
+  const handleToggleDemoPrompt = () => {
+    setShowDemoPrompt((prev) => !prev);
+  };
+  const handleToggleRawOutput = () => {
+    setShowRawOutput((prev) => !prev);
+  };
+  const handleToggleNoteUsage = () => {
+    setShowNoteUsage((prev) => !prev);
+  };
+  const handleToggleNoteSuggestions = () => {
+    setShowNoteSuggestions((prev) => !prev);
+  };
+  const handleToggleStepStream = (stepId: string) => {
+    setStepStreams((prev) => {
+      const current = prev[stepId];
+      if (!current) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [stepId]: {
+          ...current,
+          collapsed: !current.collapsed,
+        },
+      };
+    });
+  };
+  const handleToggleEvaluationStream = (index: number) => {
+    setEvaluationStreams((prev) => ({
+      ...prev,
+      [index]: {
+        ...(prev[index] || { text: "", collapsed: false, done: false }),
+        collapsed: !prev[index]?.collapsed,
+      },
+    }));
+  };
+  const handleOpenReport = (path: string) => {
+    request("openFile", { path });
+  };
 
   useEffect(() => {
     const disposeHistory = on("it/showHistory", () => {
@@ -2238,699 +2286,104 @@ const InterviewTrainer: React.FC = () => {
     };
   }, [handleLoadHistory]);
 
-  const renderSteps = (steps: ItStepState[]) => {
-    return (
-      <div className="it-steps">
-        {steps.map((step) => {
-          const stream = stepStreams[step.id];
-          const isEvaluationStep = step.id === "evaluation";
-          const showStream = streamingSettings.enabled && stream?.text && !isEvaluationStep;
-          const previewChars = Math.max(50, streamingSettings.previewChars || 200);
-          return (
-            <div key={step.id} className={`it-step it-step--${step.status}`}>
-            <div className="it-step__content">
-              <div className="it-step__dot" />
-              <div className="it-step__label">{STEP_LABELS[step.id]}</div>
-              {step.status !== "pending" && (
-                <div className="it-step__progress">{step.progress}%</div>
-              )}
-            </div>
-            {step.message && (
-              <div className="it-step__meta">{step.message}</div>
-            )}
-            {isEvaluationStep && streamingSettings.enabled && (
-              <div className="it-step__evaluation-streams">
-                <div className="it-step__evaluation-title">
-                  面试评价实时输出（仅保留最新 {previewChars} 字）
-                </div>
-                <div className="it-evaluation__stream-grid">
-                  {[0, 1, 2].map((idx) => {
-                    const evalStream = evaluationStreams[idx];
-                    const label = evaluationStreamQuestions[idx] || `第${idx + 1}题`;
-                    const isActive = Boolean(evalStream?.text);
-                    const status = evalStream?.done
-                      ? "完成"
-                      : isActive
-                        ? "输出中"
-                        : "等待";
-                    return (
-                      <StreamCard
-                        key={`eval-stream-${idx}`}
-                        variant="evaluation"
-                        title={label}
-                        status={status}
-                        text={evalStream?.text}
-                        collapsed={evalStream?.collapsed}
-                        done={evalStream?.done}
-                        showToggle={isActive}
-                        previewLimit={previewChars}
-                        onToggle={() =>
-                          setEvaluationStreams((prev) => ({
-                            ...prev,
-                            [idx]: {
-                              ...(prev[idx] || {
-                                text: "",
-                                collapsed: false,
-                                done: false,
-                              }),
-                              collapsed: !prev[idx]?.collapsed,
-                            },
-                          }))
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {showStream && (
-              <StreamCard
-                variant="step"
-                title="实时输出"
-                text={stream?.text}
-                collapsed={stream?.collapsed}
-                showToggle
-                previewLimit={previewChars}
-                onToggle={() =>
-                  setStepStreams((prev) => {
-                    const current = prev[step.id];
-                    if (!current) {
-                      return prev;
-                    }
-                    return {
-                      ...prev,
-                      [step.id]: {
-                        ...current,
-                        collapsed: !current.collapsed,
-                      },
-                    };
-                  })
-                }
-              />
-            )}
-          </div>
-        );
-        })}
-      </div>
-    );
-  };
-
-
-
   return (
     <div className="it-root">
-      <div className="it-header">
-        <div className="it-title">面试训练助手</div>
-        <div className="it-page-tabs">
-          <button
-            className={`it-tab ${activePage === "practice" ? "active" : ""}`}
-            onClick={() => setActivePage("practice")}
-          >
-            练习
-          </button>
-          <button
-            className={`it-tab ${activePage === "settings" ? "active" : ""}`}
-            onClick={() => setActivePage("settings")}
-          >
-            设置
-          </button>
-        </div>
-        {activePage === "practice" && (
-          <div className="it-actions">
-            <button
-              className={`it-button ${itState.recordingState === "recording" ? "it-button--danger" : "it-button--primary"}`}
-              disabled={uiLocked}
-              onClick={() =>
-                itState.recordingState === "recording"
-                  ? handleStopRecording()
-                  : handleStartRecording()
-              }
-            >
-              {itState.recordingState === "recording" ? "停止录音" : "开始录音"}
-            </button>
-            <label className="it-button it-button--secondary">
-              导入音频
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleImportAudio}
-                disabled={uiLocked}
-              />
-            </label>
-            <label className="it-button it-button--secondary">
-              导入题干
-              <input
-                type="file"
-                accept=".txt,.md,text/plain,text/markdown"
-                onChange={handleImportQuestions}
-                disabled={uiLocked}
-              />
-            </label>
-            <button
-              className={`it-button ${isProcessing ? "it-button--danger" : ""}`}
-              disabled={
-                isProcessing
-                  ? uiLocked
-                  : uiLocked || !audioPayload || !hasQuestion || isImporting
-              }
-              onClick={isProcessing ? handleCancelAnalyze : handleAnalyze}
-            >
-              {isProcessing ? "结束分析" : "开始分析"}
-            </button>
-            <button
-              className="it-button"
-              disabled={uiLocked || savingResult}
-              onClick={handleSaveResult}
-            >
-              {savingResult ? "保存中..." : "保存结果"}
-            </button>
-            <button
-              className="it-button"
-              disabled={uiLocked}
-              onClick={handleLoadHistory}
-            >
-              历史记录
-            </button>
-          </div>
-        )}
-      </div>
+      <InterviewHeader
+        activePage={activePage}
+        onSetActivePage={setActivePage}
+        uiLocked={uiLocked}
+        recordingState={itState.recordingState}
+        isProcessing={isProcessing}
+        isImporting={isImporting}
+        hasAudio={Boolean(audioPayload)}
+        hasQuestion={hasQuestion}
+        savingResult={savingResult}
+        onStartRecording={handleStartRecording}
+        onStopRecording={handleStopRecording}
+        onImportAudio={handleImportAudio}
+        onImportQuestions={handleImportQuestions}
+        onAnalyze={handleAnalyze}
+        onCancelAnalyze={handleCancelAnalyze}
+        onSaveResult={handleSaveResult}
+        onLoadHistory={handleLoadHistory}
+      />
 
-      <div className="it-status">
-        <span>{uiLocked ? "界面初始化中..." : itState.statusMessage}</span>
-        {saveResultMessage && (
-          <span className="it-status__hint">{saveResultMessage}</span>
-        )}
-        {itState.recordingState === "recording" && (
-          <span className="it-status__timer">
-            {it_formatSeconds(recordingTime)}
-          </span>
-        )}
-        {itState.lastError && (
-          <span className="it-status__error">{itState.lastError.reason}</span>
-        )}
-        {itState.lastError?.type === "recording_permission" && (
-          <button
-            className="it-link-button"
-            type="button"
-            onClick={() => request("it/openMicSettings", undefined)}
-          >
-            打开麦克风权限设置
-          </button>
-        )}
-      </div>
+      <InterviewStatus
+        uiLocked={uiLocked}
+        statusMessage={itState.statusMessage}
+        saveResultMessage={saveResultMessage}
+        recordingState={itState.recordingState}
+        recordingTime={recordingTime}
+        lastError={itState.lastError}
+        formatSeconds={it_formatSeconds}
+        onOpenMicSettings={() => request("it/openMicSettings", undefined)}
+      />
 
       {activePage === "practice" && (
         <>
-          <div className="it-flow">
-            <div className="it-flow__left">{renderSteps(itState.steps)}</div>
-            <div className="it-flow__right">
-              <div className="it-progress">
-                <div className="it-progress__label">
-                  总进度：{Math.round(itState.overallProgress)}%
-                </div>
-                <div className="it-progress__bar">
-                  <div
-                    className="it-progress__fill"
-                    style={{ width: `${itState.overallProgress}%` }}
-                  />
-                </div>
-              </div>
-              {audioPayload && (
-                <div className="it-audio-summary">
-                  音频时长：{audioPayload.durationSec.toFixed(1)}s
-                </div>
-              )}
-              {thinkingVisible && (
-                <div className="it-thinking">
-                  <div className="it-thinking__title">正在思考：分析处理中</div>
-                  <div className="it-thinking__body">
-                    1. 解析语音特征与转写文本
-                    <br />
-                    2. 检索相似笔记与评分标准
-                    <br />
-                    3. 生成结构化面试评价
-                  </div>
-                </div>
-              )}
-              <div className="it-question">
-                <textarea
-                  className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
-                  placeholder="题干材料（可选）"
-                  value={questionText}
-                  onChange={handleQuestionTextChange}
-                />
-                <textarea
-                  className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
-                  placeholder="小题列表（一行一个，可选）"
-                  value={questionList}
-                  onChange={handleQuestionListChange}
-                />
-                <div className="it-question__hint">
-                  题干或小题列表为必填；开始分析时自动识别第N题，也可手动点击“识别题目”。
-                </div>
-                <div className="it-question__status">
-                  <span
-                    className={`it-status-badge ${
-                      questionParsing
-                        ? "it-status-badge--running"
-                        : questionParsed
-                          ? "it-status-badge--ok"
-                          : "it-status-badge--idle"
-                    }`}
-                  >
-                    题干状态：
-                    {questionParsing
-                      ? "识别中"
-                      : questionParsed
-                        ? "已识别"
-                        : hasQuestion
-                          ? "待解析"
-                          : "未填写"}
-                  </span>
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked || questionParsing || !hasQuestion}
-                    onClick={async () => {
-                      const merged = buildQuestionParseInput();
-                      await parseQuestionsFromText(merged, {
-                        fallbackPrompt: questionText.trim(),
-                      });
-                    }}
-                  >
-                    {questionParsing ? "识别中..." : "识别题目"}
-                  </button>
-                </div>
-                {typeof notesPreview !== "undefined" && (
-                  <div className="it-question__notes">
-                    <div className="it-question__notes-header">
-                      <span>笔记命中</span>
-                      <button
-                        className="it-button it-button--secondary it-button--compact"
-                        type="button"
-                        onClick={() => setShowNoteHits((prev) => !prev)}
-                      >
-                        {showNoteHits ? "收起" : "展开"}
-                      </button>
-                    </div>
-                    {showNoteHits && (
-                      <>
-                        {config?.retrievalEnabled === false ? (
-                          <div className="it-placeholder">检索未启用</div>
-                        ) : notesPreview.length > 0 ? (
-                          <ul className="it-note-hits">
-                            {notesPreview.map((item, idx) => (
-                              <li key={`${idx}-${item.source}`} className="it-note-hits__item">
-                                <div className="it-note-hits__header">
-                                  <span className="it-note-hits__score">
-                                    {Number.isFinite(item.score)
-                                      ? item.score.toFixed(2)
-                                      : "-"}
-                                  </span>
-                                  <span className="it-note-hits__source">
-                                    {item.source}
-                                  </span>
-                                </div>
-                                <div className="it-note-hits__snippet">
-                                  {item.snippet}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="it-placeholder">暂无命中</div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="it-results">
-            <div className="it-tabs">
-              <button
-                className={`it-tab ${activeTab === "transcript" ? "active" : ""}`}
-                onClick={() => setActiveTab("transcript")}
-              >
-                转录文本
-              </button>
-              <button
-                className={`it-tab ${activeTab === "acoustic" ? "active" : ""}`}
-                onClick={() => setActiveTab("acoustic")}
-              >
-                声学分析
-              </button>
-              <button
-                className={`it-tab ${activeTab === "evaluation" ? "active" : ""}`}
-                onClick={() => setActiveTab("evaluation")}
-              >
-                面试评价
-              </button>
-              <button
-                className={`it-tab ${activeTab === "history" ? "active" : ""}`}
-                onClick={() => setActiveTab("history")}
-              >
-                历史记录
-              </button>
-            </div>
-            <div className="it-result-panel">
-              {!hasAnyResult && (
-                <div className="it-placeholder">等待分析结果...</div>
-              )}
-              {(analysisResult || itState.draftTranscript || itState.draftDetailedTranscript) &&
-                activeTab === "transcript" && (
-                <div className="it-transcript">
-                  {detailedTranscriptPreview ? (
-                    <>
-                      <div className="it-section-title">带时间标注</div>
-                      <textarea
-                        className="it-textarea it-textarea--tall"
-                        value={detailedTranscriptPreview}
-                        readOnly
-                      />
-                      <div className="it-section-title">原始转写</div>
-                      <textarea
-                        className="it-textarea"
-                        value={transcriptPreview}
-                        readOnly
-                      />
-                    </>
-                  ) : (
-                    <textarea
-                      className="it-textarea"
-                      value={transcriptPreview}
-                      readOnly
-                    />
-                  )}
-                </div>
-              )}
-              {acousticPreview && activeTab === "acoustic" && (
-                <div className="it-metrics">
-                  <div>时长：{acousticPreview.durationSec.toFixed(2)}s</div>
-                  <div>语速：{acousticPreview.speechRateWpm ?? "-"}</div>
-                  <div>停顿次数：{acousticPreview.pauseCount}</div>
-                  <div>平均停顿：{acousticPreview.pauseAvgSec}s</div>
-                  <div>最长停顿：{acousticPreview.pauseMaxSec}s</div>
-                  <div>RMS均值：{acousticPreview.rmsDbMean}dB</div>
-                  <div>RMS波动：{acousticPreview.rmsDbStd}dB</div>
-                  <div>SNR：{acousticPreview.snrDb ?? "-"}</div>
-                </div>
-              )}
-              {activeTab === "evaluation" && (
-                <div className="it-evaluation">
-                  {questionText.trim() && (
-                    <div className="it-evaluation__section">
-                      <h4>题干材料</h4>
-                      <textarea
-                        className="it-textarea it-textarea--prompt"
-                        value={questionText}
-                        readOnly
-                      />
-                    </div>
-                  )}
-                  {parsedQuestionList.length > 0 && (
-                    <div className="it-evaluation__section">
-                      <h4>题目列表</h4>
-                      <ul>
-                        {parsedQuestionList.map((item, idx) => (
-                          <li key={`${idx}-${item}`}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {questionTimingsPreview && questionTimingsPreview.length > 0 ? (
-                    <div className="it-question-timings">
-                      <div className="it-question-timings__title">
-                        题目用时
-                      </div>
-                      {questionTimingsPreview.map((item, idx) => (
-                        <div key={`${idx}-${item.question}`} className="it-question-timings__item">
-                          <div className="it-question-timings__label">
-                            {idx + 1}. {item.question}
-                          </div>
-                          <div className="it-question-timings__value">
-                            {`${it_formatSeconds(item.startSec)} - ${it_formatSeconds(item.endSec)} （用时 ${it_formatSeconds(item.durationSec)}${item.note ? `，${item.note}` : ""}）`}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : questionTimingNotePreview ? (
-                    <div className="it-question-timings">
-                      <div className="it-question-timings__title">
-                        题目用时
-                      </div>
-                      <div className="it-question-timings__item">
-                        <div className="it-question-timings__label">状态</div>
-                        <div className="it-question-timings__value">
-                          {questionTimingNotePreview}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                  {evaluationPreview ? (
-                    <>
-                      <div className="it-evaluation__summary">
-                        {evaluationPreview.topicSummary}
-                      </div>
-                      <div className="it-evaluation__overall">
-                        <span>总分</span>
-                        <span className="it-evaluation__overall-value">
-                          {evaluationPreview.overallScore ?? "-"}
-                        </span>
-                      </div>
-                      <div className="it-evaluation__scores">
-                        {Object.entries(evaluationPreview.scores || {}).map(
-                          ([key, value]) => (
-                            <div key={key} className="it-score">
-                              <span>{key}</span>
-                              <span>{value}</span>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                      <div className="it-evaluation__section">
-                        <h4>优点</h4>
-                        <ul>
-                          {evaluationPreview.strengths.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="it-evaluation__section">
-                        <h4>问题</h4>
-                        <ul>
-                          {evaluationPreview.issues.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="it-evaluation__section">
-                        <h4>改进建议</h4>
-                        <ul>
-                          {evaluationPreview.improvements.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="it-evaluation__section">
-                        <h4>练习重点</h4>
-                        <ul>
-                          {evaluationPreview.nextFocus.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      {evaluationPreview.revisedAnswers &&
-                      evaluationPreview.revisedAnswers.length > 0 && (
-                        <div className="it-evaluation__section">
-                          <h4>示范性修改</h4>
-                          <div className="it-revised-list">
-                            {evaluationPreview.revisedAnswers.map((item, idx) => (
-                              <div key={`${idx}-${item.question}`} className="it-revised-item">
-                                <div className="it-revised-item__title">
-                                  <span>
-                                    {idx + 1}. {item.question}
-                                    {typeof item.estimatedTimeMin === "number"
-                                      ? `（建议${item.estimatedTimeMin}分钟）`
-                                      : ""}
-                                  </span>
-                                  <button
-                                    className="it-button it-button--compact"
-                                    type="button"
-                                    disabled={uiLocked || isProcessing || regeneratingIndex === idx}
-                                    onClick={() => handleRegenerateDemoAnswer(idx)}
-                                  >
-                                    {regeneratingIndex === idx ? "生成中..." : "重新生成示范"}
-                                  </button>
-                                </div>
-                                <div className="it-revised-item__block">
-                                  <span>原回答：</span>
-                                  {it_renderParagraphs(item.original, `${idx}-orig`)}
-                                </div>
-                                <div className="it-revised-item__block">
-                                  <span>答题提纲（你的回答）：</span>
-                                  {item.outlineOriginal && item.outlineOriginal.length > 0 ? (
-                                    it_renderOutlineTree(
-                                      it_buildOutlineTree(item.outlineOriginal),
-                                      `${idx}-orig-outline`,
-                                    )
-                                  ) : (
-                                    <span>（未提供）</span>
-                                  )}
-                                </div>
-                                <div className="it-revised-item__block">
-                                  <span>示范：</span>
-                                  {it_renderParagraphs(item.revised, `${idx}-demo`)}
-                                </div>
-                                <div className="it-revised-item__block">
-                                  <span>答题提纲（示范）：</span>
-                                  {item.outlineRevised && item.outlineRevised.length > 0 ? (
-                                    it_renderOutlineTree(
-                                      it_buildOutlineTree(item.outlineRevised),
-                                      `${idx}-demo-outline`,
-                                    )
-                                  ) : (
-                                    <span>（未提供）</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {evaluationPreview.prompt && (
-                        <div className="it-evaluation__section">
-                          <div className="it-section-header">
-                            <h4>示范答题提示词</h4>
-                            <button
-                              className="it-button it-button--secondary it-button--compact"
-                              type="button"
-                              onClick={() => setShowDemoPrompt((prev) => !prev)}
-                            >
-                              {showDemoPrompt ? "收起" : "展开"}
-                            </button>
-                          </div>
-                          {showDemoPrompt && (
-                            <textarea
-                              className="it-textarea it-textarea--prompt"
-                              value={evaluationPreview.prompt}
-                              readOnly
-                            />
-                          )}
-                        </div>
-                      )}
-                      {(evaluationPreview.raw || showRawOutput) && (
-                        <div className="it-evaluation__section">
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 12,
-                            }}
-                          >
-                            <h4 style={{ margin: 0 }}>原始输出</h4>
-                            <button
-                              className="it-button it-button--secondary it-button--compact"
-                              disabled={!evaluationPreview.raw}
-                              onClick={() => setShowRawOutput((prev) => !prev)}
-                            >
-                              {showRawOutput ? "收起" : "查看原始输出"}
-                            </button>
-                          </div>
-                          {showRawOutput && (
-                            <textarea
-                              className="it-textarea it-textarea--prompt"
-                              value={evaluationPreview.raw || ""}
-                              readOnly
-                            />
-                          )}
-                        </div>
-                      )}
-                      {evaluationPreview.noteUsage &&
-                      evaluationPreview.noteUsage.length > 0 && (
-                        <div className="it-evaluation__section">
-                          <div className="it-section-header">
-                            <h4>笔记引用</h4>
-                            <button
-                              className="it-button it-button--secondary it-button--compact"
-                              type="button"
-                              onClick={() => setShowNoteUsage((prev) => !prev)}
-                            >
-                              {showNoteUsage ? "收起" : "展开"}
-                            </button>
-                          </div>
-                          {showNoteUsage && (
-                            <ul>
-                              {evaluationPreview.noteUsage.map((item, idx) => (
-                                <li key={idx}>{item}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                      {evaluationPreview.noteSuggestions &&
-                      evaluationPreview.noteSuggestions.length > 0 && (
-                        <div className="it-evaluation__section">
-                          <div className="it-section-header">
-                            <h4>可用素材/参考思路</h4>
-                            <button
-                              className="it-button it-button--secondary it-button--compact"
-                              type="button"
-                              onClick={() => setShowNoteSuggestions((prev) => !prev)}
-                            >
-                              {showNoteSuggestions ? "收起" : "展开"}
-                            </button>
-                          </div>
-                          {showNoteSuggestions && (
-                            <ul>
-                              {evaluationPreview.noteSuggestions.map((item, idx) => (
-                                <li key={idx}>{item}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="it-placeholder">评价生成中...</div>
-                  )}
-                </div>
-              )}
-              {activeTab === "history" && (
-                <div className="it-history">
-                  {historyItems.length === 0 ? (
-                    <div className="it-placeholder">暂无历史记录</div>
-                  ) : (
-                    historyItems.map((item) => (
-                      <div key={item.reportPath} className="it-history__item">
-                        <div>
-                          <div className="it-history__title">{item.topicTitle}</div>
-                          <div className="it-history__meta">
-                            {item.timestamp || "未知时间"}
-                          </div>
-                        </div>
-                        <button
-                          className="it-button it-button--secondary"
-                          onClick={() => request("openFile", { path: item.reportPath })}
-                        >
-                          打开报告
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
+          <PracticeFlow
+            steps={itState.steps}
+            stepStreams={stepStreams}
+            evaluationStreams={evaluationStreams}
+            evaluationStreamQuestions={evaluationStreamQuestions}
+            streamingEnabled={streamingSettings.enabled}
+            previewChars={streamPreviewChars}
+            onToggleStepStream={handleToggleStepStream}
+            onToggleEvaluationStream={handleToggleEvaluationStream}
+            overallProgress={itState.overallProgress}
+            audioPayload={audioPayload}
+            thinkingVisible={thinkingVisible}
+            questionText={questionText}
+            questionList={questionList}
+            questionError={questionError}
+            questionParsing={questionParsing}
+            questionParsed={questionParsed}
+            hasQuestion={hasQuestion}
+            onQuestionTextChange={handleQuestionTextChange}
+            onQuestionListChange={handleQuestionListChange}
+            onParseQuestions={handleParseQuestions}
+            uiLocked={uiLocked}
+            notesPreview={notesPreview}
+            showNoteHits={showNoteHits}
+            onToggleNoteHits={handleToggleNoteHits}
+            retrievalEnabled={config?.retrievalEnabled !== false}
+          />
+          <ResultsPanel
+            activeTab={activeTab}
+            onSetActiveTab={setActiveTab}
+            hasAnyResult={hasAnyResult}
+            hasTranscriptContent={hasTranscriptContent}
+            transcriptPreview={transcriptPreview}
+            detailedTranscriptPreview={detailedTranscriptPreview}
+            acousticPreview={acousticPreview}
+            questionText={questionText}
+            parsedQuestionList={parsedQuestionList}
+            questionTimingsPreview={questionTimingsPreview}
+            questionTimingNotePreview={questionTimingNotePreview}
+            evaluationPreview={evaluationPreview}
+            uiLocked={uiLocked}
+            isProcessing={isProcessing}
+            regeneratingIndex={regeneratingIndex}
+            onRegenerateDemoAnswer={handleRegenerateDemoAnswer}
+            showDemoPrompt={showDemoPrompt}
+            onToggleDemoPrompt={handleToggleDemoPrompt}
+            showRawOutput={showRawOutput}
+            onToggleRawOutput={handleToggleRawOutput}
+            showNoteUsage={showNoteUsage}
+            onToggleNoteUsage={handleToggleNoteUsage}
+            showNoteSuggestions={showNoteSuggestions}
+            onToggleNoteSuggestions={handleToggleNoteSuggestions}
+            historyItems={historyItems}
+            onOpenReport={handleOpenReport}
+            formatSeconds={it_formatSeconds}
+            renderParagraphs={it_renderParagraphs}
+            buildOutlineTree={it_buildOutlineTree}
+            renderOutlineTree={it_renderOutlineTree}
+          />
         </>
       )}
 
-
-
-            {activePage === "settings" && (
+      {activePage === "settings" && (
         <SettingsPage
           uiLocked={uiLocked}
           config={config}
@@ -2947,6 +2400,8 @@ const InterviewTrainer: React.FC = () => {
           handleCreateEnvironment={handleCreateEnvironment}
           handleDeleteEnvironment={handleDeleteEnvironment}
           handleReloadConfig={handleReloadConfig}
+          handleOpenSettings={handleOpenSettings}
+          handleSelectSessionsDir={handleSelectSessionsDir}
           traceLogEnabled={traceLogEnabled}
           handleEnableTraceLogs={handleEnableTraceLogs}
           templateCategory={templateCategory}
@@ -2960,6 +2415,7 @@ const InterviewTrainer: React.FC = () => {
           templateJsonDraft={templateJsonDraft}
           setTemplateJsonDraft={setTemplateJsonDraft}
           templateJsonErrors={templateJsonErrors}
+          setTemplateJsonErrors={setTemplateJsonErrors}
           templateSaveMessage={templateSaveMessage}
           savingTemplate={savingTemplate}
           isCreatingTemplate={isCreatingTemplate}
@@ -3018,6 +2474,7 @@ const InterviewTrainer: React.FC = () => {
           selectedInput={selectedInput}
           setSelectedInput={setSelectedInput}
           handleRefreshInputs={handleRefreshInputs}
+          retrievalEnabled={config?.retrievalEnabled ?? true}
           retrievalForm={retrievalForm}
           handleRetrievalFieldChange={handleRetrievalFieldChange}
           handleRetrievalVectorChange={handleRetrievalVectorChange}
@@ -3037,6 +2494,7 @@ const InterviewTrainer: React.FC = () => {
           embeddingCachePath={embeddingCachePath}
           corpusCacheMb={corpusCacheMb}
           queryCacheSize={queryCacheSize}
+          sessionsDir={config?.sessionsDir || "sessions"}
           maxConcurrency={maxConcurrency}
           topicTitleMode={topicTitleMode}
           setTopicTitleMode={setTopicTitleMode}
