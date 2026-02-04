@@ -132,7 +132,8 @@ function it_buildOpenAiResponsesPayload(
   if (stream) {
     payload.stream = true;
   }
-  const reasoningEffort = options?.reasoningEffort ?? cfg.reasoningEffort;
+  const reasoningEffort =
+    options?.reasoningEffort ?? cfg.reasoningEffort ?? ("xhigh" as ItLlmReasoningEffort);
   if (reasoningEffort) {
     payload.reasoning = { effort: reasoningEffort, summary: "auto" };
   }
