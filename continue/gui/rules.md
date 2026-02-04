@@ -1,1 +1,0 @@
-- Whenever adding links in the `gui` that direct to `hub.continue.dev`, you should use an onClick handler that calls `ideMessenger.request("controlPlane/openUrl", { path, orgSlug: undefined });` instead of directly linking to the URL with an `href`.
