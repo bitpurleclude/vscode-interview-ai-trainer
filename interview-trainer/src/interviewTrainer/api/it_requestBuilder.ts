@@ -137,10 +137,7 @@ function it_buildOpenAiResponsesPayload(
   if (reasoningEffort) {
     payload.reasoning = { effort: reasoningEffort, summary: "auto" };
   }
-  const maxOutputTokens = options?.maxOutputTokens ?? cfg.maxOutputTokens;
-  if (Number.isFinite(maxOutputTokens) && Number(maxOutputTokens) > 0) {
-    payload.max_output_tokens = Number(maxOutputTokens);
-  }
+  // Do not send max_output_tokens for openai_compatible responses endpoints.
   if (options?.previousResponseId) {
     payload.previous_response_id = options.previousResponseId;
   }
