@@ -72,6 +72,7 @@ export async function it_handleAnalyze(
     });
 
     host.configBundle = host.configService.loadBundle();
+    host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
     host.configBundle.api = await it_applySecretOverrides(
       host.context,
@@ -82,6 +83,7 @@ export async function it_handleAnalyze(
       {
         context: host.context,
         apiConfig: host.configBundle.api,
+        templatesConfig: host.configBundle.templates,
         skillConfig: {
           ...host.configBundle.skill,
           providers: host.configBundle.providers,

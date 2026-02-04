@@ -3,9 +3,8 @@
   ItEvaluation,
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
-import { it_callDoubaoResponses, it_callLlmChat, it_callLlmChatStreaming } from "../api/it_llm";
+import { it_callLlmChatStreaming } from "../api/it_llm";
 import { ItLlmConfig, ItLlmProvider } from "../api/it_llmTypes";
-import { it_hashText } from "../utils/it_text";
 
 export interface ItEvaluationConfig extends ItLlmConfig {
   provider: ItLlmProvider | "heuristic";
@@ -14,68 +13,22 @@ export interface ItEvaluationConfig extends ItLlmConfig {
   answerMode?: "single" | "two-step";
 }
 
-const IT_PREFIX_CACHE_LIMIT = 50;
-const IT_PREFIX_CACHE = new Map<
-  string,
-  { responseId: string; updatedAt: number }
->();
-
-function it_getPrefixCache(key: string): string | undefined {
-  const entry = IT_PREFIX_CACHE.get(key);
-  if (!entry) {
-    return undefined;
-  }
-  entry.updatedAt = Date.now();
-  return entry.responseId;
-}
-
-function it_setPrefixCache(key: string, responseId: string): void {
-  IT_PREFIX_CACHE.set(key, { responseId, updatedAt: Date.now() });
-  if (IT_PREFIX_CACHE.size <= IT_PREFIX_CACHE_LIMIT) {
-    return;
-  }
-  const entries = Array.from(IT_PREFIX_CACHE.entries()).sort(
-    (a, b) => a[1].updatedAt - b[1].updatedAt,
-  );
-  while (entries.length > IT_PREFIX_CACHE_LIMIT) {
-    const oldest = entries.shift();
-    if (oldest) {
-      IT_PREFIX_CACHE.delete(oldest[0]);
-    }
-  }
-}
-
-function it_buildPrefixKey(
-  config: ItEvaluationConfig,
-  systemPrompt: string,
-  staticPrompt: string,
-): string {
-  const base = [
-    config.provider,
-    config.baseUrl,
-    config.model,
-    config.temperature,
-    config.topP,
-    config.reasoningEffort,
-    config.maxOutputTokens,
-    config.webSearch ? "1" : "0",
-    systemPrompt,
-    staticPrompt,
-  ]
-    .map((item) => String(item ?? ""))
-    .join("|");
-  return it_hashText(base);
-}
-
-function it_appendNonce(text: string): string {
-  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  return `${text}\n\n[nonce:${nonce}]`;
+function it_canUseLlm(config: ItEvaluationConfig): boolean {
+  return Boolean(config.template || config.apiKey);
 }
 
 function it_maskLlmConfig(config: ItLlmConfig): Record<string, unknown> {
+  const { templateContext, template, ...rest } = config;
   return {
-    ...config,
+    ...rest,
     apiKey: config.apiKey ? "***" : "",
+    template: template
+      ? {
+          id: template.id,
+          name: template.name,
+          category: template.category,
+        }
+      : undefined,
   };
 }
 
@@ -324,7 +277,7 @@ async function it_generateRevisedByOutline(
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
   onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<string[] | null> {
-  if (!items.length || !config.apiKey) {
+  if (!items.length || !it_canUseLlm(config)) {
     return null;
   }
   const systemPrompt = [
@@ -391,6 +344,11 @@ async function it_generateRevisedByOutline(
       maxOutputTokens: config.maxOutputTokens,
       reusePrefix: config.reusePrefix,
       stream: config.stream,
+      template: config.template,
+      templateEnv: config.templateEnv,
+      templateContext: config.templateContext,
+      templateVars: config.templateVars,
+      templateMaxRetries: config.templateMaxRetries,
     };
     onTrace?.("面试评价 LLM 请求（按提纲生成示范）", {
       config: it_maskLlmConfig(callConfig),
@@ -439,7 +397,7 @@ async function it_generateOutlines(
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
   onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<Array<{ outlineOriginal?: string[]; outlineRevised?: string[] }> | null> {
-  if (!items.length) {
+  if (!items.length || !it_canUseLlm(config)) {
     return null;
   }
   const systemPrompt = [
@@ -488,6 +446,11 @@ async function it_generateOutlines(
       maxOutputTokens: config.maxOutputTokens,
       reusePrefix: config.reusePrefix,
       stream: config.stream,
+      template: config.template,
+      templateEnv: config.templateEnv,
+      templateContext: config.templateContext,
+      templateVars: config.templateVars,
+      templateMaxRetries: config.templateMaxRetries,
     };
     onTrace?.("面试评价 LLM 请求（提纲修复）", {
       config: it_maskLlmConfig(callConfig),
@@ -956,7 +919,7 @@ export async function it_evaluateAnswer(
   const userPrompt = [staticPrompt, dynamicPrompt].filter(Boolean).join("\n\n");
   const promptText = `System:\n${systemPrompt}\n\nUser:\n${userPrompt}`;
 
-  if (!config.apiKey || config.provider === "heuristic") {
+  if (!it_canUseLlm(config) || config.provider === "heuristic") {
     return it_buildUnavailableEvaluation({
       question,
       reason: "LLM 未配置或不可用，无法生成评分与示范。",
@@ -976,15 +939,6 @@ export async function it_evaluateAnswer(
   let parsedRevised: any[] = [];
   let lastError: string | undefined;
   let finalPromptText = promptText;
-  const usePrefixReuse =
-    config.provider === "volc_doubao" &&
-    Boolean(config.apiMode === "responses" || config.useResponses) &&
-    Boolean(config.reusePrefix) &&
-    !config.antiRepeat;
-  const prefixKey = usePrefixReuse
-    ? it_buildPrefixKey(config, systemPrompt, staticPrompt)
-    : "";
-
   for (let attempt = 0; attempt < parseAttempts; attempt += 1) {
     const attemptDynamicPrompt =
       attempt === 0 ? dynamicPrompt : `${dynamicPrompt}\n\n${formatGuard}`;
@@ -1015,100 +969,33 @@ export async function it_evaluateAnswer(
         maxOutputTokens: config.maxOutputTokens,
         reusePrefix: config.reusePrefix,
         stream: config.stream,
+        template: config.template,
+        templateEnv: config.templateEnv,
+        templateContext: config.templateContext,
+        templateVars: config.templateVars,
+        templateMaxRetries: config.templateMaxRetries,
       };
       onStream?.({ text: "", reset: true });
-      if (usePrefixReuse) {
-        let responseId = it_getPrefixCache(prefixKey);
-        if (!responseId) {
-          const prefixPrompt = `${staticPrompt}\n\n仅用于前缀缓存，请回复OK。`;
-          onTrace?.("面试评价 LLM 请求（前缀缓存）", {
-            config: it_maskLlmConfig(callConfig),
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prefixPrompt },
-            ],
-          });
-          const prefixResp = await it_callDoubaoResponses(
-            callConfig,
-            [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prefixPrompt },
-            ],
-            {
-              reasoningEffort: "minimal",
-              maxOutputTokens: 16,
-              webSearch: false,
-            },
-          );
-          onTrace?.("面试评价 LLM 返回（前缀缓存）", { text: prefixResp.text });
-          if (prefixResp.responseId) {
-            responseId = prefixResp.responseId;
-            it_setPrefixCache(prefixKey, prefixResp.responseId);
-          }
-        }
-        if (responseId) {
-          const dynamicPayload = config.antiRepeat
-            ? it_appendNonce(attemptDynamicPrompt)
-            : attemptDynamicPrompt;
-          onTrace?.("面试评价 LLM 请求（评审-复用前缀）", {
-            config: it_maskLlmConfig(callConfig),
-            messages: [{ role: "user", content: dynamicPayload }],
-            previousResponseId: responseId,
-          });
-          const resp = await it_callDoubaoResponses(
-            callConfig,
-            [{ role: "user", content: dynamicPayload }],
-            {
-              previousResponseId: responseId,
-            },
-          );
-          content = resp.text;
-          onStream?.({ text: content, done: true });
-          onTrace?.("面试评价 LLM 返回（评审-复用前缀）", { text: content });
-        } else {
-          onTrace?.("面试评价 LLM 请求（评审）", {
-            config: it_maskLlmConfig(callConfig),
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: attemptPrompt },
-            ],
-          });
-          content = await it_callLlmChatStreaming(
-            callConfig,
-            [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: attemptPrompt },
-            ],
-            {
-              onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
-              stream: callConfig.stream,
-            },
-          );
-          onStream?.({ text: content, done: true });
-          onTrace?.("面试评价 LLM 返回（评审）", { text: content });
-        }
-      } else {
-        onTrace?.("面试评价 LLM 请求（评审）", {
-          config: it_maskLlmConfig(callConfig),
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: attemptPrompt },
-          ],
-        });
-        content = await it_callLlmChatStreaming(
-          callConfig,
-          [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: attemptPrompt },
-          ],
-          {
-            onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
-            stream: callConfig.stream,
-          },
-        );
-        onStream?.({ text: content, done: true });
-        onTrace?.("面试评价 LLM 返回（评审）", { text: content });
-      }
+      onTrace?.("面试评价 LLM 请求（评审）", {
+        config: it_maskLlmConfig(callConfig),
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: attemptPrompt },
+        ],
+      });
+      content = await it_callLlmChatStreaming(
+        callConfig,
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: attemptPrompt },
+        ],
+        {
+          onDelta: onStream ? (_delta, full) => onStream({ text: full }) : undefined,
+          stream: callConfig.stream,
+        },
+      );
+      onStream?.({ text: content, done: true });
+      onTrace?.("面试评价 LLM 返回（评审）", { text: content });
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       onTrace?.("面试评价 LLM 失败（评审）", { error: lastError });
@@ -1211,7 +1098,7 @@ export async function it_evaluateAnswer(
         !it_outlineHasIndent(item.outlineOriginal) ||
         !it_outlineHasIndent(item.outlineRevised),
     );
-    if (needOutlineFix && config.apiKey) {
+    if (needOutlineFix && it_canUseLlm(config)) {
       const regenerated = await it_generateOutlines(
         config,
         revisedAnswers.map((item) => ({
@@ -1241,7 +1128,7 @@ export async function it_evaluateAnswer(
       (item) => Array.isArray(item.outlineRevised) && item.outlineRevised.length,
     );
     const answerMode = config.answerMode || "two-step";
-    if (answerMode === "two-step" && hasRevisedOutline && config.apiKey) {
+    if (answerMode === "two-step" && hasRevisedOutline && it_canUseLlm(config)) {
       const regeneratedRevised = await it_generateRevisedByOutline(
         config,
         revisedAnswers.map((item) => ({

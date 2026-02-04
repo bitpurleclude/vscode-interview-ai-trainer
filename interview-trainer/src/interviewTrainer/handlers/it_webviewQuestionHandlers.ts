@@ -4,6 +4,8 @@ import type {
   ItRevisedAnswer,
 } from "../../protocol/interviewTrainer";
 import { it_applySecretOverrides } from "../api/it_apiConfig";
+import type { ItLlmConfig } from "../api/it_llmTypes";
+import { it_resolveBindingTemplate, ItTemplateRuntime } from "../api/it_templateExecutor";
 import { it_evaluateAnswer } from "../core/it_evaluation";
 import { it_parseQuestions } from "../core/it_questionParser";
 import {
@@ -13,14 +15,51 @@ import {
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
+  const buildTemplateLlmConfig = (
+    base: ItLlmConfig | null,
+    runtime: ItTemplateRuntime,
+  ): ItLlmConfig => {
+    const fallback: ItLlmConfig = {
+      provider: "openai_compatible",
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+      temperature: 0.8,
+      topP: 0.8,
+      timeoutSec: 60,
+      maxRetries: 0,
+      antiRepeat: false,
+      useResponses: false,
+      apiMode: "chat",
+      responsesPath: "",
+      toolsPreset: "",
+      webSearch: false,
+      reasoningEffort: undefined,
+      maxOutputTokens: 0,
+      reusePrefix: false,
+      stream: true,
+    };
+    const merged = {
+      ...(base || fallback),
+    };
+    return {
+      ...merged,
+      template: runtime.template,
+      templateEnv: runtime.environment,
+      templateContext: runtime.context,
+    };
+  };
   host.webviewProtocol.on("it/parseQuestions", async (msg) => {
     const text = String(msg.data?.text || "");
     host.configBundle = host.configService.loadBundle();
+    host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
     host.configBundle.api = await it_applySecretOverrides(
       host.context,
       host.configBundle.api,
     );
+    const env = host.configBundle.api.active?.environment || "prod";
+    const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
     const cacheRoot = host.context.globalStorageUri?.fsPath;
     if (cacheRoot && text.trim()) {
       const cached = await it_readQuestionParseCache(cacheRoot, text);
@@ -35,7 +74,21 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
     const taskCfg = host.configBundle.skill.llm_tasks || {};
     const taskProfile =
       String(taskCfg.question_parse || taskCfg.questionParse || "").trim() || undefined;
-    const llmConfig = host.it_getLlmConfig(taskProfile);
+    const parseTemplate = it_resolveBindingTemplate(
+      templatesConfig,
+      env,
+      "llm",
+      "questionParse",
+    );
+    const parseRuntime = parseTemplate
+      ? {
+          template: parseTemplate,
+          environment: env,
+          context: host.context,
+        }
+      : null;
+    const llmBase = host.it_getLlmConfig(taskProfile);
+    const llmConfig = parseRuntime ? buildTemplateLlmConfig(llmBase, parseRuntime) : null;
     const parsed = await it_parseQuestions(text, llmConfig);
     if (parsed.debug?.request) {
       host.logCorpusTrace("题目解析 LLM 请求", parsed.debug.request);
@@ -102,6 +155,7 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
         };
 
     host.configBundle = host.configService.loadBundle();
+    host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
     host.configBundle.api = await it_applySecretOverrides(
       host.context,
@@ -109,56 +163,52 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
     );
     const env = host.configBundle.api.active?.environment || "prod";
     const envConfig = host.configBundle.api.environments?.[env] ?? {};
+    const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
     const taskCfg = host.configBundle.skill.llm_tasks || {};
     const evalProfileId = String(taskCfg.evaluation || taskCfg.evaluate || "").trim() || undefined;
-    const evalLlmConfig = host.it_getLlmConfig(evalProfileId);
+    const evaluationTemplate = it_resolveBindingTemplate(
+      templatesConfig,
+      env,
+      "llm",
+      "evaluation",
+    );
+    const evaluationRuntime = evaluationTemplate
+      ? {
+          template: evaluationTemplate,
+          environment: env,
+          context: host.context,
+        }
+      : null;
+    const evalBase = host.it_getLlmConfig(evalProfileId);
+    const evalLlmConfig = evaluationRuntime ? buildTemplateLlmConfig(evalBase, evaluationRuntime) : null;
     if (evalLlmConfig) {
       evalLlmConfig.maxOutputTokens = 0;
     }
-    const evalProvider = evalLlmConfig?.provider || envConfig.llm?.provider || "heuristic";
-    const evalIsDoubao = evalProvider === "volc_doubao";
-    const evalDefaultBase = evalIsDoubao
-      ? "https://ark.cn-beijing.volces.com"
-      : "https://qianfan.baidubce.com/v2";
-    const evalDefaultModel = evalIsDoubao
-      ? "doubao-seed-1-8-251228"
-      : "ernie-4.5-turbo-128k";
+    const evalProvider = evalLlmConfig?.provider || "heuristic";
+    const evalDefaultBase = evalLlmConfig?.baseUrl || "";
+    const evalDefaultModel = evalLlmConfig?.model || "";
     const evaluationConfig = {
       provider: evalProvider,
-      model: evalLlmConfig?.model || envConfig.llm?.model || evalDefaultModel,
-      baseUrl: evalLlmConfig?.baseUrl || envConfig.llm?.base_url || evalDefaultBase,
-      apiKey: evalLlmConfig?.apiKey || envConfig.llm?.api_key || "",
-      temperature: Number(evalLlmConfig?.temperature ?? envConfig.llm?.temperature ?? 0.8),
-      topP: Number(evalLlmConfig?.topP ?? envConfig.llm?.top_p ?? 0.8),
-      timeoutSec: Number(evalLlmConfig?.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
+      model: evalLlmConfig?.model || evalDefaultModel,
+      baseUrl: evalLlmConfig?.baseUrl || evalDefaultBase,
+      apiKey: evalLlmConfig?.apiKey || "",
+      temperature: Number(evalLlmConfig?.temperature ?? 0.8),
+      topP: Number(evalLlmConfig?.topP ?? 0.8),
+      timeoutSec: Number(evalLlmConfig?.timeoutSec ?? 60),
       maxRetries: Math.max(
         5,
-        Number(evalLlmConfig?.maxRetries ?? envConfig.llm?.max_retries ?? 1),
+        Number(evalLlmConfig?.maxRetries ?? 1),
       ),
-      useResponses: Boolean(
-        evalLlmConfig?.useResponses ??
-          envConfig.llm?.use_responses ??
-          envConfig.llm?.useResponses ??
-          (evalIsDoubao ? true : false),
-      ),
-      webSearch: Boolean(
-        evalLlmConfig?.webSearch ??
-          envConfig.llm?.web_search ??
-          envConfig.llm?.webSearch ??
-          (evalIsDoubao ? true : false),
-      ),
-      reasoningEffort:
-        evalLlmConfig?.reasoningEffort ??
-        envConfig.llm?.reasoning_effort ??
-        envConfig.llm?.reasoningEffort ??
-        (evalIsDoubao ? "medium" : undefined),
+      useResponses: Boolean(evalLlmConfig?.useResponses ?? false),
+      webSearch: Boolean(evalLlmConfig?.webSearch ?? false),
+      reasoningEffort: evalLlmConfig?.reasoningEffort ?? undefined,
       maxOutputTokens: 0,
-      reusePrefix: Boolean(
-        evalLlmConfig?.reusePrefix ??
-          envConfig.llm?.reuse_prefix ??
-          envConfig.llm?.reusePrefix ??
-          (evalIsDoubao ? true : false),
-      ),
+      reusePrefix: Boolean(evalLlmConfig?.reusePrefix ?? false),
+      template: evalLlmConfig?.template,
+      templateEnv: evalLlmConfig?.templateEnv,
+      templateContext: evalLlmConfig?.templateContext,
+      templateVars: evalLlmConfig?.templateVars,
+      templateMaxRetries: evalLlmConfig?.templateMaxRetries,
       language: host.configBundle.skill.evaluation?.language || "zh-CN",
       dimensions: host.configBundle.skill.evaluation?.dimensions ?? [],
       answerMode:

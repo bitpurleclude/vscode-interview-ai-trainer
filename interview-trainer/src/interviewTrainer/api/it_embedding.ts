@@ -1,4 +1,7 @@
 import axios from "axios";
+import type * as vscode from "vscode";
+import type { ItApiTemplate } from "../../protocol/interviewTrainer";
+import { it_executeTemplate } from "./it_templateExecutor";
 
 export type ItEmbeddingProvider = "baidu_qianfan" | "volc_doubao" | "openai_compatible" | string;
 
@@ -9,6 +12,11 @@ export interface ItEmbeddingConfig {
   model: string;
   timeoutSec: number;
   maxRetries: number;
+  template?: ItApiTemplate;
+  templateEnv?: string;
+  templateContext?: vscode.ExtensionContext;
+  templateVars?: Record<string, unknown>;
+  templateMaxRetries?: number;
 }
 
 export interface ItEmbeddingDebugRequest {
@@ -210,6 +218,38 @@ export async function it_callEmbedding(
 ): Promise<number[][]> {
   if (!inputs.length) {
     return [];
+  }
+  if (cfg.template && cfg.templateContext && cfg.templateEnv) {
+    const embeddingInput = inputs.length === 1 ? inputs[0] : inputs;
+    const result = await it_executeTemplate({
+      runtime: {
+        template: cfg.template,
+        environment: cfg.templateEnv || "prod",
+        context: cfg.templateContext,
+      },
+      variables: {
+        embeddingInput,
+        model: cfg.model,
+        ...(cfg.templateVars || {}),
+      },
+      maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
+      timeoutSec: cfg.timeoutSec,
+      stream: false,
+    });
+    const value = result.value ?? result.raw;
+    if (Array.isArray(value)) {
+      if (value.length && Array.isArray(value[0])) {
+        return value as number[][];
+      }
+      if (value.length && value.every((item) => typeof item === "number")) {
+        return [value as number[]];
+      }
+    }
+    const vectors = it_parseEmbeddingResponse(result.raw, inputs.length);
+    if (vectors.length) {
+      return vectors;
+    }
+    throw new Error("Embedding response missing data");
   }
   if (it_isDoubaoMultimodalModel(cfg)) {
     return it_callDoubaoMultimodal(cfg, inputs);

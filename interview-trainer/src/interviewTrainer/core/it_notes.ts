@@ -421,6 +421,11 @@ function it_reportPhaseOnce(options: ItRetrievalOptions, phase: string): void {
 }
 
 function it_buildEmbeddingCacheKey(cfg: ItVectorSearchConfig): string {
+  if (cfg.template) {
+    const url = cfg.template.request?.url || "";
+    const stamp = cfg.template.updatedAt || "";
+    return `template:${cfg.template.id}|${url}|${stamp}`;
+  }
   return `${cfg.provider}|${it_normalizeEmbeddingBaseUrl(cfg.baseUrl)}|${cfg.model}`;
 }
 
@@ -1100,10 +1105,11 @@ export async function it_prepareEmbeddingCache(
 ): Promise<ItEmbeddingWarmupResult> {
   if (
     !vectorCfg ||
-    !vectorCfg.provider ||
-    !vectorCfg.apiKey ||
-    !vectorCfg.baseUrl ||
-    !vectorCfg.model
+    (!vectorCfg.template &&
+      (!vectorCfg.provider ||
+        !vectorCfg.apiKey ||
+        !vectorCfg.baseUrl ||
+        !vectorCfg.model))
   ) {
     throw new Error("vector retrieval config incomplete");
   }
@@ -1279,10 +1285,11 @@ export async function it_retrieveNotes(
   const vectorCfg = options.vector;
   if (
     !vectorCfg ||
-    !vectorCfg.provider ||
-    !vectorCfg.apiKey ||
-    !vectorCfg.baseUrl ||
-    !vectorCfg.model
+    (!vectorCfg.template &&
+      (!vectorCfg.provider ||
+        !vectorCfg.apiKey ||
+        !vectorCfg.baseUrl ||
+        !vectorCfg.model))
   ) {
     throw new Error("vector retrieval config incomplete");
   }

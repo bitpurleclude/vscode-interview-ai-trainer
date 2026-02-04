@@ -1,5 +1,6 @@
 import axios from "axios";
 import { it_callQianfanChat } from "./it_qianfan";
+import { it_executeLlmTemplate } from "./it_templateExecutor";
 import { ItLlmConfig, ItLlmMessage, ItLlmResponse } from "./it_llmTypes";
 import {
   it_buildDoubaoChatRequest,
@@ -78,6 +79,30 @@ async function it_callOpenAiCompatibleChat(
   throw lastError instanceof Error
     ? lastError
     : new Error("OpenAI compatible chat request failed.");
+}
+
+function it_hasTemplateRuntime(cfg: ItLlmConfig): boolean {
+  return Boolean(cfg.template && cfg.templateContext && cfg.templateEnv);
+}
+
+function it_buildTemplateVariables(
+  cfg: ItLlmConfig,
+  streamEnabled: boolean,
+): Record<string, unknown> {
+  return {
+    temperature: cfg.temperature,
+    topP: cfg.topP,
+    reasoningEffort: cfg.reasoningEffort,
+    maxOutputTokens: cfg.maxOutputTokens,
+    webSearch: cfg.webSearch,
+    reusePrefix: cfg.reusePrefix,
+    stream: streamEnabled,
+    tools: cfg.tools,
+    include: cfg.include,
+    store: cfg.store,
+    promptCacheKey: cfg.promptCacheKey,
+    ...(cfg.templateVars || {}),
+  };
 }
 
 function it_extractStreamDelta(payload: any): string {
@@ -331,6 +356,22 @@ export async function it_callLlmChat(
   messages: ItLlmMessage[],
 ): Promise<string> {
   const resolvedMessages = cfg.antiRepeat ? it_withNonce(messages) : messages;
+  if (it_hasTemplateRuntime(cfg)) {
+    return await it_executeLlmTemplate(
+      {
+        template: cfg.template as NonNullable<ItLlmConfig["template"]>,
+        environment: cfg.templateEnv || "prod",
+        context: cfg.templateContext as NonNullable<ItLlmConfig["templateContext"]>,
+      },
+      resolvedMessages,
+      {
+        variables: it_buildTemplateVariables(cfg, false),
+        maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
+        timeoutSec: cfg.timeoutSec,
+        stream: false,
+      },
+    );
+  }
   const provider = cfg.provider || "baidu_qianfan";
   const apiMode = cfg.apiMode || (cfg.useResponses ? "responses" : "chat");
   if (provider === "baidu_qianfan") {
@@ -362,9 +403,30 @@ export async function it_callLlmChatStreaming(
   },
 ): Promise<string> {
   const resolvedMessages = cfg.antiRepeat ? it_withNonce(messages) : messages;
+  const streamEnabled = options?.stream ?? cfg.stream ?? true;
+  if (it_hasTemplateRuntime(cfg)) {
+    const text = await it_executeLlmTemplate(
+      {
+        template: cfg.template as NonNullable<ItLlmConfig["template"]>,
+        environment: cfg.templateEnv || "prod",
+        context: cfg.templateContext as NonNullable<ItLlmConfig["templateContext"]>,
+      },
+      resolvedMessages,
+      {
+        variables: it_buildTemplateVariables(cfg, streamEnabled),
+        maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
+        timeoutSec: cfg.timeoutSec,
+        stream: streamEnabled,
+        onDelta: options?.onDelta,
+      },
+    );
+    if (options?.onDelta && !streamEnabled) {
+      options.onDelta(text, text);
+    }
+    return text;
+  }
   const provider = cfg.provider || "baidu_qianfan";
   const apiMode = cfg.apiMode || (cfg.useResponses ? "responses" : "chat");
-  const streamEnabled = options?.stream ?? cfg.stream ?? true;
   if (streamEnabled) {
     if (provider === "openai_compatible") {
       if (apiMode === "responses") {

@@ -12,13 +12,15 @@ import {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../protocol/interviewTrainer";
-import { v4 as uuidv4 } from "uuid";
 
-import { it_callBaiduAsr } from "../api/it_baidu";
-import { it_callVolcAsr } from "../api/it_volc_asr";
-import { ItApiConfig } from "../api/it_apiConfig";
+import { ItApiConfig, ItTemplatesConfig } from "../api/it_apiConfig";
 import { it_callLlmChat, it_callLlmChatStreaming } from "../api/it_llm";
 import { ItLlmConfig } from "../api/it_llmTypes";
+import {
+  it_executeTemplate,
+  it_resolveBindingTemplate,
+  ItTemplateRuntime,
+} from "../api/it_templateExecutor";
 import { it_evaluateAnswer } from "./it_evaluation";
 import {
   ItCorpusItem,
@@ -57,6 +59,7 @@ function it_normalizeWorkspaceKey(root: string): string {
 interface ItAnalyzeDeps {
   context: vscode.ExtensionContext;
   apiConfig: ItApiConfig;
+  templatesConfig: ItTemplatesConfig;
   skillConfig: Record<string, any>;
   workspaceRoot: string;
   onProgress?: (update: ItAnalyzeProgress) => void;
@@ -96,6 +99,58 @@ interface ItAnalyzeProgress {
 
 function it_getEnvConfig(apiConfig: ItApiConfig, env: string): any {
   return apiConfig.environments?.[env] ?? {};
+}
+
+function it_buildTemplateRuntime(
+  deps: ItAnalyzeDeps,
+  template: ItTemplateRuntime["template"] | null,
+): ItTemplateRuntime | null {
+  if (!template) {
+    return null;
+  }
+  const env = deps.apiConfig.active?.environment || "prod";
+  return {
+    template,
+    environment: env,
+    context: deps.context,
+  };
+}
+
+function it_attachTemplateToLlmConfig(
+  base: ItLlmConfig | null,
+  runtime: ItTemplateRuntime,
+  overrides?: Partial<ItLlmConfig>,
+): ItLlmConfig {
+  const fallback: ItLlmConfig = {
+    provider: "openai_compatible",
+    apiKey: "",
+    baseUrl: "",
+    model: "",
+    temperature: 0.8,
+    topP: 0.8,
+    timeoutSec: 60,
+    maxRetries: 0,
+    antiRepeat: false,
+    useResponses: false,
+    apiMode: "chat",
+    responsesPath: "",
+    toolsPreset: "",
+    webSearch: false,
+    reasoningEffort: undefined,
+    maxOutputTokens: 0,
+    reusePrefix: false,
+    stream: true,
+  };
+  const merged = {
+    ...(base || fallback),
+    ...(overrides || {}),
+  };
+  return {
+    ...merged,
+    template: runtime.template,
+    templateEnv: runtime.environment,
+    templateContext: runtime.context,
+  };
 }
 
 function it_sanitizeTopicTitle(raw: string, maxLen: number): string {
@@ -372,43 +427,6 @@ function it_isBaiduContentTooLong(error: unknown): boolean {
   );
 }
 
-function it_isVolcAsrProvider(provider: string): boolean {
-  const normalized = String(provider || "").toLowerCase();
-  return (
-    normalized === "volc_asr" ||
-    normalized === "volcengine_asr" ||
-    normalized === "volc_doubao"
-  );
-}
-
-function it_buildVolcAudioPayload(
-  audio: ItAnalyzeRequest["audio"],
-): {
-  data?: string;
-  format?: string;
-  rate?: number;
-  bits?: number;
-  channel?: number;
-} {
-  if (audio.format === "pcm") {
-    const pcm = it_decodePcm16(audio.base64);
-    const wavBuffer = it_pcm16ToWavBuffer(pcm, audio.sampleRate, 1);
-    return {
-      data: wavBuffer.toString("base64"),
-      format: "wav",
-      rate: audio.sampleRate,
-      bits: 16,
-      channel: 1,
-    };
-  }
-  return {
-    data: audio.base64,
-    format: audio.format,
-    rate: audio.sampleRate,
-    bits: 16,
-    channel: 1,
-  };
-}
 
 function it_getLlmConfig(
   envConfig: any,
@@ -504,9 +522,17 @@ function it_extractJson(text: string): any | null {
 }
 
 function it_maskLlmConfig(config: ItLlmConfig): Record<string, unknown> {
+  const { templateContext, template, ...rest } = config;
   return {
-    ...config,
+    ...rest,
     apiKey: config.apiKey ? "***" : "",
+    template: template
+      ? {
+          id: template.id,
+          name: template.name,
+          category: template.category,
+        }
+      : undefined,
   };
 }
 
@@ -1264,10 +1290,8 @@ function it_buildRetrievalQueries(params: {
 }
 
 async function it_transcribePcmWithChunks(
+  runtime: ItTemplateRuntime,
   asrConfig: {
-    apiKey: string;
-    secretKey: string;
-    baseUrl: string;
     devPid: number;
     language: string;
     timeoutSec: number;
@@ -1307,14 +1331,33 @@ async function it_transcribePcmWithChunks(
     let done = 0;
     try {
       await runWithLimit(chunks, resolvedConcurrency, async (chunk, idx) => {
-        const part = await it_callBaiduAsr(asrConfig, {
-          format: "pcm",
-          rate: sampleRate,
-          channel: 1,
-          cuid: uuidv4(),
-          speech: chunk.speech,
-          len: chunk.len,
+        const result = await it_executeTemplate({
+          runtime,
+          variables: {
+            audioFile: chunk.speech,
+            audio: {
+              format: "pcm",
+              rate: sampleRate,
+              sampleRate,
+              channel: 1,
+              byteLength: chunk.len,
+            },
+            asr: {
+              lang: asrConfig.language,
+              dev_pid: asrConfig.devPid,
+              language: asrConfig.language,
+              devPid: asrConfig.devPid,
+            },
+          },
+          maxRetries: asrConfig.maxRetries,
+          timeoutSec: asrConfig.timeoutSec,
+          stream: false,
         });
+        const part = typeof result.text === "string"
+          ? result.text
+          : typeof result.value === "string"
+            ? result.value
+            : "";
         parts[idx] = part;
         done += 1;
         onProgress?.(done, chunks.length);
@@ -1330,12 +1373,13 @@ async function it_transcribePcmWithChunks(
       throw err;
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("Baidu ASR failed.");
+  throw lastError instanceof Error ? lastError : new Error("ASR failed.");
 }
 
 async function it_transcribeAudio(
   request: ItAnalyzeRequest,
   asrCfg: any,
+  templateRuntime: ItTemplateRuntime | null,
   reportProgress: (
     step: ItWorkflowStep,
     progress: number,
@@ -1352,74 +1396,63 @@ async function it_transcribeAudio(
     reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
     return mockText;
   }
-  if (it_isVolcAsrProvider(asrProvider)) {
-    if (!asrCfg.api_key || !asrCfg.secret_key) {
-      throw new Error("缺少火山引擎 ASR 的 App Key 或 Access Key。");
-    }
-    const modeRaw = String(asrCfg.mode || asrCfg.volc_mode || "flash").toLowerCase();
-    const mode = modeRaw === "standard" ? "standard" : "flash";
-    const baseUrl = asrCfg.base_url || "https://openspeech.bytedance.com";
-    const resourceId =
-      asrCfg.resource_id ||
-      asrCfg.resourceId ||
-      (mode === "standard" ? "volc.bigasr.auc" : "volc.bigasr.auc_turbo");
-    const modelName = asrCfg.model_name || asrCfg.modelName || "bigmodel";
-    const enablePunc =
-      asrCfg.enable_punc ?? asrCfg.enablePunc ?? true;
-    const userId = asrCfg.user_id || asrCfg.userId || "it-user";
-    const audioUrl = asrCfg.audio_url || asrCfg.audioUrl || "";
-    const audioFormat = asrCfg.audio_format || asrCfg.audioFormat;
-    const audioPayload = audioUrl
-      ? { url: audioUrl, format: audioFormat }
-      : it_buildVolcAudioPayload(request.audio);
-    if (mode === "standard" && !audioUrl) {
-      throw new Error(
-        "火山引擎 ASR 标准版需要 audio_url（可访问的音频地址）。请在 provider 配置中设置 audio_url 或切换到 flash 模式。",
-      );
-    }
-    reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    const transcript = await it_callVolcAsr(
-      {
-        appKey: asrCfg.api_key || "",
-        accessKey: asrCfg.secret_key || "",
-        baseUrl,
-        resourceId,
-        modelName,
-        enablePunc: Boolean(enablePunc),
-        userId,
-        mode,
-        timeoutSec: Number(asrCfg.timeout_sec ?? 120),
-        maxRetries: Number(asrCfg.max_retries ?? 1),
-        pollIntervalSec: Number(asrCfg.poll_interval_sec ?? 1),
-        maxPollSec: Number(asrCfg.max_poll_sec ?? 300),
-      },
-      audioPayload,
-    );
-    reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
-    return transcript;
-  }
-  if (asrProvider !== "baidu_vop") {
-    throw new Error("当前仅支持百度语音转文字（baidu_vop）与火山引擎 ASR（volc_asr）。");
-  }
-  if (!asrCfg.api_key || !asrCfg.secret_key) {
-    throw new Error("缺少百度语音转文字的API Key或Secret Key。");
+
+  if (!templateRuntime) {
+    throw new Error("ASR 模板未绑定，无法转写。");
   }
 
-  const asrConfig = {
-    apiKey: asrCfg.api_key || "",
-    secretKey: asrCfg.secret_key || "",
-    baseUrl: asrCfg.base_url || "https://vop.baidu.com/server_api",
-    devPid: Number(asrCfg.dev_pid || 1537),
-    language: asrCfg.language || "zh",
-    timeoutSec: Number(asrCfg.timeout_sec || 120),
-    maxRetries: Number(asrCfg.max_retries || 1),
-  };
-  const maxChunkSec = Number(asrCfg.max_chunk_sec || 50);
+  const language = asrCfg.language || "zh";
+  const devPid = Number(asrCfg.dev_pid ?? 1537);
+  const timeoutSec = Number(asrCfg.timeout_sec ?? 120);
+  const maxRetries = Number(asrCfg.max_retries ?? 1);
+  const maxChunkSec = Number(asrCfg.max_chunk_sec ?? 50);
   const maxConcurrency = Number(asrCfg.max_concurrency ?? asrCfg.maxConcurrency ?? 1);
+  const audioUrl = asrCfg.audio_url || asrCfg.audioUrl || "";
+
+  const audioMeta = {
+    format: request.audio.format,
+    rate: request.audio.sampleRate,
+    sampleRate: request.audio.sampleRate,
+    channel: 1,
+    byteLength: request.audio.byteLength,
+    durationSec: request.audio.durationSec,
+    url: audioUrl || undefined,
+  };
+
   let transcript = "";
-  if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
+  if (audioUrl) {
+    reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
+    const result = await it_executeTemplate({
+      runtime: templateRuntime,
+      variables: {
+        audioFile: request.audio.base64,
+        audioUrl,
+        audio: audioMeta,
+        asr: {
+          lang: language,
+          dev_pid: devPid,
+          language,
+          devPid,
+        },
+      },
+      maxRetries,
+      timeoutSec,
+      stream: false,
+    });
+    transcript = typeof result.text === "string"
+      ? result.text
+      : typeof result.value === "string"
+        ? result.value
+        : "";
+  } else if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
     transcript = await it_transcribePcmWithChunks(
-      asrConfig,
+      templateRuntime,
+      {
+        devPid,
+        language,
+        timeoutSec,
+        maxRetries,
+      },
       request.audio.base64,
       request.audio.sampleRate,
       maxChunkSec,
@@ -1436,15 +1469,29 @@ async function it_transcribeAudio(
     );
   } else {
     reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    transcript = await it_callBaiduAsr(asrConfig, {
-      format: request.audio.format,
-      rate: request.audio.sampleRate,
-      channel: 1,
-      cuid: uuidv4(),
-      speech: request.audio.base64,
-      len: request.audio.byteLength,
+    const result = await it_executeTemplate({
+      runtime: templateRuntime,
+      variables: {
+        audioFile: request.audio.base64,
+        audio: audioMeta,
+        asr: {
+          lang: language,
+          dev_pid: devPid,
+          language,
+          devPid,
+        },
+      },
+      maxRetries,
+      timeoutSec,
+      stream: false,
     });
+    transcript = typeof result.text === "string"
+      ? result.text
+      : typeof result.value === "string"
+        ? result.value
+        : "";
   }
+
   reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
   return transcript;
 }
@@ -1547,12 +1594,37 @@ export async function it_runAnalysis(
   };
   const env = deps.apiConfig.active?.environment || "prod";
   const envConfig = it_getEnvConfig(deps.apiConfig, env);
+  const templatesConfig = deps.templatesConfig || { version: 1, environments: {} };
+  const questionParseTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "llm",
+    "questionParse",
+  );
+  const questionParseRuntime = it_buildTemplateRuntime(deps, questionParseTemplate);
   const questionParseProfile = it_resolveTaskProfile(
     envConfig,
     deps.skillConfig,
     "question_parse",
   );
-  const llmConfig = it_getLlmConfig(envConfig, questionParseProfile || undefined);
+  const llmConfigBase = it_getLlmConfig(envConfig, questionParseProfile || undefined);
+  const llmConfig = questionParseRuntime
+    ? it_attachTemplateToLlmConfig(llmConfigBase, questionParseRuntime)
+    : null;
+  const asrTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "asr",
+    "transcription",
+  );
+  const asrRuntime = it_buildTemplateRuntime(deps, asrTemplate);
+  const embeddingTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "embedding",
+    "retrieval",
+  );
+  const embeddingRuntime = it_buildTemplateRuntime(deps, embeddingTemplate);
   const cacheRoot = deps.context.globalStorageUri?.fsPath;
   let questionText = request.questionText?.trim() || "";
   let questionList = (request.questionList ?? []).filter((q) => q.trim());
@@ -1725,7 +1797,12 @@ export async function it_runAnalysis(
   }
 
   const asrCfg = envConfig.asr ?? {};
-  const transcript = await it_transcribeAudio(request, asrCfg, reportProgress);
+  const transcript = await it_transcribeAudio(
+    request,
+    asrCfg,
+    asrRuntime,
+    reportProgress,
+  );
   ensureNotAborted();
   deps.onPartial?.({ transcript });
   if (retrievalEnabled) {
@@ -1780,7 +1857,17 @@ export async function it_runAnalysis(
     deps.skillConfig,
     "segment",
   );
-  const segmentLlmConfig = it_getLlmConfig(envConfig, segmentProfile || undefined);
+  const segmentTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "llm",
+    "segment",
+  );
+  const segmentRuntime = it_buildTemplateRuntime(deps, segmentTemplate);
+  const segmentLlmBase = it_getLlmConfig(envConfig, segmentProfile || undefined);
+  const segmentLlmConfig = segmentRuntime
+    ? it_attachTemplateToLlmConfig(segmentLlmBase, segmentRuntime)
+    : null;
   if (segmentLlmConfig) {
     segmentLlmConfig.maxOutputTokens = 0;
   }
@@ -1976,7 +2063,14 @@ export async function it_runAnalysis(
       max_retries: Number(providerEmbedding.max_retries ?? vectorCfg.max_retries ?? 1),
       batch_size: Number(vectorCfg.batch_size ?? 16),
       query_max_chars: Number(vectorCfg.query_max_chars ?? 1500),
+      template: embeddingRuntime?.template,
+      templateEnv: embeddingRuntime?.environment,
+      templateContext: embeddingRuntime?.context,
     };
+    if (!embeddingRuntime && retrievalMode !== "keyword") {
+      notesError = "Embedding 模板未绑定";
+      notesErrorStage = "retrieve";
+    }
     const notesTopK = Number(retrievalCfg.top_k ?? 5);
     const notesTopKNotes = Number(retrievalCfg.top_k_notes ?? notesTopK);
     const notesTopKKnowledge = Number(retrievalCfg.top_k_knowledge ?? notesTopK);
@@ -2074,6 +2168,9 @@ export async function it_runAnalysis(
           maxRetries: Number(resolvedVector.max_retries ?? 1),
           batchSize: Number(resolvedVector.batch_size ?? 16),
           queryMaxChars: Number(resolvedVector.query_max_chars ?? 1500),
+          template: resolvedVector.template,
+          templateEnv: resolvedVector.templateEnv,
+          templateContext: resolvedVector.templateContext,
         },
       });
       const elapsedMs = Date.now() - startedAt;
@@ -2231,85 +2328,54 @@ export async function it_runAnalysis(
     deps.skillConfig,
     "evaluation",
   );
-  const evaluationLlmConfig = it_getLlmConfig(envConfig, evaluationProfile || undefined);
+  const evaluationTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "llm",
+    "evaluation",
+  );
+  const evaluationRuntime = it_buildTemplateRuntime(deps, evaluationTemplate);
+  const evaluationLlmBase = it_getLlmConfig(envConfig, evaluationProfile || undefined);
+  const evaluationLlmConfig = evaluationRuntime
+    ? it_attachTemplateToLlmConfig(evaluationLlmBase, evaluationRuntime)
+    : null;
   if (evaluationLlmConfig) {
     evaluationLlmConfig.maxOutputTokens = 0;
   }
-  const evalProvider = evaluationLlmConfig?.provider || envConfig.llm?.provider || "heuristic";
-  const evalIsDoubao = evalProvider === "volc_doubao";
-  const evalDefaultBase = evalIsDoubao
-    ? "https://ark.cn-beijing.volces.com"
-    : "https://qianfan.baidubce.com/v2";
-  const evalDefaultModel = evalIsDoubao
-    ? "doubao-seed-1-8-251228"
-    : "ernie-4.5-turbo-128k";
+  const evalProvider = evaluationLlmConfig?.provider || "heuristic";
+  const evalDefaultBase = evaluationLlmConfig?.baseUrl || "";
+  const evalDefaultModel = evaluationLlmConfig?.model || "";
   const evaluationConfig = {
     provider: evalProvider,
-    model: evaluationLlmConfig?.model || envConfig.llm?.model || evalDefaultModel,
-    baseUrl: evaluationLlmConfig?.baseUrl || envConfig.llm?.base_url || evalDefaultBase,
-    apiKey: evaluationLlmConfig?.apiKey || envConfig.llm?.api_key || "",
-    temperature: Number(evaluationLlmConfig?.temperature ?? envConfig.llm?.temperature ?? 0.8),
-    topP: Number(evaluationLlmConfig?.topP ?? envConfig.llm?.top_p ?? 0.8),
-    timeoutSec: Number(evaluationLlmConfig?.timeoutSec ?? envConfig.llm?.timeout_sec ?? 60),
+    model: evaluationLlmConfig?.model || evalDefaultModel,
+    baseUrl: evaluationLlmConfig?.baseUrl || evalDefaultBase,
+    apiKey: evaluationLlmConfig?.apiKey || "",
+    temperature: Number(evaluationLlmConfig?.temperature ?? 0.8),
+    topP: Number(evaluationLlmConfig?.topP ?? 0.8),
+    timeoutSec: Number(evaluationLlmConfig?.timeoutSec ?? 60),
     maxRetries: Math.max(
       5,
-      Number(evaluationLlmConfig?.maxRetries ?? envConfig.llm?.max_retries ?? 1),
+      Number(evaluationLlmConfig?.maxRetries ?? 1),
     ),
-    antiRepeat: Boolean(
-      evaluationLlmConfig?.antiRepeat ??
-        envConfig.llm?.anti_repeat ??
-        envConfig.llm?.antiRepeat ??
-        false,
-    ),
-    useResponses: Boolean(
-      evaluationLlmConfig?.useResponses ??
-        envConfig.llm?.use_responses ??
-        envConfig.llm?.useResponses ??
-        (evalIsDoubao ? true : false),
-    ),
+    antiRepeat: Boolean(evaluationLlmConfig?.antiRepeat ?? false),
+    useResponses: Boolean(evaluationLlmConfig?.useResponses ?? false),
     apiMode:
       evaluationLlmConfig?.apiMode ??
-      envConfig.llm?.api_mode ??
-      envConfig.llm?.apiMode ??
-      ((evaluationLlmConfig?.useResponses ??
-        envConfig.llm?.use_responses ??
-        envConfig.llm?.useResponses ??
-        (evalIsDoubao ? true : false))
-        ? "responses"
-        : "chat"),
-    responsesPath:
-      evaluationLlmConfig?.responsesPath ??
-      envConfig.llm?.responses_path ??
-      envConfig.llm?.responsesPath ??
-      "",
-    toolsPreset:
-      evaluationLlmConfig?.toolsPreset ??
-      envConfig.llm?.tools_preset ??
-      envConfig.llm?.toolsPreset ??
-      "",
-    webSearch: Boolean(
-      evaluationLlmConfig?.webSearch ??
-        envConfig.llm?.web_search ??
-        envConfig.llm?.webSearch ??
-        (evalIsDoubao ? true : false),
-    ),
-    reasoningEffort:
-      evaluationLlmConfig?.reasoningEffort ??
-      envConfig.llm?.reasoning_effort ??
-      envConfig.llm?.reasoningEffort ??
-      (evalIsDoubao ? "medium" : undefined),
+      ((evaluationLlmConfig?.useResponses ?? false) ? "responses" : "chat"),
+    responsesPath: evaluationLlmConfig?.responsesPath ?? "",
+    toolsPreset: evaluationLlmConfig?.toolsPreset ?? "",
+    webSearch: Boolean(evaluationLlmConfig?.webSearch ?? false),
+    reasoningEffort: evaluationLlmConfig?.reasoningEffort ?? undefined,
     maxOutputTokens: 0,
-    reusePrefix: Boolean(
-      evaluationLlmConfig?.reusePrefix ??
-        envConfig.llm?.reuse_prefix ??
-        envConfig.llm?.reusePrefix ??
-        (evalIsDoubao ? true : false),
-    ),
+    reusePrefix: Boolean(evaluationLlmConfig?.reusePrefix ?? false),
     stream:
       evaluationLlmConfig?.stream ??
-      envConfig.llm?.stream ??
-      envConfig.llm?.stream_enabled ??
       true,
+    template: evaluationLlmConfig?.template,
+    templateEnv: evaluationLlmConfig?.templateEnv,
+    templateContext: evaluationLlmConfig?.templateContext,
+    templateVars: evaluationLlmConfig?.templateVars,
+    templateMaxRetries: evaluationLlmConfig?.templateMaxRetries,
     language: deps.skillConfig.evaluation?.language || "zh-CN",
     dimensions: deps.skillConfig.evaluation?.dimensions ?? [],
     answerMode:
@@ -2321,7 +2387,7 @@ export async function it_runAnalysis(
   const evalUsesApi = Boolean(
     evaluationLlmConfig?.provider &&
       evaluationLlmConfig?.provider !== "heuristic" &&
-      evaluationLlmConfig?.apiKey,
+      (evaluationLlmConfig?.template || evaluationLlmConfig?.apiKey),
   );
   const evalLabel = evalUsesApi ? "API" : "LLM不可用";
   const evalModeLabel = evaluationConfig.answerMode === "two-step" ? "两步法" : "单次";

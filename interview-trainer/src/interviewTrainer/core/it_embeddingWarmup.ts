@@ -1,4 +1,5 @@
 import path from "path";
+import { it_resolveBindingTemplate } from "../api/it_templateExecutor";
 import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "./it_notes";
 import { it_hashText } from "../utils/it_text";
 import { it_normalizeWorkspaceKey } from "./it_configSnapshot";
@@ -59,6 +60,7 @@ export async function it_runEmbeddingWarmup(
     return;
   }
   host.configBundle = host.configService.loadBundle();
+  host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
   const retrievalEnabled = host.configBundle.skill.retrieval?.enabled !== false;
   if (!retrievalEnabled) {
     host.updateEmbeddingWarmup({
@@ -82,6 +84,14 @@ export async function it_runEmbeddingWarmup(
     return;
   }
   const retrievalCfg = host.configBundle.skill.retrieval ?? {};
+  const env = host.configBundle.api.active?.environment || "prod";
+  const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+  const embeddingTemplate = it_resolveBindingTemplate(
+    templatesConfig,
+    env,
+    "embedding",
+    "retrieval",
+  );
   const warmupConcurrency = Number(
     retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency ?? 1,
   );
@@ -147,12 +157,26 @@ export async function it_runEmbeddingWarmup(
     maxRetries: Number(providerEmbedding.max_retries ?? vectorCfg.max_retries ?? 1),
     batchSize: Number(vectorCfg.batch_size ?? 16),
     queryMaxChars: Number(vectorCfg.query_max_chars ?? 1500),
+    template: embeddingTemplate || undefined,
+    templateEnv: env,
+    templateContext: host.context,
   };
+  if (!embeddingTemplate) {
+    host.updateEmbeddingWarmup({
+      status: "idle",
+      progress: 0,
+      total: 0,
+      done: 0,
+      message: "向量预计算跳过：Embedding 模板未绑定",
+    });
+    return;
+  }
   if (
-    !resolvedVector.provider ||
-    !resolvedVector.apiKey ||
-    !resolvedVector.baseUrl ||
-    !resolvedVector.model
+    !resolvedVector.template &&
+    (!resolvedVector.provider ||
+      !resolvedVector.apiKey ||
+      !resolvedVector.baseUrl ||
+      !resolvedVector.model)
   ) {
     host.updateEmbeddingWarmup({
       status: "idle",

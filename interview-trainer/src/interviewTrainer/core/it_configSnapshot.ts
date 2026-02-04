@@ -72,6 +72,9 @@ function it_buildTemplateParamUsage(
     ]);
     const unknown: string[] = [];
     used.forEach((item) => {
+      if (item.startsWith("secrets.")) {
+        return;
+      }
       if (!knownVars.has(item)) {
         unknown.push(item);
       }
