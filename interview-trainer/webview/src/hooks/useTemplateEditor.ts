@@ -295,10 +295,6 @@ export function useTemplateEditor({
     if (!templateId) {
       return;
     }
-    const confirmed = window.confirm(`确认删除模板 ${templateId}？`);
-    if (!confirmed) {
-      return;
-    }
     setSavingTemplate(true);
     setTemplateSaveMessage(null);
     try {

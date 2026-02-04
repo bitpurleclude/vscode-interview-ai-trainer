@@ -82,6 +82,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [testRunning, setTestRunning] = useState(false);
   const [testRunId, setTestRunId] = useState<string>("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const selectedTemplateName = selectedTemplate?.name || selectedTemplate?.id || "";
   const canTest = Boolean(selectedTemplateId);
@@ -139,6 +140,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     setTestMessage(null);
     setTestVarsError(null);
     setTestRunId("");
+    setDeleteConfirmId(null);
   }, [selectedTemplateId, templateCategory]);
 
   const parseTestVars = () => {
@@ -302,15 +304,39 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                           已绑定
                         </span>
                       )}
-                      <button
-                        className="it-button it-button--secondary it-button--compact it-template__list-delete"
-                        type="button"
-                        disabled={uiLocked || isBound}
-                        title={isBound ? "已绑定，无法删除" : "删除模板"}
-                        onClick={() => handleDeleteTemplate(item.id)}
-                      >
-                        删除
-                      </button>
+                      {deleteConfirmId === item.id ? (
+                        <>
+                          <button
+                            className="it-button it-button--danger it-button--compact it-template__list-delete"
+                            type="button"
+                            disabled={uiLocked || isBound}
+                            onClick={() => {
+                              setDeleteConfirmId(null);
+                              handleDeleteTemplate(item.id);
+                            }}
+                          >
+                            确认删除
+                          </button>
+                          <button
+                            className="it-button it-button--secondary it-button--compact"
+                            type="button"
+                            disabled={uiLocked}
+                            onClick={() => setDeleteConfirmId(null)}
+                          >
+                            取消
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="it-button it-button--secondary it-button--compact it-template__list-delete"
+                          type="button"
+                          disabled={uiLocked || isBound}
+                          title={isBound ? "已绑定，无法删除" : "删除模板"}
+                          onClick={() => setDeleteConfirmId(item.id)}
+                        >
+                          删除
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
