@@ -26,6 +26,12 @@ const TEMPLATE_RESPONSE_MODES = [
   { value: "websocket", label: "WebSocket" },
   { value: "binary", label: "Binary" },
 ];
+const TEMPLATE_LOW_PRIORITY_VARS = new Set([
+  "apiKey",
+  "secretKey",
+  "timeoutSec",
+  "stream",
+]);
 
 type SettingsTemplateManagerProps = SettingsCommonTemplateProps &
   Pick<SettingsBindingProps, "templateBindings">;
@@ -89,6 +95,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
   const [testRunId, setTestRunId] = useState<string>("");
   const [testTokenInfo, setTestTokenInfo] = useState<any | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showAllVars, setShowAllVars] = useState(false);
 
   const selectedTemplateName = selectedTemplate?.name || selectedTemplate?.id || "";
   const canTest = Boolean(selectedTemplateId);
@@ -121,6 +128,17 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       return String(testResponsePreview);
     }
   }, [testResponsePreview]);
+  const visibleParamList = useMemo(() => {
+    if (showAllVars) {
+      return paramCatalogList;
+    }
+    return paramCatalogList.filter((name) => {
+      if (!TEMPLATE_LOW_PRIORITY_VARS.has(name)) {
+        return true;
+      }
+      return templateUsageSets.used.has(name);
+    });
+  }, [paramCatalogList, showAllVars, templateUsageSets.used]);
   const updateTokenDraft = (patch: Partial<NonNullable<ItApiTemplate["token"]>>) => {
     setTemplateDraft((prev) => {
       if (!prev) {
@@ -174,6 +192,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     setTestRunId("");
     setTestTokenInfo(null);
     setDeleteConfirmId(null);
+    setShowAllVars(false);
   }, [selectedTemplateId, templateCategory]);
 
   const parseTestVars = () => {
@@ -846,9 +865,19 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
               可引用变量
               <InfoTip text="模板中引用到才会发送；未引用会标记出来。" />
             </div>
+            <div className="it-input-row it-input-row--nowrap">
+              <label className="it-toggle">
+                <input
+                  type="checkbox"
+                  checked={showAllVars}
+                  onChange={(event) => setShowAllVars(event.target.checked)}
+                />
+                <span>显示全部</span>
+              </label>
+            </div>
             <div className="it-template__param-list">
-              {paramCatalogList.length ? (
-                paramCatalogList.map((name) => {
+              {visibleParamList.length ? (
+                visibleParamList.map((name) => {
                   let status = "unused";
                   if (templateUsageSets.used.has(name)) {
                     status = "used";

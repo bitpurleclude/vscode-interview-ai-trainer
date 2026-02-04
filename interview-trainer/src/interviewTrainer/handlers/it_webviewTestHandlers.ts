@@ -17,6 +17,14 @@ import {
   it_resolveTemplateById,
 } from "../api/it_templateExecutor";
 import { it_extractTokenInfo } from "../core/it_tokens";
+import type { ItApiTemplate } from "../../protocol/interviewTrainer";
+import {
+  IT_SAMPLE_AUDIO_BASE64,
+  IT_SAMPLE_AUDIO_BYTE_LENGTH,
+  IT_SAMPLE_AUDIO_CHANNEL,
+  IT_SAMPLE_AUDIO_FORMAT,
+  IT_SAMPLE_AUDIO_SAMPLE_RATE,
+} from "../constants/it_sampleAudio";
 
 function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
   const masked: Record<string, string> = { ...headers };
@@ -38,21 +46,84 @@ function it_isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function it_buildTemplateTestVariables(payload: any): Record<string, unknown> {
+const DEFAULT_TEST_INSTRUCTIONS = "你是一个测试助手。";
+
+function it_mergeDeep(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...base };
+  Object.entries(patch).forEach(([key, value]) => {
+    if (value === undefined) {
+      return;
+    }
+    const current = next[key];
+    if (it_isPlainObject(current) && it_isPlainObject(value)) {
+      next[key] = it_mergeDeep(
+        current as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+      return;
+    }
+    next[key] = value;
+  });
+  return next;
+}
+
+function it_buildTemplateTestDefaults(
+  host: ItWebviewHandlersHost,
+  template: ItApiTemplate,
+): Record<string, unknown> {
+  const snapshot = host.configSnapshot;
+  const defaults: Record<string, unknown> = {};
+  if (template.category === "llm") {
+    defaults.model = snapshot.llm?.model;
+    defaults.temperature = snapshot.llm?.temperature;
+    defaults.topP = snapshot.llm?.topP;
+    defaults.reasoningEffort = snapshot.llm?.reasoningEffort;
+    defaults.maxOutputTokens = snapshot.llm?.maxOutputTokens;
+    defaults.webSearch = snapshot.llm?.webSearch;
+    defaults.reusePrefix = snapshot.llm?.reusePrefix;
+    defaults.stream = snapshot.llm?.stream;
+  } else if (template.category === "embedding") {
+    defaults.model = snapshot.retrieval?.vector?.model;
+  } else if (template.category === "asr") {
+    defaults.audioFile = IT_SAMPLE_AUDIO_BASE64;
+    defaults.audio = {
+      format: IT_SAMPLE_AUDIO_FORMAT,
+      sampleRate: IT_SAMPLE_AUDIO_SAMPLE_RATE,
+      channel: IT_SAMPLE_AUDIO_CHANNEL,
+      byteLength: IT_SAMPLE_AUDIO_BYTE_LENGTH,
+    };
+    defaults.asr = {
+      lang: snapshot.asr?.language || "zh",
+      dev_pid: snapshot.asr?.devPid ?? 1537,
+    };
+  }
+  return defaults;
+}
+
+function it_buildTemplateTestVariables(
+  payload: any,
+  defaults: Record<string, unknown>,
+): Record<string, unknown> {
   const inputText = String(payload?.inputText || "");
   const base: Record<string, unknown> = {};
   if (inputText) {
     base.input = inputText;
     base.embeddingInput = inputText;
-    base.messages = [{ role: "user", content: inputText }];
+    base.instructions = DEFAULT_TEST_INSTRUCTIONS;
+    base.messages = [
+      { role: "system", content: DEFAULT_TEST_INSTRUCTIONS },
+      { role: "user", content: inputText },
+    ];
   }
   if (typeof payload?.stream === "boolean") {
     base.stream = payload.stream;
   }
   const extra = it_isPlainObject(payload?.variables) ? payload.variables : {};
   return {
-    ...base,
-    ...extra,
+    ...it_mergeDeep(it_mergeDeep(base, defaults), extra),
   };
 }
 
@@ -342,7 +413,8 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
       throw new Error("模板不存在或未加载");
     }
     const runtime = { template, environment, context: host.context };
-    const variables = it_buildTemplateTestVariables(payload);
+    const defaults = it_buildTemplateTestDefaults(host, template);
+    const variables = it_buildTemplateTestVariables(payload, defaults);
     const requestPreview = await it_renderTemplateRequest({
       runtime,
       variables,
@@ -374,7 +446,8 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
       throw new Error("模板不存在或未加载");
     }
     const runtime = { template, environment, context: host.context };
-    const variables = it_buildTemplateTestVariables(payload);
+    const defaults = it_buildTemplateTestDefaults(host, template);
+    const variables = it_buildTemplateTestVariables(payload, defaults);
     const preview = await it_renderTemplateRequest({ runtime, variables });
     if (preview.missing.length) {
       throw new Error(`模板变量缺失: ${preview.missing.join(", ")}`);
