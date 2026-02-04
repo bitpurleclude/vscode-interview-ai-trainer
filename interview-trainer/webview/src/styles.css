@@ -979,6 +979,76 @@
   color: var(--vscode-descriptionForeground);
 }
 
+.it-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.it-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+  border: 1px solid var(--vscode-input-border);
+  cursor: help;
+  position: relative;
+  user-select: none;
+}
+
+.it-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  max-width: 280px;
+  white-space: pre-wrap;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.it-tip::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: var(--vscode-editorWidget-background) transparent transparent transparent;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.it-tip:hover::after,
+.it-tip:focus::after,
+.it-tip:hover::before,
+.it-tip:focus::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+.it-tip:focus {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
 .it-settings__raw {
   margin: 0;
   white-space: pre-wrap;

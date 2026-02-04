@@ -1,6 +1,7 @@
 import React from "react";
 import type { SettingsCommonTemplateProps } from "./settingsTypes";
 import type { ItTemplateCategory } from "../../types";
+import { InfoTip } from "../common/InfoTip";
 
 const TEMPLATE_CATEGORY_TABS: Array<{
   key: ItTemplateCategory;
@@ -153,7 +154,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
               return (
                 <>
                   <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 70 }}>模板 ID</div>
+                    <div style={{ minWidth: 70 }} className="it-label">
+                      模板 ID
+                      <InfoTip text="唯一标识，建议小写加下划线，用于模板引用与绑定。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.id}
@@ -163,7 +167,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         )
                       }
                     />
-                    <div style={{ minWidth: 60 }}>名称</div>
+                    <div style={{ minWidth: 60 }} className="it-label">
+                      名称
+                      <InfoTip text="展示名称，可中文；不影响实际调用。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.name || ""}
@@ -175,7 +182,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                     />
                   </div>
                   <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 70 }}>分类</div>
+                    <div style={{ minWidth: 70 }} className="it-label">
+                      分类
+                      <InfoTip text="选择模板用途：LLM / ASR / Embedding。" />
+                    </div>
                     <select
                       className="it-select"
                       value={templateDraft.category}
@@ -191,7 +201,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         </option>
                       ))}
                     </select>
-                    <div style={{ minWidth: 80 }}>解析模式</div>
+                    <div style={{ minWidth: 80 }} className="it-label">
+                      解析模式
+                      <InfoTip text="与响应格式一致：JSON=一次性返回，SSE=流式返回。" />
+                    </div>
                     <select
                       className="it-select"
                       value={responseMode}
@@ -219,7 +232,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         </option>
                       ))}
                     </select>
-                    <div style={{ minWidth: 70 }}>Method</div>
+                    <div style={{ minWidth: 70 }} className="it-label">
+                      Method
+                      <InfoTip text="HTTP 方法，绝大多数接口使用 POST。" />
+                    </div>
                     <select
                       className="it-select"
                       value={templateDraft.request?.method || "POST"}
@@ -233,7 +249,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                     </select>
                   </div>
                   <div className="it-input-row">
-                    <div style={{ minWidth: 70 }}>URL</div>
+                    <div style={{ minWidth: 70 }} className="it-label">
+                      URL
+                      <InfoTip text="完整请求地址或相对路径（视运行环境而定）。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.request?.url || ""}
@@ -241,7 +260,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                     />
                   </div>
                   <div className="it-input-row">
-                    <div style={{ minWidth: 70 }}>Stream</div>
+                    <div style={{ minWidth: 70 }} className="it-label">
+                      Stream
+                      <InfoTip text="是否以流式读取响应（接口支持时才开启）。" />
+                    </div>
                     <label className="it-toggle">
                       <input
                         type="checkbox"
@@ -255,7 +277,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                   </div>
                   <div className="it-template__json-grid">
                     <div className="it-template__json-block">
-                      <div className="it-settings__title">Headers (JSON)</div>
+                      <div className="it-settings__title it-label">
+                        Headers (JSON)
+                        <InfoTip text="请求头，一般包含 Authorization 与 Content-Type。" />
+                      </div>
                       <textarea
                         className="it-textarea it-template__textarea"
                         value={templateJsonDraft.headers}
@@ -274,7 +299,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                       )}
                     </div>
                     <div className="it-template__json-block">
-                      <div className="it-settings__title">Query (JSON)</div>
+                      <div className="it-settings__title it-label">
+                        Query (JSON)
+                        <InfoTip text="URL 查询参数，未使用可留空 {}。" />
+                      </div>
                       <textarea
                         className="it-textarea it-template__textarea"
                         value={templateJsonDraft.query}
@@ -293,7 +321,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                       )}
                     </div>
                     <div className="it-template__json-block">
-                      <div className="it-settings__title">Body (JSON)</div>
+                      <div className="it-settings__title it-label">
+                        Body (JSON)
+                        <InfoTip text="请求体 JSON，可引用变量占位符，例如 {{model}}、{{input}}。" />
+                      </div>
                       <textarea
                         className="it-textarea it-template__textarea"
                         value={templateJsonDraft.body}
@@ -313,13 +344,19 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                     </div>
                   </div>
                   <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 90 }}>textPath</div>
+                    <div style={{ minWidth: 90 }} className="it-label">
+                      textPath
+                      <InfoTip text="纯文本输出路径（JSON 模式常用）。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.response?.textPath || ""}
                       onChange={(event) => updateTemplateResponse({ textPath: event.target.value })}
                     />
-                    <div style={{ minWidth: 90 }}>jsonPath</div>
+                    <div style={{ minWidth: 90 }} className="it-label">
+                      jsonPath
+                      <InfoTip text="结构化输出路径（JSON 模式常用）。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.response?.jsonPath || ""}
@@ -327,13 +364,19 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                     />
                   </div>
                   <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 90 }}>errorPath</div>
+                    <div style={{ minWidth: 90 }} className="it-label">
+                      errorPath
+                      <InfoTip text="错误信息所在路径，用于提示接口错误。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.response?.errorPath || ""}
                       onChange={(event) => updateTemplateResponse({ errorPath: event.target.value })}
                     />
-                    <div style={{ minWidth: 90 }}>statusPath</div>
+                    <div style={{ minWidth: 90 }} className="it-label">
+                      statusPath
+                      <InfoTip text="状态码或状态字段路径（可选）。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.response?.statusPath || ""}
@@ -343,17 +386,23 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                     />
                   </div>
                   <div className="it-input-row">
-                    <div style={{ minWidth: 90 }}>doneSignal</div>
+                    <div style={{ minWidth: 90 }} className="it-label">
+                      doneSignal
+                      <InfoTip text="JSON 模式下的结束标记（可选）。" />
+                    </div>
                     <input
                       className="it-input"
                       value={templateDraft.response?.doneSignal || ""}
                       onChange={(event) => updateTemplateResponse({ doneSignal: event.target.value })}
                     />
                   </div>
-                  {responseMode === "sse" && (
+                      {responseMode === "sse" && (
                     <div className="it-template__stream-grid">
                       <div className="it-input-row">
-                        <div style={{ minWidth: 110 }}>eventDelimiter</div>
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          eventDelimiter
+                          <InfoTip text="事件分隔符，常见为 \\n\\n。" />
+                        </div>
                         <input
                           className="it-input"
                           value={templateDraft.streaming?.eventDelimiter || ""}
@@ -365,7 +414,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         />
                       </div>
                       <div className="it-input-row">
-                        <div style={{ minWidth: 110 }}>dataPrefix</div>
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          dataPrefix
+                          <InfoTip text="数据前缀，常见为 data:。" />
+                        </div>
                         <input
                           className="it-input"
                           value={templateDraft.streaming?.dataPrefix || ""}
@@ -377,7 +429,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         />
                       </div>
                       <div className="it-input-row">
-                        <div style={{ minWidth: 110 }}>deltaPath</div>
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          deltaPath
+                          <InfoTip text="增量文本字段路径，用于拼接输出。" />
+                        </div>
                         <input
                           className="it-input"
                           value={templateDraft.streaming?.deltaPath || ""}
@@ -389,7 +444,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         />
                       </div>
                       <div className="it-input-row">
-                        <div style={{ minWidth: 110 }}>doneSignals</div>
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          doneSignals
+                          <InfoTip text="流结束标记数组，例如 [DONE]。" />
+                        </div>
                         <input
                           className="it-input"
                           value={doneSignalsText}
@@ -404,7 +462,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
                         />
                       </div>
                       <div className="it-input-row">
-                        <div style={{ minWidth: 110 }}>heartbeatPattern</div>
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          heartbeatPattern
+                          <InfoTip text="心跳包匹配模式（可选）。" />
+                        </div>
                         <input
                           className="it-input"
                           value={templateDraft.streaming?.heartbeatPattern || ""}
@@ -448,7 +509,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
 
         <div className="it-template__sidebar">
           <div className="it-template__panel">
-            <div className="it-template__panel-title">可引用变量</div>
+            <div className="it-template__panel-title it-label">
+              可引用变量
+              <InfoTip text="模板中引用到才会发送；未引用会标记出来。" />
+            </div>
             <div className="it-template__param-list">
               {paramCatalogList.length ? (
                 paramCatalogList.map((name) => {
@@ -494,7 +558,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
           </div>
 
           <div className="it-template__panel">
-            <div className="it-template__panel-title">密钥库</div>
+            <div className="it-template__panel-title it-label">
+              密钥库
+              <InfoTip text="存放 API Key 等敏感值，模板里用 {{apiKey}} 引用。" />
+            </div>
             <div className="it-template__secret-list">
               {templateSecrets.length ? (
                 templateSecrets.map((name) => (
@@ -543,7 +610,10 @@ export const SettingsTemplateManager: React.FC<SettingsCommonTemplateProps> = (p
           </div>
 
           <div className="it-template__panel">
-            <div className="it-template__panel-title">reasoning.effort 选项</div>
+            <div className="it-template__panel-title it-label">
+              reasoning.effort 选项
+              <InfoTip text="可选的思考强度列表，供模板/配置下拉选择。" />
+            </div>
             <div className="it-template__chips">
               {templateParamOptions.length ? (
                 templateParamOptions.map((item) => (
