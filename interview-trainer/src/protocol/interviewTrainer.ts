@@ -14,7 +14,14 @@ export type ItStepStatus = "pending" | "running" | "success" | "error";
 
 export type ItRecordingState = "idle" | "recording" | "paused";
 
-export type ItTemplateCategory = "llm" | "asr" | "embedding" | "tts" | "vision" | "tools";
+export type ItTemplateCategory =
+  | "llm"
+  | "asr"
+  | "embedding"
+  | "token"
+  | "tts"
+  | "vision"
+  | "tools";
 
 export type ItTemplateResponseMode = "json" | "sse" | "ndjson" | "websocket" | "binary";
 
@@ -45,6 +52,16 @@ export interface ItTemplateStreaming {
   heartbeatPattern?: string;
 }
 
+export interface ItTemplateTokenConfig {
+  name: string;
+  valuePath?: string;
+  expiresInPath?: string;
+  expiresAtPath?: string;
+  refreshBeforeSec?: number;
+  maxRetries?: number;
+  enabled?: boolean;
+}
+
 export interface ItApiTemplate {
   id: string;
   name: string;
@@ -52,6 +69,7 @@ export interface ItApiTemplate {
   request: ItTemplateRequest;
   response?: ItTemplateResponse;
   streaming?: ItTemplateStreaming;
+  token?: ItTemplateTokenConfig;
   tags?: string[];
   updatedAt?: string;
 }
@@ -75,6 +93,7 @@ export interface ItTemplateParamCatalog {
   llm: string[];
   asr: string[];
   embedding: string[];
+  token: string[];
 }
 
 export interface ItTemplateParamUsage {
@@ -93,6 +112,23 @@ export interface ItTemplatesSnapshot {
     reasoningEffort: string[];
   };
   secretNames?: string[];
+  tokenStore?: ItTokenStoreSnapshot;
+}
+
+export type ItTokenStatus = "idle" | "refreshing" | "ok" | "error";
+
+export interface ItTokenState {
+  name: string;
+  templateId: string;
+  status: ItTokenStatus;
+  updatedAt?: string;
+  expiresAt?: string;
+  lastError?: string;
+}
+
+export interface ItTokenStoreSnapshot {
+  tokens: ItTokenState[];
+  autoRefresh: boolean;
 }
 export interface ItStepState {
   id: ItWorkflowStep;

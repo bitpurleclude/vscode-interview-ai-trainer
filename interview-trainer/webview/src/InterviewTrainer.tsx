@@ -275,6 +275,17 @@ const InterviewTrainer: React.FC = () => {
     setConfig,
   });
 
+  const tokenStore = config?.templates?.tokenStore;
+  const handleRefreshToken = useCallback(async (name: string) => {
+    await request("it/refreshToken", { name });
+  }, []);
+  const handleRefreshAllTokens = useCallback(async () => {
+    await request("it/refreshAllTokens");
+  }, []);
+  const handleToggleTokenAutoRefresh = useCallback(async (enabled: boolean) => {
+    await request("it/setTokenAutoRefresh", { enabled });
+  }, []);
+
   const {
     envDraftName,
     setEnvDraftName,
@@ -435,6 +446,10 @@ const InterviewTrainer: React.FC = () => {
     savingParamOptions,
     handleAddParamOption,
     handleSaveParamOptions,
+    tokenStore,
+    handleRefreshToken,
+    handleRefreshAllTokens,
+    handleToggleTokenAutoRefresh,
     templateBindings,
     setTemplateBindings,
     llmTemplates,

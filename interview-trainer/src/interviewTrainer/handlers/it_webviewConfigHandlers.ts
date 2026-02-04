@@ -121,6 +121,35 @@ export function it_registerConfigHandlers(host: ItWebviewHandlersHost): void {
     return host.configSnapshot;
   });
 
+  host.webviewProtocol.on("it/refreshToken", async (msg) => {
+    const name = String(msg.data?.name || "").trim();
+    if (!name) {
+      throw new Error("missing token name");
+    }
+    await host.tokenService.refreshTokenByName(name);
+    return { ok: true };
+  });
+
+  host.webviewProtocol.on("it/refreshAllTokens", async () => {
+    await host.tokenService.refreshAll();
+    return { ok: true };
+  });
+
+  host.webviewProtocol.on("it/setTokenAutoRefresh", async (msg) => {
+    const enabled = msg.data?.enabled !== false;
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    templatesConfig = host.configService.saveTokenOptions(templatesConfig, env, {
+      auto_refresh: Boolean(enabled),
+    });
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
   host.webviewProtocol.on("it/setActiveEnvironment", async (msg) => {
     const environment = String(msg.data?.environment || "").trim();
     if (!environment) {

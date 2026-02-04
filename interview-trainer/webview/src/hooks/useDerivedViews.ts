@@ -52,6 +52,8 @@ export function useDerivedViews({
           ? templateParamCatalog?.asr ?? []
           : templateCategory === "embedding"
             ? templateParamCatalog?.embedding ?? []
+            : templateCategory === "token"
+              ? templateParamCatalog?.token ?? []
             : [];
     return Array.from(new Set([...common, ...scoped]));
   }, [templateParamCatalog, templateCategory]);

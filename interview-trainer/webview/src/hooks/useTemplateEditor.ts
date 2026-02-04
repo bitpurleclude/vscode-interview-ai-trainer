@@ -43,6 +43,7 @@ export function useTemplateEditor({
   const buildDefaultTemplate = useCallback(
     (category: ItTemplateCategory): ItApiTemplate => {
       const mode = category === "llm" ? "sse" : "json";
+      const isToken = category === "token";
       return {
         id: "",
         name: "",
@@ -70,6 +71,16 @@ export function useTemplateEditor({
                 doneSignals: ["[DONE]"],
               }
             : undefined,
+        token: isToken
+          ? {
+              name: "",
+              valuePath: "access_token",
+              expiresInPath: "expires_in",
+              refreshBeforeSec: 300,
+              maxRetries: 1,
+              enabled: true,
+            }
+          : undefined,
         updatedAt: new Date().toISOString(),
       };
     },
@@ -215,6 +226,18 @@ export function useTemplateEditor({
       setTemplateSaveMessage("请填写模板 ID。");
       return;
     }
+    let tokenName = "";
+    if (templateDraft.category === "token") {
+      tokenName = String(templateDraft.token?.name || "").trim();
+      if (!tokenName) {
+        setTemplateSaveMessage("请填写 Token 名称。");
+        return;
+      }
+      if (!/^[a-zA-Z0-9_.-]+$/.test(tokenName)) {
+        setTemplateSaveMessage("Token 名称仅支持字母、数字、_、-、.");
+        return;
+      }
+    }
     const headersParsed = parseJson(templateJsonDraft.headers);
     const queryParsed = parseJson(templateJsonDraft.query);
     const bodyParsed = parseJson(templateJsonDraft.body);
@@ -264,6 +287,18 @@ export function useTemplateEditor({
                   ? templateDraft.streaming.doneSignals.filter(Boolean)
                   : undefined,
               heartbeatPattern: templateDraft.streaming?.heartbeatPattern || undefined,
+            }
+          : undefined,
+      token:
+        templateDraft.category === "token"
+          ? {
+              name: tokenName,
+              valuePath: templateDraft.token?.valuePath || undefined,
+              expiresInPath: templateDraft.token?.expiresInPath || undefined,
+              expiresAtPath: templateDraft.token?.expiresAtPath || undefined,
+              refreshBeforeSec: Number(templateDraft.token?.refreshBeforeSec ?? 300),
+              maxRetries: Number(templateDraft.token?.maxRetries ?? 0),
+              enabled: templateDraft.token?.enabled !== false,
             }
           : undefined,
       updatedAt: new Date().toISOString(),

@@ -10,6 +10,7 @@ import { ItApiConfig, ItConfigBundle } from "../api/it_apiConfig";
 import { ItConfigService } from "../api/it_configService";
 import { ItLlmConfig } from "../api/it_llmTypes";
 import { WebviewProtocol } from "../../webview/WebviewProtocol";
+import { ItTokenService } from "../core/it_tokens";
 import { it_registerConfigHandlers } from "./it_webviewConfigHandlers";
 import { it_registerCoreHandlers } from "./it_webviewCoreHandlers";
 import { it_registerQuestionHandlers } from "./it_webviewQuestionHandlers";
@@ -27,6 +28,7 @@ export type ItWebviewHandlersHost = {
   configBundle: ItConfigBundle;
   configSnapshot: ItConfigSnapshot;
   configService: ItConfigService;
+  tokenService: ItTokenService;
   corpusDirty: boolean;
   detectedInput: string | null;
   availableInputs: string[] | null;

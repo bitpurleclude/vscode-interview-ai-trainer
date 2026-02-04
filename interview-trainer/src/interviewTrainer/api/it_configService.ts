@@ -104,6 +104,9 @@ export class ItConfigService {
       param_options: {
         reasoning_effort: ["low", "medium", "high", "xhigh"],
       },
+      token_options: {
+        auto_refresh: true,
+      },
     });
   }
 
@@ -166,6 +169,22 @@ export class ItConfigService {
       ...envConfig,
       param_options: {
         ...(envConfig.param_options || {}),
+        ...(options || {}),
+      },
+    });
+  }
+
+  saveTokenOptions(
+    templatesConfig: ItTemplatesConfig,
+    environment: string,
+    options: { auto_refresh?: boolean },
+  ): ItTemplatesConfig {
+    const ensured = this.ensureTemplateEnvironment(templatesConfig, environment);
+    const envConfig = ensured.environments?.[environment] || {};
+    return this.applyTemplateEnvConfig(ensured, environment, {
+      ...envConfig,
+      token_options: {
+        ...(envConfig.token_options || {}),
         ...(options || {}),
       },
     });

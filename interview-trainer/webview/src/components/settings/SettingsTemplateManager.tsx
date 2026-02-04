@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { SettingsBindingProps, SettingsCommonTemplateProps } from "./settingsTypes";
-import type { ItTemplateCategory } from "../../types";
+import type { ItApiTemplate, ItTemplateCategory } from "../../types";
 import { InfoTip } from "../common/InfoTip";
 import { on, request } from "../../messenger";
 
@@ -12,6 +12,7 @@ const TEMPLATE_CATEGORY_TABS: Array<{
   { key: "llm", label: "LLM", enabled: true },
   { key: "asr", label: "ASR", enabled: true },
   { key: "embedding", label: "Embedding", enabled: true },
+  { key: "token", label: "Token", enabled: true },
   { key: "tts", label: "TTS", enabled: false },
   { key: "vision", label: "Vision", enabled: false },
   { key: "tools", label: "Tools", enabled: false },
@@ -71,6 +72,10 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     savingParamOptions,
     handleAddParamOption,
     handleSaveParamOptions,
+    tokenStore,
+    handleRefreshToken,
+    handleRefreshAllTokens,
+    handleToggleTokenAutoRefresh,
   } = props;
   const [testInput, setTestInput] = useState("ping");
   const [testVarsDraft, setTestVarsDraft] = useState("{}");
@@ -82,6 +87,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [testRunning, setTestRunning] = useState(false);
   const [testRunId, setTestRunId] = useState<string>("");
+  const [testTokenInfo, setTestTokenInfo] = useState<any | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const selectedTemplateName = selectedTemplate?.name || selectedTemplate?.id || "";
@@ -115,6 +121,16 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       return String(testResponsePreview);
     }
   }, [testResponsePreview]);
+  const tokenList = tokenStore?.tokens ?? [];
+  const tokenAutoRefresh = tokenStore?.autoRefresh !== false;
+  const formatTokenTime = (value?: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return date.toLocaleString();
+  };
 
   useEffect(() => {
     const dispose = on("it/templateTestDelta", (data) => {
@@ -140,6 +156,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     setTestMessage(null);
     setTestVarsError(null);
     setTestRunId("");
+    setTestTokenInfo(null);
     setDeleteConfirmId(null);
   }, [selectedTemplateId, templateCategory]);
 
@@ -174,6 +191,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     setTestResponsePreview(null);
     setTestStreamOutput("");
     setTestMissingVars([]);
+    setTestTokenInfo(null);
     try {
       const resp = await request("it/testTemplateDryRun", {
         templateId: selectedTemplateId,
@@ -210,6 +228,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     setTestResponsePreview(null);
     setTestStreamOutput("");
     setTestMissingVars([]);
+    setTestTokenInfo(null);
     try {
       const resp = await request("it/testTemplateLive", {
         templateId: selectedTemplateId,
@@ -220,6 +239,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       if (resp?.status === "success") {
         const content = resp.content ?? null;
         setTestResponsePreview(content?.result ?? content);
+        setTestTokenInfo(content?.tokenInfo ?? null);
       } else {
         setTestMessage(resp?.error || "Live 测试失败，请检查模板或网络。");
       }
@@ -352,6 +372,10 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
             (() => {
               const responseMode = templateDraft.response?.mode || "json";
               const doneSignalsText = (templateDraft.streaming?.doneSignals || []).join(", ");
+              const isToken = templateDraft.category === "token";
+              const tokenConfig = (templateDraft.token || {}) as NonNullable<
+                ItApiTemplate["token"]
+              >;
               return (
                 <>
                   <div className="it-input-row it-input-row--nowrap">
@@ -679,6 +703,172 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                       </div>
                     </div>
                   )}
+                  {isToken && (
+                    <div className="it-template__token-config">
+                      <div className="it-settings__title it-label">
+                        Token 输出配置
+                        <InfoTip text="保存后会进入 Token 库，可在其他模板用 {{tokens.xxx}} 引用。" />
+                      </div>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 90 }} className="it-label">
+                          Token 名称
+                          <InfoTip text="用于 {{tokens.xxx}} 的 xxx 部分，建议小写+下划线。" />
+                        </div>
+                        <input
+                          className="it-input"
+                          value={tokenConfig.name || ""}
+                          onChange={(event) =>
+                            setTemplateDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    token: {
+                                      ...(prev.token || {}),
+                                      name: event.target.value,
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                        <div style={{ minWidth: 90 }} className="it-label">
+                          tokenPath
+                          <InfoTip text="响应 JSON 中 token 的路径，例如 access_token。" />
+                        </div>
+                        <input
+                          className="it-input"
+                          value={tokenConfig.valuePath || ""}
+                          onChange={(event) =>
+                            setTemplateDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    token: {
+                                      ...(prev.token || {}),
+                                      valuePath: event.target.value,
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          expiresInPath
+                          <InfoTip text="响应中的有效期秒数字段，例如 expires_in。" />
+                        </div>
+                        <input
+                          className="it-input"
+                          value={tokenConfig.expiresInPath || ""}
+                          onChange={(event) =>
+                            setTemplateDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    token: {
+                                      ...(prev.token || {}),
+                                      expiresInPath: event.target.value,
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          expiresAtPath
+                          <InfoTip text="响应中的到期时间字段（ISO 或时间戳）。" />
+                        </div>
+                        <input
+                          className="it-input"
+                          value={tokenConfig.expiresAtPath || ""}
+                          onChange={(event) =>
+                            setTemplateDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    token: {
+                                      ...(prev.token || {}),
+                                      expiresAtPath: event.target.value,
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="it-input-row it-input-row--nowrap">
+                        <div style={{ minWidth: 110 }} className="it-label">
+                          refreshBeforeSec
+                          <InfoTip text="提前多久刷新（秒），例如 300。" />
+                        </div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={tokenConfig.refreshBeforeSec ?? 300}
+                          onChange={(event) =>
+                            setTemplateDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    token: {
+                                      ...(prev.token || {}),
+                                      refreshBeforeSec: Number(event.target.value),
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                        <div style={{ minWidth: 90 }} className="it-label">
+                          failureRetry
+                          <InfoTip text="失败重试次数（模板执行重试）。" />
+                        </div>
+                        <input
+                          className="it-input"
+                          type="number"
+                          value={tokenConfig.maxRetries ?? 0}
+                          onChange={(event) =>
+                            setTemplateDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    token: {
+                                      ...(prev.token || {}),
+                                      maxRetries: Number(event.target.value),
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                        <div style={{ minWidth: 70 }} className="it-label">
+                          启用
+                          <InfoTip text="关闭后该 Token 不会自动刷新。" />
+                        </div>
+                        <label className="it-toggle">
+                          <input
+                            type="checkbox"
+                            checked={tokenConfig.enabled !== false}
+                            onChange={(event) =>
+                              setTemplateDraft((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      token: {
+                                        ...(prev.token || {}),
+                                        enabled: event.target.checked,
+                                      },
+                                    }
+                                  : prev,
+                              )
+                            }
+                          />
+                          <span>自动续期</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
                   <div className="it-settings__actions">
                     <button
                       className="it-button it-button--primary it-button--compact"
@@ -807,14 +997,79 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                 {savingSecret ? "保存中..." : "保存"}
               </button>
             </div>
-            {secretMessage && <div className="it-settings__hint">{secretMessage}</div>}
-          </div>
+          {secretMessage && <div className="it-settings__hint">{secretMessage}</div>}
+        </div>
 
-          <div className="it-template__panel">
-            <div className="it-template__panel-title it-label">
-              reasoning.effort 选项
-              <InfoTip text="可选的思考强度列表，供模板/配置下拉选择。" />
-            </div>
+        <div className="it-template__panel">
+          <div className="it-template__panel-title it-label">
+            Token 库
+            <InfoTip text="由 Token 模板生成并自动续期，可通过 {{tokens.xxx}} 引用。" />
+          </div>
+          <div className="it-template__token-list">
+            {tokenList.length ? (
+              tokenList.map((token) => {
+                const statusLabel =
+                  token.status === "ok"
+                    ? "可用"
+                    : token.status === "refreshing"
+                      ? "刷新中"
+                      : token.status === "error"
+                        ? "失败"
+                        : "未获取";
+                const expiresText = token.expiresAt
+                  ? `有效至 ${formatTokenTime(token.expiresAt)}`
+                  : "无到期信息";
+                return (
+                  <div key={token.name} className="it-template__token-item">
+                    <span className={`it-token-dot ${token.status}`} />
+                    <div className="it-template__token-main">
+                      <div className="it-template__token-name">{token.name}</div>
+                      <div className="it-template__token-meta">
+                        {statusLabel} · {expiresText}
+                      </div>
+                      {token.lastError && (
+                        <div className="it-template__token-error">{token.lastError}</div>
+                      )}
+                    </div>
+                    <button
+                      className="it-button it-button--secondary it-button--compact"
+                      disabled={uiLocked}
+                      onClick={() => handleRefreshToken(token.name)}
+                    >
+                      刷新
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="it-settings__hint">暂无 Token</div>
+            )}
+          </div>
+          <div className="it-input-row it-input-row--nowrap">
+            <label className="it-toggle">
+              <input
+                type="checkbox"
+                checked={tokenAutoRefresh}
+                disabled={uiLocked}
+                onChange={(event) => handleToggleTokenAutoRefresh(event.target.checked)}
+              />
+              <span>自动续期</span>
+            </label>
+            <button
+              className="it-button it-button--secondary it-button--compact"
+              disabled={uiLocked || !tokenList.length}
+              onClick={handleRefreshAllTokens}
+            >
+              刷新全部
+            </button>
+          </div>
+        </div>
+
+        <div className="it-template__panel">
+          <div className="it-template__panel-title it-label">
+            reasoning.effort 选项
+            <InfoTip text="可选的思考强度列表，供模板/配置下拉选择。" />
+          </div>
             <div className="it-template__chips">
               {templateParamOptions.length ? (
                 templateParamOptions.map((item) => (
@@ -916,6 +1171,14 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
         {testMissingVars.length > 0 && (
           <div className="it-settings__hint it-settings__hint--error">
             缺失变量：{testMissingVars.join(", ")}
+          </div>
+        )}
+        {testTokenInfo && (
+          <div>
+            <div className="it-settings__title">Token 解析</div>
+            <pre className="it-settings__raw">
+              {JSON.stringify(testTokenInfo, null, 2)}
+            </pre>
           </div>
         )}
         {requestPreviewText && (

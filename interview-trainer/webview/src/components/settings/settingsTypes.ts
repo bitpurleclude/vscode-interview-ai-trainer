@@ -5,6 +5,7 @@ import type {
   ItEmbeddingWarmupState,
   ItTemplateBindings,
   ItTemplateCategory,
+  ItTokenStoreSnapshot,
 } from "../../types";
 
 export type StreamingSettings = {
@@ -97,6 +98,10 @@ export type SettingsCommonTemplateProps = {
   savingParamOptions: boolean;
   handleAddParamOption: () => void;
   handleSaveParamOptions: () => void;
+  tokenStore: ItTokenStoreSnapshot | undefined;
+  handleRefreshToken: (name: string) => void;
+  handleRefreshAllTokens: () => void;
+  handleToggleTokenAutoRefresh: (enabled: boolean) => void;
 };
 
 export type SettingsEnvProps = {

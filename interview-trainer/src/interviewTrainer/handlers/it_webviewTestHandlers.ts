@@ -16,6 +16,7 @@ import {
   it_renderTemplateRequest,
   it_resolveTemplateById,
 } from "../api/it_templateExecutor";
+import { it_extractTokenInfo } from "../core/it_tokens";
 
 function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
   const masked: Record<string, string> = { ...headers };
@@ -390,9 +391,12 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
         });
       },
     });
+    const tokenInfo =
+      template.category === "token" ? it_extractTokenInfo(template, result) : undefined;
     return {
       runId,
       result,
+      tokenInfo,
     };
   });
 }

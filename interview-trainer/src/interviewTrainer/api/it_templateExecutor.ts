@@ -138,6 +138,25 @@ async function it_injectTemplateSecrets(
   if (secretNames.length) {
     variables.secrets = secrets;
   }
+
+  const tokens = it_isPlainObject(variables.tokens)
+    ? { ...(variables.tokens as Record<string, unknown>) }
+    : {};
+  const tokenNames = it_collectTemplateVars(runtime.template)
+    .filter((item) => item.startsWith("tokens."))
+    .map((item) => item.slice("tokens.".length))
+    .filter(Boolean);
+  for (const name of tokenNames) {
+    if (tokens[name] !== undefined) {
+      continue;
+    }
+    tokens[name] = await runtime.context.secrets.get(
+      `interviewTrainer.${runtime.environment}.token.${name}`,
+    );
+  }
+  if (tokenNames.length) {
+    variables.tokens = tokens;
+  }
 }
 
 function it_maskTemplateSecrets(variables: Record<string, unknown>): void {
@@ -153,6 +172,13 @@ function it_maskTemplateSecrets(variables: Record<string, unknown>): void {
       masked[key] = "***";
     });
     variables.secrets = masked;
+  }
+  if (it_isPlainObject(variables.tokens)) {
+    const masked: Record<string, unknown> = { ...(variables.tokens as Record<string, unknown>) };
+    Object.keys(masked).forEach((key) => {
+      masked[key] = "***";
+    });
+    variables.tokens = masked;
   }
 }
 
@@ -208,7 +234,7 @@ function it_parsePath(path: string): ItPathToken[] {
   return tokens;
 }
 
-function it_readPath(obj: any, path: string | undefined): any {
+export function it_readPath(obj: any, path: string | undefined): any {
   if (!path) {
     return undefined;
   }

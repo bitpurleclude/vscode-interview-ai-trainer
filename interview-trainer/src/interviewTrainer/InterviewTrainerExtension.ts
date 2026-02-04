@@ -27,6 +27,7 @@ import {
   it_runEmbeddingWarmup,
   it_scheduleEmbeddingWarmup,
 } from "./core/it_embeddingWarmup";
+import { ItTokenService } from "./core/it_tokens";
 import {
   it_emitEvaluationStreamUpdate,
   it_emitStreamUpdate,
@@ -75,6 +76,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   public corpusDirty = true;
   public corpusDirtyFiles = new Set<string>();
   public corpusWatchers: vscode.FileSystemWatcher[] = [];
+  public tokenService: ItTokenService;
 
   constructor(
     public readonly context: vscode.ExtensionContext,
@@ -83,6 +85,8 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.outputChannel = vscode.window.createOutputChannel("Interview Trainer");
     this.configService = new ItConfigService(this.context);
     this.configBundle = this.configService.loadBundle();
+    this.tokenService = new ItTokenService(this);
+    this.tokenService.sync();
     this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
     this.updateCorpusWatchers();
     this.registerHandlers();

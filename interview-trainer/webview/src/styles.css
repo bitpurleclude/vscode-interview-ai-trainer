@@ -1293,6 +1293,12 @@
   gap: 6px;
 }
 
+.it-template__token-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .it-template__param-item,
 .it-template__secret-item {
   display: flex;
@@ -1304,6 +1310,62 @@
   border: 1px solid var(--vscode-sideBar-border);
   background: var(--vscode-editorWidget-background);
   font-size: 11px;
+}
+
+.it-template__token-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-editorWidget-background);
+  font-size: 11px;
+}
+
+.it-template__token-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.it-template__token-name {
+  font-weight: 600;
+}
+
+.it-template__token-meta {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-template__token-error {
+  font-size: 10px;
+  color: var(--vscode-errorForeground);
+}
+
+.it-token-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: var(--vscode-descriptionForeground);
+}
+
+.it-token-dot.ok {
+  background: var(--vscode-testing-iconPassed);
+}
+
+.it-token-dot.error {
+  background: var(--vscode-errorForeground);
+}
+
+.it-token-dot.refreshing {
+  background: var(--vscode-notificationsWarningIcon-foreground);
+}
+
+.it-token-dot.idle {
+  background: var(--vscode-descriptionForeground);
 }
 
 .it-template__param-item.used {

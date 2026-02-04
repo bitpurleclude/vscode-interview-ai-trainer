@@ -11,6 +11,7 @@ import {
   ItConfigSnapshot,
   ItTemplateParamCatalog,
   ItTemplateParamUsage,
+  ItTokenStoreSnapshot,
   ItTemplatesSnapshot,
 } from "../../protocol/interviewTrainer";
 import { it_hashText } from "../utils/it_text";
@@ -34,6 +35,7 @@ function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
     ],
     asr: ["audioFile", "asr.lang", "asr.dev_pid"],
     embedding: ["embeddingInput", "model"],
+    token: [],
   };
 }
 
@@ -68,11 +70,13 @@ function it_buildTemplateParamUsage(
           ? catalog.asr
           : template.category === "embedding"
             ? catalog.embedding
-            : []),
+            : template.category === "token"
+              ? catalog.token
+              : []),
     ]);
     const unknown: string[] = [];
     used.forEach((item) => {
-      if (item.startsWith("secrets.")) {
+      if (item.startsWith("secrets.") || item.startsWith("tokens.")) {
         return;
       }
       if (!knownVars.has(item)) {
@@ -104,6 +108,7 @@ export type ItConfigSnapshotHost = {
   corpusDirty: boolean;
   corpusDirtyFiles: Set<string>;
   resolveApiConfigWithProviders: (apiConfig: ItApiConfig) => ItApiConfig;
+  tokenService?: { getSnapshot: (env: string) => ItTokenStoreSnapshot; sync: () => void };
 };
 
 export function it_normalizeWorkspaceKey(root: string): string {
@@ -137,6 +142,7 @@ export function it_buildConfigSnapshot(
   };
   const paramCatalog = it_buildTemplateParamCatalog();
   const paramUsage = it_buildTemplateParamUsage(templates, paramCatalog);
+  const tokenStore = host.tokenService?.getSnapshot(env);
   const templatesSnapshot: ItTemplatesSnapshot = {
     templates,
     bindings: templateBindings,
@@ -144,6 +150,7 @@ export function it_buildConfigSnapshot(
     paramUsage,
     paramOptions,
     secretNames: templateSecrets,
+    tokenStore,
   };
   const llmConfig = envConfig.llm ?? {};
   const asrConfig = envConfig.asr ?? {};
@@ -402,6 +409,7 @@ export async function it_refreshConfigSnapshot(
 ): Promise<ItConfigSnapshot> {
   host.configBundle = host.configService.loadBundle();
   host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
+  host.tokenService?.sync();
   host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
   host.configBundle.api = await it_applySecretOverrides(
     host.context,
