@@ -12,259 +12,21 @@ import {
   ItTemplateParamUsage,
 } from "./types";
 import { on, request } from "./messenger";
+import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "./constants/prompts";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { InterviewHeader } from "./components/practice/InterviewHeader";
 import { InterviewStatus } from "./components/practice/InterviewStatus";
 import { PracticeFlow } from "./components/practice/PracticeFlow";
 import { ResultsPanel } from "./components/practice/ResultsPanel";
+import { formatSeconds } from "./utils/format";
+import { buildOutlineTree, renderOutlineTree, renderParagraphs } from "./utils/outline";
+import { pcmToBase64, bytesToBase64 } from "./utils/audio";
+import { cloneTemplate, formatJson, parseJson } from "./utils/template";
+import { parseQuestionsRemote } from "./utils/questions";
+import { useStreaming } from "./hooks/useStreaming";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
-
-
-function it_formatSeconds(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
-  const mins = Math.floor(safe / 60);
-  const secs = safe % 60;
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-}
-
-type ItOutlineNode = {
-  text: string;
-  children: ItOutlineNode[];
-};
-
-const IT_OUTLINE_LEVEL1_PATTERN = /^([一二三四五六七八九十]+|\d+)[、.]/;
-const IT_OUTLINE_LEVEL2_PATTERN = /^[（(]([一二三四五六七八九十]+|\d+)[）)]/;
-const IT_OUTLINE_MARKER_PATTERN =
-  /^(?<indent>\s*)(?:[-*+]\s+|\d+[.)]\s+)(?<text>.+)$/;
-
-function it_extractOutlinePaths(items: string[]): string[][] {
-  const paths: string[][] = [];
-  let currentLevel1: string | null = null;
-  let currentLevel2: string | null = null;
-  const stack: Array<{ depth: number; text: string }> = [];
-  items.forEach((item) => {
-    const rawLine = String(item || "").replace(/\t/g, "  ");
-    const trimmed = rawLine.trim();
-    if (!trimmed) {
-      return;
-    }
-    if (trimmed.includes("->")) {
-      const parts = trimmed
-        .split("->")
-        .map((part) => part.trim())
-        .filter(Boolean);
-      if (parts.length) {
-        stack.length = 0;
-        parts.forEach((part, idx) => stack.push({ depth: idx, text: part }));
-        currentLevel1 = parts[0] || currentLevel1;
-        currentLevel2 = parts.length > 1 ? parts[1] : null;
-        paths.push(parts);
-      }
-      return;
-    }
-    const markerMatch = rawLine.match(IT_OUTLINE_MARKER_PATTERN);
-    if (markerMatch?.groups?.text) {
-      const indentRaw = markerMatch.groups.indent || "";
-      const indentLen = indentRaw.replace(/\t/g, "  ").length;
-      const depth = Math.max(0, Math.floor(indentLen / 2));
-      const text = markerMatch.groups.text.trim();
-      if (!text) {
-        return;
-      }
-      while (stack.length && stack[stack.length - 1].depth >= depth) {
-        stack.pop();
-      }
-      stack.push({ depth, text });
-      paths.push(stack.map((node) => node.text));
-      currentLevel1 = stack[0]?.text ?? currentLevel1;
-      currentLevel2 = stack[1]?.text ?? null;
-      return;
-    }
-    if (IT_OUTLINE_LEVEL1_PATTERN.test(trimmed)) {
-      currentLevel1 = trimmed;
-      currentLevel2 = null;
-      stack.length = 0;
-      stack.push({ depth: 0, text: trimmed });
-      paths.push([trimmed]);
-      return;
-    }
-    if (IT_OUTLINE_LEVEL2_PATTERN.test(trimmed) && currentLevel1) {
-      currentLevel2 = trimmed;
-      stack.length = 0;
-      stack.push({ depth: 0, text: currentLevel1 });
-      stack.push({ depth: 1, text: trimmed });
-      paths.push([currentLevel1, trimmed]);
-      return;
-    }
-    if (currentLevel1) {
-      if (currentLevel2) {
-        paths.push([currentLevel1, currentLevel2, trimmed]);
-      } else {
-        paths.push([currentLevel1, trimmed]);
-      }
-      return;
-    }
-    paths.push([trimmed]);
-  });
-  return paths;
-}
-
-function it_buildOutlineTree(items: string[]): ItOutlineNode[] {
-  const roots: ItOutlineNode[] = [];
-  const findOrCreate = (list: ItOutlineNode[], text: string): ItOutlineNode => {
-    const existing = list.find((node) => node.text === text);
-    if (existing) {
-      return existing;
-    }
-    const node = { text, children: [] };
-    list.push(node);
-    return node;
-  };
-  const paths = it_extractOutlinePaths(items);
-  paths.forEach((parts) => {
-    let current = roots;
-    parts.forEach((part) => {
-      const node = findOrCreate(current, part);
-      current = node.children;
-    });
-  });
-  return roots;
-}
-
-function it_renderOutlineTree(nodes: ItOutlineNode[], keyPrefix: string): JSX.Element {
-  return (
-    <ul>
-      {nodes.map((node, idx) => {
-        const key = `${keyPrefix}-${idx}`;
-        return (
-          <li key={key}>
-            {node.text}
-            {node.children.length ? it_renderOutlineTree(node.children, key) : null}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function it_renderParagraphs(text: string, keyPrefix: string): JSX.Element {
-  const raw = String(text || "").trim();
-  if (!raw) {
-    return <span>（空）</span>;
-  }
-  const parts = raw.split(/\r?\n\s*\n/).map((item) => item.trim()).filter(Boolean);
-  return (
-    <div className="it-paragraphs">
-      {parts.map((part, idx) => (
-        <p key={`${keyPrefix}-${idx}`}>{part}</p>
-      ))}
-    </div>
-  );
-}
-
-async function it_decodeToPcm16(
-  arrayBuffer: ArrayBuffer,
-  targetRate: number,
-): Promise<{ pcm: Int16Array; durationSec: number; sampleRate: number }> {
-  const audioCtx = new AudioContext();
-  try {
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-    const channelData = decoded.getChannelData(0);
-    const sourceRate = decoded.sampleRate;
-    const ratio = sourceRate / targetRate;
-    const length = Math.floor(channelData.length / ratio);
-    const resampled = new Float32Array(length);
-    for (let i = 0; i < length; i += 1) {
-      const pos = i * ratio;
-      const left = Math.floor(pos);
-      const right = Math.min(channelData.length - 1, left + 1);
-      const interp = pos - left;
-      resampled[i] =
-        channelData[left] * (1 - interp) + channelData[right] * interp;
-    }
-    const pcm = new Int16Array(resampled.length);
-    for (let i = 0; i < resampled.length; i += 1) {
-      pcm[i] = Math.max(-1, Math.min(1, resampled[i])) * 32767;
-    }
-    return {
-      pcm,
-      durationSec: resampled.length / targetRate,
-      sampleRate: targetRate,
-    };
-  } finally {
-    void audioCtx.close();
-  }
-}
-
-function it_pcmToBase64(pcm: Int16Array): string {
-  const buffer = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
-  return it_bytesToBase64(buffer);
-}
-
-function it_bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-function it_cloneTemplate(template: ItApiTemplate): ItApiTemplate {
-  return JSON.parse(JSON.stringify(template)) as ItApiTemplate;
-}
-
-function it_formatJson(value: unknown, fallback = "{}"): string {
-  if (value === undefined || value === null) {
-    return fallback;
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return fallback;
-  }
-}
-
-function it_parseJson(text: string): { ok: true; value: any } | { ok: false; error: string } {
-  const trimmed = String(text || "").trim();
-  if (!trimmed) {
-    return { ok: true, value: undefined };
-  }
-  try {
-    return { ok: true, value: JSON.parse(trimmed) };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-async function it_parseQuestionsRemote(
-  text: string,
-): Promise<{ prompt: string; questions: string[]; source: string } | null> {
-  try {
-    const resp = await request("it/parseQuestions", { text });
-    if (resp?.status === "success" && resp.content) {
-      const material = String(resp.content.material || "").trim();
-      const questions = Array.isArray(resp.content.questions)
-        ? resp.content.questions.map((item: any) => String(item)).filter(Boolean)
-        : [];
-      if (material || questions.length) {
-        return {
-          prompt: material,
-          questions,
-          source: String(resp.content.source || "unknown"),
-        };
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
 
 const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",
@@ -297,27 +59,6 @@ const DEFAULT_STATE: ItState = {
   ],
 };
 
-const STRICT_SYSTEM_PROMPT = [
-  "你是严格、直接的中文面试评审，仅输出 JSON，不要出现英语标签、客套或安慰语。",
-  "评分规则（1-10，整数）：10=卓越/完整无明显缺陷；8=良好仅有轻微问题；6=基本达标但有明显缺口；4=不达标；2=严重不足/几乎无有效内容；1=违禁或完全失败。",
-  "若语音时长极短、长时间静音或回答缺失，整体与各维度不得高于2，并在 issues 中说明原因。",
-  "若未覆盖题干要点、逻辑混乱或无可执行对策，相关维度不高于4。",
-  "严禁使用“继续加油”等安慰式措辞，问题描述必须直白、具体、可执行。",
-  "若提供检索笔记，必须在 noteUsage/noteSuggestions 中列出可用素材与参考思路（每项至少2条）。",
-  "strengths/issues/improvements 至少各3条；nextFocus 至少2条。",
-  "revisedAnswers 必须输出 JSON 数组且与题目一一对应，字段: question, revised, estimatedTimeMin, outlineOriginal, outlineRevised。",
-  "outlineOriginal/outlineRevised 为要点数组或 Markdown 列表文本（每题8-18条），分别对应本题“原回答提纲”与“示范提纲”。",
-  "提纲必须是关键词式（避免完整长句），用 Markdown 列表缩进表示层级，至少两级，禁止使用箭头符号。",
-  "第一级用中文序号+标题，例如：一、开头 二、重要性 三、问题 四、对策 五、结尾。",
-  "每条<=20字。",
-  "系统会自动解析 Markdown 列表缩进。",
-].join("\n");
-const DEFAULT_DEMO_PROMPT = [
-  "estimatedTimeMin 按 4/3/3 分配（总≤10 分钟），内容过长需压缩到对应时长。",
-  "revised 必须基于原回答重写（禁止照搬原句），结构为 总-分-总 或 问题-原因-对策-预期/风险。",
-  "每题至少 2-3 条可执行动作（责任人/时间节点/指标/风险兜底），删除口头禅、问候语、重复表述。",
-].join("\n");
-
 const InterviewTrainer: React.FC = () => {
   const [itState, setItState] = useState<ItState>(DEFAULT_STATE);
   const [config, setConfig] = useState<ItConfigSnapshot | null>(null);
@@ -342,6 +83,18 @@ const InterviewTrainer: React.FC = () => {
     enabled: true,
     autoCollapse: true,
     previewChars: 200,
+  });
+  const {
+    stepStreams,
+    evaluationStreams,
+    resetStreams,
+    resetEvaluationStream,
+    handleToggleStepStream,
+    handleToggleEvaluationStream,
+  } = useStreaming({
+    enabled: streamingSettings.enabled,
+    autoCollapse: streamingSettings.autoCollapse,
+    previewChars: streamingSettings.previewChars,
   });
   const [templateCategory, setTemplateCategory] = useState<ItTemplateCategory>("llm");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -378,26 +131,6 @@ const InterviewTrainer: React.FC = () => {
   const [savingAsrParams, setSavingAsrParams] = useState(false);
   const [llmParamsMessage, setLlmParamsMessage] = useState<string | null>(null);
   const [asrParamsMessage, setAsrParamsMessage] = useState<string | null>(null);
-  const [stepStreams, setStepStreams] = useState<
-    Record<
-      string,
-      {
-        text: string;
-        collapsed: boolean;
-        done?: boolean;
-      }
-    >
-  >({});
-  const [evaluationStreams, setEvaluationStreams] = useState<
-    Record<
-      number,
-      {
-        text: string;
-        collapsed: boolean;
-        done?: boolean;
-      }
-    >
-  >({});
   const [historyItems, setHistoryItems] = useState<ItHistoryItem[]>([]);
   const [showNoteHits, setShowNoteHits] = useState(false);
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
@@ -785,12 +518,12 @@ const InterviewTrainer: React.FC = () => {
       setTemplateDraftOrigin(null);
       return;
     }
-    setTemplateDraft(it_cloneTemplate(selectedTemplate));
+    setTemplateDraft(cloneTemplate(selectedTemplate));
     setTemplateDraftOrigin(selectedTemplate.id);
     setTemplateJsonDraft({
-      headers: it_formatJson(selectedTemplate.request?.headers, "{}"),
-      query: it_formatJson(selectedTemplate.request?.query, "{}"),
-      body: it_formatJson(selectedTemplate.request?.body, "{}"),
+      headers: formatJson(selectedTemplate.request?.headers, "{}"),
+      query: formatJson(selectedTemplate.request?.query, "{}"),
+      body: formatJson(selectedTemplate.request?.body, "{}"),
     });
     setTemplateJsonErrors({});
   }, [selectedTemplate, isCreatingTemplate]);
@@ -808,79 +541,7 @@ const InterviewTrainer: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const disposeStream = on("it/stepStreamUpdate", (data) => {
-      if (!streamingSettings.enabled) {
-        return;
-      }
-      const step = String(data?.step || "");
-      if (!step) {
-        return;
-      }
-      setStepStreams((prev) => {
-        const current = prev[step] || { text: "", collapsed: false, done: false };
-        const reset = Boolean(data?.reset);
-        const done = Boolean(data?.done);
-        const rawText =
-          typeof data?.text === "string" ? data.text : reset ? "" : current.text;
-        const previewLimit = Math.max(50, streamingSettings.previewChars || 200);
-        const nextText =
-          rawText.length > previewLimit ? rawText.slice(-previewLimit) : rawText;
-        let collapsed = reset ? false : current.collapsed;
-        if (done && streamingSettings.autoCollapse) {
-          collapsed = true;
-        }
-        return {
-          ...prev,
-          [step]: {
-            text: nextText,
-            collapsed,
-            done,
-          },
-        };
-      });
-    });
-    return () => {
-      disposeStream();
-    };
-  }, [on, streamingSettings.enabled, streamingSettings.autoCollapse, streamingSettings.previewChars]);
 
-  useEffect(() => {
-    const disposeStream = on("it/evaluationStreamUpdate", (data) => {
-      if (!streamingSettings.enabled) {
-        return;
-      }
-      const index = Number(data?.questionIndex ?? 0);
-      if (!Number.isFinite(index) || index < 0) {
-        return;
-      }
-      setEvaluationStreams((prev) => {
-        const current = prev[index] || { text: "", collapsed: false, done: false };
-        const reset = Boolean(data?.reset);
-        const done = Boolean(data?.done);
-        const rawText =
-          typeof data?.text === "string" ? data.text : reset ? "" : current.text;
-        const previewLimit = Math.max(50, streamingSettings.previewChars || 200);
-        const nextText =
-          rawText.length > previewLimit ? rawText.slice(-previewLimit) : rawText;
-        let collapsed = reset ? false : current.collapsed;
-        if (done && streamingSettings.autoCollapse) {
-          collapsed = true;
-        }
-        return {
-          ...prev,
-          [index]: {
-            text: nextText,
-            collapsed,
-            done,
-          },
-        };
-      });
-    });
-    return () => {
-      disposeStream();
-    };
-  }, [on, streamingSettings.enabled, streamingSettings.autoCollapse, streamingSettings.previewChars]);
 
   useEffect(() => {
     setShowRawOutput(false);
@@ -1021,7 +682,7 @@ const InterviewTrainer: React.FC = () => {
         }));
       }
       try {
-        const remote = await it_parseQuestionsRemote(input);
+        const remote = await parseQuestionsRemote(input);
         if (remote && remote.questions.length) {
           const nextPrompt = remote.prompt || fallbackPrompt;
           const nextList = remote.questions;
@@ -1214,7 +875,7 @@ const InterviewTrainer: React.FC = () => {
           sampleRate: targetRate,
           byteLength: pcm.length * 2,
           durationSec: rendered.duration,
-          base64: it_pcmToBase64(pcm),
+          base64: pcmToBase64(pcm),
         });
 
         setItState((prev) => ({
@@ -1232,7 +893,7 @@ const InterviewTrainer: React.FC = () => {
         const resp = await request("it/convertAudioToPcm", {
           filename: file.name,
           ext,
-          base64: it_bytesToBase64(bytes),
+          base64: bytesToBase64(bytes),
         });
         if (resp?.status !== "success" || !resp.content) {
           throw decodeErr;
@@ -1315,8 +976,7 @@ const InterviewTrainer: React.FC = () => {
       }));
       return;
     }
-    setStepStreams({});
-    setEvaluationStreams({});
+    resetStreams();
     setIsProcessing(true);
     setShowNoteHits(false);
     analysisCancelledRef.current = false;
@@ -1391,10 +1051,7 @@ const InterviewTrainer: React.FC = () => {
       const current = analysisResult?.evaluation?.revisedAnswers?.[index];
       if (!current) return;
       setRegeneratingIndex(index);
-      setEvaluationStreams((prev) => ({
-        ...prev,
-        [index]: { text: "", collapsed: false, done: false },
-      }));
+      resetEvaluationStream(index);
       try {
         const contextQuestions =
           Array.isArray(analysisResult?.questionList) && analysisResult.questionList.length
@@ -1693,9 +1350,9 @@ const InterviewTrainer: React.FC = () => {
     setTemplateDraft(next);
     setTemplateDraftOrigin(null);
     setTemplateJsonDraft({
-      headers: it_formatJson(next.request?.headers, "{}"),
-      query: it_formatJson(next.request?.query, "{}"),
-      body: it_formatJson(next.request?.body, "{}"),
+      headers: formatJson(next.request?.headers, "{}"),
+      query: formatJson(next.request?.query, "{}"),
+      body: formatJson(next.request?.body, "{}"),
     });
     setTemplateJsonErrors({});
     setTemplateSaveMessage(null);
@@ -1704,7 +1361,7 @@ const InterviewTrainer: React.FC = () => {
     if (!selectedTemplate) {
       return;
     }
-    const next = it_cloneTemplate(selectedTemplate);
+    const next = cloneTemplate(selectedTemplate);
     next.id = "";
     next.name = `${next.name || selectedTemplate.id}-copy`;
     next.updatedAt = new Date().toISOString();
@@ -1713,9 +1370,9 @@ const InterviewTrainer: React.FC = () => {
     setTemplateDraft(next);
     setTemplateDraftOrigin(null);
     setTemplateJsonDraft({
-      headers: it_formatJson(next.request?.headers, "{}"),
-      query: it_formatJson(next.request?.query, "{}"),
-      body: it_formatJson(next.request?.body, "{}"),
+      headers: formatJson(next.request?.headers, "{}"),
+      query: formatJson(next.request?.query, "{}"),
+      body: formatJson(next.request?.body, "{}"),
     });
     setTemplateJsonErrors({});
     setTemplateSaveMessage(null);
@@ -1740,9 +1397,9 @@ const InterviewTrainer: React.FC = () => {
       setTemplateSaveMessage("请填写模板 ID。");
       return;
     }
-    const headersParsed = it_parseJson(templateJsonDraft.headers);
-    const queryParsed = it_parseJson(templateJsonDraft.query);
-    const bodyParsed = it_parseJson(templateJsonDraft.body);
+    const headersParsed = parseJson(templateJsonDraft.headers);
+    const queryParsed = parseJson(templateJsonDraft.query);
+    const bodyParsed = parseJson(templateJsonDraft.body);
     const errors: Partial<Record<"headers" | "query" | "body", string>> = {};
     if (!headersParsed.ok) {
       errors.headers = headersParsed.error;
@@ -2245,30 +1902,6 @@ const InterviewTrainer: React.FC = () => {
   const handleToggleNoteSuggestions = () => {
     setShowNoteSuggestions((prev) => !prev);
   };
-  const handleToggleStepStream = (stepId: string) => {
-    setStepStreams((prev) => {
-      const current = prev[stepId];
-      if (!current) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [stepId]: {
-          ...current,
-          collapsed: !current.collapsed,
-        },
-      };
-    });
-  };
-  const handleToggleEvaluationStream = (index: number) => {
-    setEvaluationStreams((prev) => ({
-      ...prev,
-      [index]: {
-        ...(prev[index] || { text: "", collapsed: false, done: false }),
-        collapsed: !prev[index]?.collapsed,
-      },
-    }));
-  };
   const handleOpenReport = (path: string) => {
     request("openFile", { path });
   };
@@ -2315,7 +1948,7 @@ const InterviewTrainer: React.FC = () => {
         recordingState={itState.recordingState}
         recordingTime={recordingTime}
         lastError={itState.lastError}
-        formatSeconds={it_formatSeconds}
+        formatSeconds={formatSeconds}
         onOpenMicSettings={() => request("it/openMicSettings", undefined)}
       />
 
@@ -2375,10 +2008,10 @@ const InterviewTrainer: React.FC = () => {
             onToggleNoteSuggestions={handleToggleNoteSuggestions}
             historyItems={historyItems}
             onOpenReport={handleOpenReport}
-            formatSeconds={it_formatSeconds}
-            renderParagraphs={it_renderParagraphs}
-            buildOutlineTree={it_buildOutlineTree}
-            renderOutlineTree={it_renderOutlineTree}
+            formatSeconds={formatSeconds}
+            renderParagraphs={renderParagraphs}
+            buildOutlineTree={buildOutlineTree}
+            renderOutlineTree={renderOutlineTree}
           />
         </>
       )}
