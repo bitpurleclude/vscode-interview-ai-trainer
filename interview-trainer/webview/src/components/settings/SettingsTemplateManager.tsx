@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { SettingsBindingProps, SettingsCommonTemplateProps } from "./settingsTypes";
-import type { ItApiTemplate, ItTemplateCategory } from "../../types";
+import type { ItApiTemplate, ItTemplateCategory, ItTokenState } from "../../types";
 import { InfoTip } from "../common/InfoTip";
 import { on, request } from "../../messenger";
 
@@ -121,7 +121,23 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       return String(testResponsePreview);
     }
   }, [testResponsePreview]);
-  const tokenList = tokenStore?.tokens ?? [];
+  const updateTokenDraft = (patch: Partial<NonNullable<ItApiTemplate["token"]>>) => {
+    setTemplateDraft((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const name = patch.name ?? prev.token?.name ?? "";
+      return {
+        ...prev,
+        token: {
+          ...(prev.token || {}),
+          ...patch,
+          name,
+        },
+      };
+    });
+  };
+  const tokenList = (tokenStore?.tokens ?? []) as ItTokenState[];
   const tokenAutoRefresh = tokenStore?.autoRefresh !== false;
   const formatTokenTime = (value?: string) => {
     if (!value) return "";
@@ -717,19 +733,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                         <input
                           className="it-input"
                           value={tokenConfig.name || ""}
-                          onChange={(event) =>
-                            setTemplateDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    token: {
-                                      ...(prev.token || {}),
-                                      name: event.target.value,
-                                    },
-                                  }
-                                : prev,
-                            )
-                          }
+                          onChange={(event) => updateTokenDraft({ name: event.target.value })}
                         />
                         <div style={{ minWidth: 90 }} className="it-label">
                           tokenPath
@@ -738,19 +742,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                         <input
                           className="it-input"
                           value={tokenConfig.valuePath || ""}
-                          onChange={(event) =>
-                            setTemplateDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    token: {
-                                      ...(prev.token || {}),
-                                      valuePath: event.target.value,
-                                    },
-                                  }
-                                : prev,
-                            )
-                          }
+                          onChange={(event) => updateTokenDraft({ valuePath: event.target.value })}
                         />
                       </div>
                       <div className="it-input-row it-input-row--nowrap">
@@ -762,17 +754,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                           className="it-input"
                           value={tokenConfig.expiresInPath || ""}
                           onChange={(event) =>
-                            setTemplateDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    token: {
-                                      ...(prev.token || {}),
-                                      expiresInPath: event.target.value,
-                                    },
-                                  }
-                                : prev,
-                            )
+                            updateTokenDraft({ expiresInPath: event.target.value })
                           }
                         />
                         <div style={{ minWidth: 110 }} className="it-label">
@@ -783,17 +765,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                           className="it-input"
                           value={tokenConfig.expiresAtPath || ""}
                           onChange={(event) =>
-                            setTemplateDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    token: {
-                                      ...(prev.token || {}),
-                                      expiresAtPath: event.target.value,
-                                    },
-                                  }
-                                : prev,
-                            )
+                            updateTokenDraft({ expiresAtPath: event.target.value })
                           }
                         />
                       </div>
@@ -807,17 +779,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                           type="number"
                           value={tokenConfig.refreshBeforeSec ?? 300}
                           onChange={(event) =>
-                            setTemplateDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    token: {
-                                      ...(prev.token || {}),
-                                      refreshBeforeSec: Number(event.target.value),
-                                    },
-                                  }
-                                : prev,
-                            )
+                            updateTokenDraft({ refreshBeforeSec: Number(event.target.value) })
                           }
                         />
                         <div style={{ minWidth: 90 }} className="it-label">
@@ -829,17 +791,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                           type="number"
                           value={tokenConfig.maxRetries ?? 0}
                           onChange={(event) =>
-                            setTemplateDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    token: {
-                                      ...(prev.token || {}),
-                                      maxRetries: Number(event.target.value),
-                                    },
-                                  }
-                                : prev,
-                            )
+                            updateTokenDraft({ maxRetries: Number(event.target.value) })
                           }
                         />
                         <div style={{ minWidth: 70 }} className="it-label">
@@ -851,17 +803,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
                             type="checkbox"
                             checked={tokenConfig.enabled !== false}
                             onChange={(event) =>
-                              setTemplateDraft((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      token: {
-                                        ...(prev.token || {}),
-                                        enabled: event.target.checked,
-                                      },
-                                    }
-                                  : prev,
-                              )
+                              updateTokenDraft({ enabled: event.target.checked })
                             }
                           />
                           <span>自动续期</span>

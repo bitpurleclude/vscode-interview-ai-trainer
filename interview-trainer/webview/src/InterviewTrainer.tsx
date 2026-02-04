@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { ItState, ItTemplateBindings, ItTemplateCategory } from "./types";
 import { on, request } from "./messenger";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "./constants/prompts";
@@ -612,5 +612,6 @@ const InterviewTrainer: React.FC = () => {
 };
 
 export default InterviewTrainer;
+
 
 
