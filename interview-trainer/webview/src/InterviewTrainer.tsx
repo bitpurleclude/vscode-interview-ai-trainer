@@ -1,7 +1,6 @@
 ﻿import React, { useCallback, useMemo, useState, useEffect } from "react";
 import {
   ItApiTemplate,
-  ItConfigSnapshot,
   ItState,
   ItTemplateBindings,
   ItTemplateCategory,
@@ -22,6 +21,7 @@ import { parseQuestionsRemote } from "./utils/questions";
 import { useStreaming } from "./hooks/useStreaming";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useAnalysisFlow } from "./hooks/useAnalysisFlow";
+import { useConfigSync } from "./hooks/useConfigSync";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -59,7 +59,6 @@ const DEFAULT_STATE: ItState = {
 
 const InterviewTrainer: React.FC = () => {
   const [itState, setItState] = useState<ItState>(DEFAULT_STATE);
-  const [config, setConfig] = useState<ItConfigSnapshot | null>(null);
   const [activeTab, setActiveTab] = useState<ResultTab>("transcript");
   const [questionText, setQuestionText] = useState("");
   const [questionList, setQuestionList] = useState("");
@@ -130,8 +129,6 @@ const InterviewTrainer: React.FC = () => {
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
   const [showNoteUsage, setShowNoteUsage] = useState(false);
   const [showNoteSuggestions, setShowNoteSuggestions] = useState(false);
-  const [nativeInputs, setNativeInputs] = useState<string[]>([]);
-  const [selectedInput, setSelectedInput] = useState<string>("");
   const [apiForm, setApiForm] = useState({
     llm: {
       model: "",
@@ -189,486 +186,32 @@ const InterviewTrainer: React.FC = () => {
     null,
   );
   const [showRawOutput, setShowRawOutput] = useState(false);
-  const applyProfileToForm = useCallback((cfg: ItConfigSnapshot | null) => {
-    if (!cfg) return;
-    setApiForm((prev) => ({
-      ...prev,
-      llm: {
-        ...prev.llm,
-        model: cfg.llm?.model || "",
-        reasoningEffort: cfg.llm?.reasoningEffort || "",
-        webSearch: Boolean(cfg.llm?.webSearch ?? false),
-        stream: Boolean(cfg.llm?.stream ?? true),
-        timeoutSec: Number(cfg.llm?.timeoutSec ?? 60),
-        maxRetries: Number(cfg.llm?.maxRetries ?? 1),
-        antiRepeat: Boolean(cfg.llm?.antiRepeat ?? false),
-        reusePrefix: Boolean(cfg.llm?.reusePrefix ?? false),
-      },
-      asr: {
-        ...prev.asr,
-        language: cfg.asr?.language || "zh",
-        devPid: Number(cfg.asr?.devPid ?? 1537),
-        maxChunkSec: Number(cfg.asr?.maxChunkSec ?? 50),
-        maxConcurrency: Number(cfg.asr?.maxConcurrency ?? 1),
-        timeoutSec: Number(cfg.asr?.timeoutSec ?? 120),
-        maxRetries: Number(cfg.asr?.maxRetries ?? 1),
-      },
-    }));
-  }, []);
-  const applyRetrievalToForm = useCallback((cfg: ItConfigSnapshot | null) => {
-    if (!cfg) return;
-    const retrieval = cfg.retrieval || ({} as ItConfigSnapshot["retrieval"]);
-    const vector = retrieval.vector || ({} as ItConfigSnapshot["retrieval"]["vector"]);
-    setRetrievalForm({
-      mode: retrieval.mode || "vector",
-      topK: Number(retrieval.topK ?? 5),
-      topKNotes: Number(retrieval.topKNotes ?? retrieval.topK ?? 5),
-      topKKnowledge: Number(retrieval.topKKnowledge ?? retrieval.topK ?? 5),
-      topKRubrics: Number(retrieval.topKRubrics ?? retrieval.topK ?? 5),
-      topKExamples: Number(retrieval.topKExamples ?? retrieval.topK ?? 5),
-      maxConcurrency: Number(retrieval.maxConcurrency ?? 3),
-      embeddingMaxConcurrency: Number(retrieval.embeddingMaxConcurrency ?? 1),
-      minScore: Number(retrieval.minScore ?? 0.2),
-      vector: {
-        batchSize: Number(vector.batchSize ?? 16),
-        queryMaxChars: Number(vector.queryMaxChars ?? 1500),
-      },
-    });
-  }, []);
-  const [activePage, setActivePage] = useState<"practice" | "settings">("practice");
-  const [questionError, setQuestionError] = useState(false);
-  const uiLocked = !config;
-  const templatesSnapshot = config?.templates;
-  const templatesList = useMemo(
-    () => templatesSnapshot?.templates ?? [],
-    [templatesSnapshot],
-  );
-  const templatesByCategory = useMemo(
-    () =>
-      templatesList.filter((template) => template.category === templateCategory),
-    [templatesList, templateCategory],
-  );
-  const selectedTemplate = useMemo(
-    () => templatesList.find((item) => item.id === selectedTemplateId) || null,
-    [templatesList, selectedTemplateId],
-  );
-  const templateParamCatalog: ItTemplateParamCatalog | undefined =
-    templatesSnapshot?.paramCatalog;
-  const templateParamUsage: ItTemplateParamUsage | undefined =
-    templatesSnapshot?.paramUsage?.[selectedTemplate?.id || ""];
-  const paramCatalogList = useMemo(() => {
-    const common = templateParamCatalog?.common ?? [];
-    const scoped =
-      templateCategory === "llm"
-        ? templateParamCatalog?.llm ?? []
-        : templateCategory === "asr"
-          ? templateParamCatalog?.asr ?? []
-          : templateCategory === "embedding"
-            ? templateParamCatalog?.embedding ?? []
-            : [];
-    return Array.from(new Set([...common, ...scoped]));
-  }, [templateParamCatalog, templateCategory]);
-  const templateUsageSets = useMemo(
-    () => ({
-      used: new Set(templateParamUsage?.used ?? []),
-      unused: new Set(templateParamUsage?.unused ?? []),
-      unknown: new Set(templateParamUsage?.unknown ?? []),
-      empty: new Set(templateParamUsage?.empty ?? []),
-    }),
-    [templateParamUsage],
-  );
-  const llmTemplates = useMemo(
-    () => templatesList.filter((template) => template.category === "llm"),
-    [templatesList],
-  );
-  const asrTemplates = useMemo(
-    () => templatesList.filter((template) => template.category === "asr"),
-    [templatesList],
-  );
-  const embeddingTemplates = useMemo(
-    () => templatesList.filter((template) => template.category === "embedding"),
-    [templatesList],
-  );
-  const embeddingWarmup = itState.embeddingWarmup;
-  const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
-
-  useEffect(() => {
-    (window as any).__itReady = true;
-    request("it/getState", undefined).then((resp) => {
-      if (resp?.status === "success" && resp.content) {
-        setItState(resp.content);
-      }
-    });
-    request("it/getConfig", undefined).then((resp) => {
-      if (resp?.status === "success" && resp.content) {
-        setConfig(resp.content);
-        applyProfileToForm(resp.content);
-        applyRetrievalToForm(resp.content);
-        setCustomPrompt(
-          resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
-        );
-        setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
-        setPerQuestionSystemPrompts(
-          resp.content.prompts?.perQuestionSystemPrompts?.slice(0, 3) ?? ["", "", ""],
-        );
-        setPerQuestionDemoPrompts(
-          resp.content.prompts?.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
-        );
-      } else {
-        // fallback to unlock UI even if后端出错
-        const fallbackConfig: ItConfigSnapshot = {
-          activeEnvironment: "prod",
-          envList: ["prod"],
-          llmProvider: "baidu_qianfan",
-          asrProvider: "baidu_vop",
-          acousticProvider: "api",
-          llmProfiles: {},
-          asrProfiles: {},
-          providerProfiles: {},
-          prompts: {
-            evaluationPrompt: STRICT_SYSTEM_PROMPT,
-            demoPrompt: DEFAULT_DEMO_PROMPT,
-            perQuestionSystemPrompts: ["", "", ""],
-            perQuestionDemoPrompts: ["", "", ""],
-          },
-          llmTasks: {
-            questionParse: "",
-            segment: "",
-            evaluation: "",
-          },
-          llm: {
-            provider: "baidu_qianfan",
-            baseUrl: "https://qianfan.baidubce.com/v2",
-            model: "ernie-4.5-turbo-128k",
-            apiKey: "",
-            temperature: 0.8,
-            topP: 0.8,
-            timeoutSec: 60,
-            maxRetries: 1,
-            useResponses: false,
-            apiMode: "chat",
-            responsesPath: "/v1/responses",
-            toolsPreset: "",
-            webSearch: false,
-            reasoningEffort: "medium",
-            maxOutputTokens: 800,
-            reusePrefix: false,
-            stream: true,
-          },
-          templates: {
-            templates: [],
-            bindings: { llm: {}, asr: {}, embedding: {} },
-            paramCatalog: {
-              common: ["apiKey", "secretKey", "timeoutSec", "stream"],
-              llm: [
-                "model",
-                "messages",
-                "input",
-                "instructions",
-                "temperature",
-                "topP",
-                "reasoningEffort",
-                "maxOutputTokens",
-                "webSearch",
-                "reusePrefix",
-              ],
-              asr: ["audioFile", "asr.lang", "asr.dev_pid"],
-              embedding: ["embeddingInput", "model"],
-            },
-            paramUsage: {},
-            paramOptions: { reasoningEffort: ["low", "medium", "high", "xhigh"] },
-            secretNames: [],
-          },
-          asr: {
-            provider: "baidu_vop",
-            baseUrl: "https://vop.baidu.com/server_api",
-            apiKey: "",
-            secretKey: "",
-            language: "zh",
-            devPid: 1537,
-            mockText: "",
-            maxChunkSec: 50,
-            maxConcurrency: 1,
-            timeoutSec: 120,
-            maxRetries: 1,
-          },
-          sessionsDir: "sessions",
-          retrievalEnabled: true,
-          retrieval: {
-            mode: "vector",
-            topK: 5,
-            minScore: 0.2,
-            embeddingProvider: "volc_doubao",
-            vector: {
-              provider: "volc_doubao",
-              baseUrl: "https://ark.cn-beijing.volces.com",
-              apiKey: "",
-              model: "doubao-embedding",
-              timeoutSec: 30,
-              maxRetries: 1,
-              batchSize: 16,
-              queryMaxChars: 1500,
-            },
-          },
-          workspaceDirs: {
-            notesDir: "inputs/notes",
-            promptsDir: "inputs/prompts/guangdong",
-            rubricsDir: "inputs/rubrics",
-            knowledgeDir: "inputs/knowledge",
-            examplesDir: "inputs/examples",
-          },
-        };
-        setConfig(fallbackConfig);
-        setCustomPrompt(STRICT_SYSTEM_PROMPT);
-        setDemoPrompt(DEFAULT_DEMO_PROMPT);
-        setPerQuestionSystemPrompts(["", "", ""]);
-        setPerQuestionDemoPrompts(["", "", ""]);
-        setItState((prev) => ({
-          ...prev,
-          statusMessage: "配置加载失败，已使用默认配置",
-        }));
-      }
-    });
-    request("it/listNativeInputs", undefined).then((resp) => {
-      if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
-        setNativeInputs(resp.content.inputs);
-        setSelectedInput(resp.content.inputs[0] || "");
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!config) return;
-    applyProfileToForm(config);
-    applyRetrievalToForm(config);
-    if (config.prompts) {
-      setCustomPrompt(config.prompts.evaluationPrompt ?? STRICT_SYSTEM_PROMPT);
-      setDemoPrompt(config.prompts.demoPrompt ?? DEFAULT_DEMO_PROMPT);
-      setPerQuestionSystemPrompts(
-        config.prompts.perQuestionSystemPrompts?.slice(0, 3) ?? ["", "", ""],
-      );
-      setPerQuestionDemoPrompts(
-        config.prompts.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
-      );
-    }
-    const nextAnswerMode = String(config.evaluation?.answerMode || "two-step");
-    setAnswerMode(nextAnswerMode === "single" ? "single" : "two-step");
-    const nextTitleMode = String(config.topics?.titleMode || "llm");
-    setTopicTitleMode(nextTitleMode === "simple" ? "simple" : "llm");
-    const nextTitleLen = Number(config.topics?.maxTitleLen ?? 18);
-    setTopicTitleLen(Number.isFinite(nextTitleLen) ? nextTitleLen : 18);
-    if (config.streaming) {
-      const nextPreview = Number(config.streaming.previewChars ?? 200);
-      setStreamingSettings({
-        enabled: config.streaming.enabled !== false,
-        autoCollapse: config.streaming.autoCollapse !== false,
-        previewChars: Number.isFinite(nextPreview) ? Math.max(50, nextPreview) : 200,
-      });
-    }
-    if (config.templates) {
-      setTemplateBindings(config.templates.bindings || { llm: {}, asr: {}, embedding: {} });
-      setTemplateParamOptions(
-        config.templates.paramOptions?.reasoningEffort ?? ["low", "medium", "high", "xhigh"],
-      );
-      setTemplateSecrets(config.templates.secretNames ?? []);
-    }
-  }, [config, applyProfileToForm, applyRetrievalToForm]);
-
-  useEffect(() => {
-    if (isCreatingTemplate) {
-      return;
-    }
-    if (!templatesByCategory.length) {
-      setSelectedTemplateId("");
-      setTemplateDraft(null);
-      setTemplateDraftOrigin(null);
-      return;
-    }
-    if (!selectedTemplateId || !templatesByCategory.some((item) => item.id === selectedTemplateId)) {
-      setSelectedTemplateId(templatesByCategory[0].id);
-    }
-  }, [templatesByCategory, selectedTemplateId, isCreatingTemplate]);
-
-  useEffect(() => {
-    if (isCreatingTemplate) {
-      return;
-    }
-    if (!selectedTemplate) {
-      setTemplateDraft(null);
-      setTemplateDraftOrigin(null);
-      return;
-    }
-    setTemplateDraft(cloneTemplate(selectedTemplate));
-    setTemplateDraftOrigin(selectedTemplate.id);
-    setTemplateJsonDraft({
-      headers: formatJson(selectedTemplate.request?.headers, "{}"),
-      query: formatJson(selectedTemplate.request?.query, "{}"),
-      body: formatJson(selectedTemplate.request?.body, "{}"),
-    });
-    setTemplateJsonErrors({});
-  }, [selectedTemplate, isCreatingTemplate]);
-
-  useEffect(() => {
-    const disposeState = on("it/stateUpdate", (data) => {
-      setItState(data);
-    });
-    const disposeConfig = on("it/configUpdate", (data) => {
-      setConfig(data);
-    });
-    return () => {
-      disposeState();
-      disposeConfig();
-    };
-  }, []);
-
-
-
-
-  const thinkingVisible = useMemo(() => {
-    return itState.steps.some(
-      (step) =>
-        step.status === "running" &&
-        ["question", "acoustic", "asr", "notes", "evaluation"].includes(step.id),
-    );
-  }, [itState]);
-
-  const parsedQuestionList = useMemo(
-    () =>
-      questionList
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
-    [questionList],
-  );
-  const hasQuestion = useMemo(
-    () => questionText.trim().length > 0 || parsedQuestionList.length > 0,
-    [questionText, parsedQuestionList],
-  );
   const {
-    audioPayload,
-    isImporting,
-    recordingTime,
-    handleStartRecording,
-    handleStopRecording,
-    handleImportAudio,
-  } = useAudioCapture({
+    config,
+    setConfig,
+    nativeInputs,
     selectedInput,
-    hasQuestion,
+    setSelectedInput,
+    handleRefreshInputs,
+    applyRetrievalToForm,
+    reloadConfig,
+  } = useConfigSync({
     setItState,
+    setCustomPrompt,
+    setDemoPrompt,
+    setPerQuestionSystemPrompts,
+    setPerQuestionDemoPrompts,
+    setAnswerMode,
+    setTopicTitleMode,
+    setTopicTitleLen,
+    setStreamingSettings,
+    setTemplateBindings,
+    setTemplateParamOptions,
+    setTemplateSecrets,
+    setApiForm,
+    setRetrievalForm,
   });
 
-  const {
-    analysisResult,
-    isProcessing,
-    savingResult,
-    saveResultMessage,
-    historyItems,
-    regeneratingIndex,
-    handleAnalyze,
-    handleRegenerateDemoAnswer,
-    handleCancelAnalyze,
-    handleSaveResult,
-    handleLoadHistory,
-  } = useAnalysisFlow({
-    audioPayload,
-    hasQuestion,
-    questionText,
-    parsedQuestionList,
-    perQuestionSystemPrompts,
-    perQuestionDemoPrompts,
-    customPrompt,
-    demoPrompt,
-    itState,
-    setItState,
-    setQuestionText,
-    setQuestionList,
-    setQuestionParsed,
-    setQuestionError,
-    setActiveTab,
-    setActivePage,
-    setShowNoteHits,
-    resetStreams,
-    resetEvaluationStream,
-  });
-
-  useEffect(() => {
-    setShowRawOutput(false);
-  }, [analysisResult]);
-
-  const evaluationStreamQuestions = useMemo(() => {
-    const list =
-      (analysisResult?.questionList && analysisResult.questionList.length
-        ? analysisResult.questionList
-        : parsedQuestionList) || [];
-    if (list.length) {
-      return list.slice(0, 3);
-    }
-    const fallback = questionText.trim();
-    return fallback ? [fallback] : [];
-  }, [analysisResult, parsedQuestionList, questionText]);
-  const buildQuestionParseInput = useCallback(() => {
-    const text = questionText.trim();
-    const list = questionList.trim();
-    if (text && list) {
-      return `${text}\n\n${list}`;
-    }
-    return text || list;
-  }, [questionText, questionList]);
-  const retrievalDirs = useMemo(() => {
-    if (!config) {
-      return [];
-    }
-    return [
-      { key: "notes", label: "笔记", value: config.workspaceDirs.notesDir },
-      { key: "prompts", label: "题干材料", value: config.workspaceDirs.promptsDir },
-      { key: "rubrics", label: "评分标准", value: config.workspaceDirs.rubricsDir },
-      { key: "knowledge", label: "知识库", value: config.workspaceDirs.knowledgeDir },
-      { key: "examples", label: "示例答案", value: config.workspaceDirs.examplesDir },
-    ];
-  }, [config]);
-
-  const transcriptPreview = analysisResult?.transcript || itState.draftTranscript || "";
-  const detailedTranscriptPreview =
-    analysisResult?.detailedTranscript || itState.draftDetailedTranscript;
-  const acousticPreview = analysisResult?.acoustic || itState.draftAcoustic;
-  const notesPreview = analysisResult?.notes ?? itState.draftNotes;
-  const questionTimingsPreview =
-    analysisResult?.questionTimings ?? itState.draftQuestionTimings;
-  const questionTimingNotePreview =
-    analysisResult?.questionTimingNote ?? itState.draftQuestionTimingNote;
-  const evaluationPreview = analysisResult?.evaluation || itState.draftEvaluation || null;
-  const retrievalCacheInfo = config?.retrievalCache;
-  const corpusCachePath = retrievalCacheInfo?.corpusCacheDir || "";
-  const embeddingCachePath = retrievalCacheInfo?.embeddingCacheDir || "";
-  const corpusCacheMb = retrievalCacheInfo?.corpusCacheMb;
-  const queryCacheSize = retrievalCacheInfo?.queryCacheSize;
-  const maxConcurrency = retrievalCacheInfo?.maxConcurrency;
-  const hasAnyResult =
-    Boolean(analysisResult) ||
-    Boolean(itState.draftTranscript) ||
-    Boolean(itState.draftDetailedTranscript) ||
-    Boolean(itState.draftEvaluation) ||
-    Boolean(itState.draftAcoustic) ||
-    typeof itState.draftNotes !== "undefined" ||
-    Boolean(itState.draftQuestionTimings) ||
-    Boolean(itState.draftQuestionTimingNote);
-  const hasTranscriptContent = Boolean(
-    analysisResult || itState.draftTranscript || itState.draftDetailedTranscript,
-  );
-  const streamPreviewChars = Math.max(50, streamingSettings.previewChars || 200);
-
-  useEffect(() => {
-    if (questionError && hasQuestion) {
-      setQuestionError(false);
-    }
-  }, [questionError, hasQuestion]);
-
-  const handleQuestionTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setQuestionText(event.target.value);
-    if (questionParsed) {
-      setQuestionParsed(false);
-    }
-  };
 
   const handleQuestionListChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setQuestionList(event.target.value);
@@ -1357,16 +900,7 @@ const InterviewTrainer: React.FC = () => {
     setClearingCorpusCache(false);
   };
   const handleReloadConfig = async () => {
-    const resp = await request("it/getConfig", undefined);
-    if (resp?.status === "success" && resp.content) {
-      setConfig(resp.content);
-      applyProfileToForm(resp.content);
-      applyRetrievalToForm(resp.content);
-      setCustomPrompt(
-        resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
-      );
-      setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
-    }
+    await reloadConfig();
   };
   const handleOpenSettings = () => {
     request("it/openSettings", undefined);
@@ -1379,21 +913,6 @@ const InterviewTrainer: React.FC = () => {
   };
   const handleSelectWorkspaceDir = async (kind: string) => {
     await request("it/selectWorkspaceDir", { kind });
-  };
-  const handleRefreshInputs = async () => {
-    const resp = await request("it/listNativeInputs", { refresh: true });
-    if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
-      const inputs = resp.content.inputs;
-      setNativeInputs(inputs);
-      if (inputs.length && !inputs.includes(selectedInput)) {
-        setSelectedInput(inputs[0] || "");
-      }
-      return;
-    }
-    setItState((prev) => ({
-      ...prev,
-      statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
-    }));
   };
   const handleParseQuestions = async () => {
     const merged = buildQuestionParseInput();
