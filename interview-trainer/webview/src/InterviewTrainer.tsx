@@ -8,6 +8,7 @@ import {
   ItStepState,
 } from "./types";
 import { on, request } from "./messenger";
+import { StreamCard } from "./components/StreamCard";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -2394,9 +2395,6 @@ const InterviewTrainer: React.FC = () => {
           const isEvaluationStep = step.id === "evaluation";
           const showStream = streamingSettings.enabled && stream?.text && !isEvaluationStep;
           const previewChars = Math.max(50, streamingSettings.previewChars || 200);
-          const previewText = showStream
-            ? String(stream?.text || "").slice(-previewChars)
-            : "";
           return (
             <div key={step.id} className={`it-step it-step--${step.status}`}>
             <div className="it-step__content">
@@ -2425,83 +2423,59 @@ const InterviewTrainer: React.FC = () => {
                         ? "输出中"
                         : "等待";
                     return (
-                      <div
+                      <StreamCard
                         key={`eval-stream-${idx}`}
-                        className={`it-evaluation__stream-card ${
-                          evalStream?.done ? "is-done" : ""
-                        }`}
-                      >
-                        <div className="it-evaluation__stream-header">
-                          <span className="it-evaluation__stream-title">{label}</span>
-                          <span className="it-evaluation__stream-status">{status}</span>
-                          {isActive && (
-                            <button
-                              type="button"
-                              className="it-link-button it-evaluation__stream-toggle"
-                              onClick={() =>
-                                setEvaluationStreams((prev) => ({
-                                  ...prev,
-                                  [idx]: {
-                                    ...(prev[idx] || {
-                                      text: "",
-                                      collapsed: false,
-                                      done: false,
-                                    }),
-                                    collapsed: !prev[idx]?.collapsed,
-                                  },
-                                }))
-                              }
-                            >
-                              {evalStream?.collapsed ? "展开" : "收起"}
-                            </button>
-                          )}
-                        </div>
-                        {evalStream?.collapsed ? (
-                          <div className="it-evaluation__stream-preview">
-                            {evalStream?.text || "（等待输出）"}
-                          </div>
-                        ) : (
-                          <div className="it-evaluation__stream-text">
-                            {evalStream?.text || "（等待输出）"}
-                          </div>
-                        )}
-                      </div>
+                        variant="evaluation"
+                        title={label}
+                        status={status}
+                        text={evalStream?.text}
+                        collapsed={evalStream?.collapsed}
+                        done={evalStream?.done}
+                        showToggle={isActive}
+                        previewLimit={previewChars}
+                        onToggle={() =>
+                          setEvaluationStreams((prev) => ({
+                            ...prev,
+                            [idx]: {
+                              ...(prev[idx] || {
+                                text: "",
+                                collapsed: false,
+                                done: false,
+                              }),
+                              collapsed: !prev[idx]?.collapsed,
+                            },
+                          }))
+                        }
+                      />
                     );
                   })}
                 </div>
               </div>
             )}
             {showStream && (
-              <div className="it-step__stream">
-                <div className="it-step__stream-header">
-                  <span>实时输出</span>
-                  <button
-                    className="it-link-button it-step__stream-toggle"
-                    onClick={() =>
-                      setStepStreams((prev) => {
-                        const current = prev[step.id];
-                        if (!current) {
-                          return prev;
-                        }
-                        return {
-                          ...prev,
-                          [step.id]: {
-                            ...current,
-                            collapsed: !current.collapsed,
-                          },
-                        };
-                      })
+              <StreamCard
+                variant="step"
+                title="实时输出"
+                text={stream?.text}
+                collapsed={stream?.collapsed}
+                showToggle
+                previewLimit={previewChars}
+                onToggle={() =>
+                  setStepStreams((prev) => {
+                    const current = prev[step.id];
+                    if (!current) {
+                      return prev;
                     }
-                  >
-                    {stream?.collapsed ? "展开" : "收起"}
-                  </button>
-                </div>
-                {stream?.collapsed ? (
-                  <div className="it-step__stream-preview">{previewText}</div>
-                ) : (
-                  <div className="it-step__stream-text">{stream?.text}</div>
-                )}
-              </div>
+                    return {
+                      ...prev,
+                      [step.id]: {
+                        ...current,
+                        collapsed: !current.collapsed,
+                      },
+                    };
+                  })
+                }
+              />
             )}
           </div>
         );
