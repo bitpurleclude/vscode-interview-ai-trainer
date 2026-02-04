@@ -1051,6 +1051,214 @@
   margin-bottom: 6px;
 }
 
+.it-chip {
+  border: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-sideBarSectionHeader-background);
+  color: var(--vscode-sideBar-foreground);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.it-chip.active {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-editorWidget-background);
+  font-weight: 600;
+}
+
+.it-chip.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.it-template__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.it-template {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(320px, 1fr) minmax(220px, 260px);
+  gap: 12px;
+}
+
+.it-template__list,
+.it-template__editor,
+.it-template__sidebar {
+  border-radius: 8px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  background: var(--vscode-editorWidget-background);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.it-template__list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.it-template__list-title {
+  font-weight: 600;
+}
+
+.it-template__list-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.it-template__list-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--vscode-sideBarSectionHeader-background);
+  cursor: pointer;
+}
+
+.it-template__list-item.is-active {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-editorWidget-background);
+}
+
+.it-template__list-name {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.it-template__list-meta {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-template__json-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.it-template__json-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.it-template__textarea {
+  min-height: 140px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+}
+
+.it-template__stream-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.it-template__panel {
+  border: 1px dashed var(--vscode-sideBar-border);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--vscode-sideBarSectionHeader-background);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.it-template__panel-title {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.it-template__param-list,
+.it-template__secret-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.it-template__param-item,
+.it-template__secret-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-editorWidget-background);
+  font-size: 11px;
+}
+
+.it-template__param-item.used {
+  border-color: color-mix(in srgb, var(--vscode-testing-iconPassed) 45%, transparent);
+}
+
+.it-template__param-item.unused {
+  border-color: color-mix(in srgb, var(--vscode-descriptionForeground) 40%, transparent);
+}
+
+.it-template__param-item.unknown {
+  border-color: color-mix(in srgb, var(--vscode-errorForeground) 55%, transparent);
+}
+
+.it-template__param-item.empty {
+  border-color: color-mix(in srgb, var(--vscode-notificationsWarningIcon-foreground) 55%, transparent);
+}
+
+.it-template__param-status {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-template__param-extra {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-template__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.it-template__test {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.it-template__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.it-template__card {
+  border: 1px solid var(--vscode-editorWidget-border);
+  background: var(--vscode-editorWidget-background);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 980px) {
+  .it-template {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .it-flow {
     grid-template-columns: 1fr;

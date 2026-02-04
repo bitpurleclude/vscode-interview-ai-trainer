@@ -100,6 +100,7 @@ export class ItConfigService {
         asr: {},
         embedding: {},
       },
+      secrets: [],
       param_options: {
         reasoning_effort: ["low", "medium", "high", "xhigh"],
       },
@@ -170,24 +171,33 @@ export class ItConfigService {
     });
   }
 
+  saveTemplateSecrets(
+    templatesConfig: ItTemplatesConfig,
+    environment: string,
+    secretNames: string[],
+  ): ItTemplatesConfig {
+    const ensured = this.ensureTemplateEnvironment(templatesConfig, environment);
+    const envConfig = ensured.environments?.[environment] || {};
+    const cleaned = Array.from(new Set(secretNames.map((item) => String(item || "").trim())))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return this.applyTemplateEnvConfig(ensured, environment, {
+      ...envConfig,
+      secrets: cleaned,
+    });
+  }
+
   async ensureTemplatesConfig(bundle: ItConfigBundle): Promise<ItConfigBundle> {
     const templatesConfig = bundle.templates || { version: 1, environments: {} };
     const env = bundle.api.active?.environment || "prod";
-    const envConfig = templatesConfig.environments?.[env];
-    const hasTemplates = Boolean(
-      envConfig && envConfig.templates && Object.keys(envConfig.templates).length > 0,
-    );
-    if (hasTemplates) {
+    const ensured = this.ensureTemplateEnvironment(templatesConfig, env);
+    if (ensured === templatesConfig) {
       return bundle;
     }
-    const migrated = await this.migrateTemplatesFromLegacy(bundle, env);
-    if (!migrated) {
-      return bundle;
-    }
-    this.saveTemplatesConfig(migrated);
+    this.saveTemplatesConfig(ensured);
     return {
       ...bundle,
-      templates: migrated,
+      templates: ensured,
     };
   }
 
@@ -337,6 +347,7 @@ export class ItConfigService {
       reuse_prefix: Boolean(
         form.reusePrefix ?? baseLlm.reuse_prefix ?? baseLlm.reusePrefix ?? false,
       ),
+      stream: Boolean(form.stream ?? baseLlm.stream ?? baseLlm.stream_enabled ?? true),
     };
   }
 

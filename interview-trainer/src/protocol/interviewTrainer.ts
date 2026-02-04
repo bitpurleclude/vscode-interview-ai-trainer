@@ -92,6 +92,7 @@ export interface ItTemplatesSnapshot {
   paramOptions?: {
     reasoningEffort: string[];
   };
+  secretNames?: string[];
 }
 export interface ItStepState {
   id: ItWorkflowStep;

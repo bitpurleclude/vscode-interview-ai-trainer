@@ -66,6 +66,178 @@ export function it_registerConfigHandlers(host: ItWebviewHandlersHost): void {
     host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
     return host.configSnapshot;
   });
+
+  host.webviewProtocol.on("it/saveTemplateSecret", async (msg) => {
+    const payload = msg.data || {};
+    const name = String(payload.name || "").trim();
+    if (!name) {
+      throw new Error("missing secret name");
+    }
+    const hasValue = Object.prototype.hasOwnProperty.call(payload, "value");
+    const value = hasValue ? String(payload.value ?? "") : "";
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    const envConfig = templatesConfig.environments?.[env] || {};
+    const existing = Array.isArray(envConfig.secrets) ? envConfig.secrets : [];
+    templatesConfig = host.configService.saveTemplateSecrets(templatesConfig, env, [
+      ...existing,
+      name,
+    ]);
+    host.configService.saveTemplatesConfig(templatesConfig);
+    if (hasValue) {
+      await host.context.secrets.store(
+        `interviewTrainer.${env}.secret.${name}`,
+        value,
+      );
+    }
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/deleteTemplateSecret", async (msg) => {
+    const name = String(msg.data?.name || "").trim();
+    if (!name) {
+      throw new Error("missing secret name");
+    }
+    host.configBundle = host.configService.loadBundle();
+    const env = host.configBundle.api.active?.environment || "prod";
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    const envConfig = templatesConfig.environments?.[env] || {};
+    const existing = Array.isArray(envConfig.secrets) ? envConfig.secrets : [];
+    const nextSecrets = existing.filter((item: string) => item !== name);
+    templatesConfig = host.configService.saveTemplateSecrets(
+      templatesConfig,
+      env,
+      nextSecrets,
+    );
+    host.configService.saveTemplatesConfig(templatesConfig);
+    await host.context.secrets.delete(`interviewTrainer.${env}.secret.${name}`);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/setActiveEnvironment", async (msg) => {
+    const environment = String(msg.data?.environment || "").trim();
+    if (!environment) {
+      throw new Error("missing environment");
+    }
+    host.configBundle = host.configService.loadBundle();
+    let apiConfig = { ...host.configBundle.api };
+    apiConfig.environments = {
+      ...(apiConfig.environments || {}),
+      [environment]: apiConfig.environments?.[environment] || {},
+    };
+    apiConfig.active = {
+      ...(apiConfig.active || { environment: "prod", llm: "", asr: "", acoustic: "api" }),
+      environment,
+    };
+    host.configService.saveApiConfig(apiConfig);
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    templatesConfig = host.configService.ensureTemplateEnvironment(
+      templatesConfig,
+      environment,
+    );
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/createTemplateEnvironment", async (msg) => {
+    const payload = msg.data || {};
+    const environment = String(payload.environment || "").trim();
+    if (!environment) {
+      throw new Error("missing environment");
+    }
+    host.configBundle = host.configService.loadBundle();
+    const currentEnv = host.configBundle.api.active?.environment || "prod";
+    let apiConfig = { ...host.configBundle.api };
+    if (apiConfig.environments?.[environment]) {
+      throw new Error("environment already exists");
+    }
+    const sourceEnv =
+      String(payload.cloneFrom || "").trim() ||
+      (apiConfig.environments?.[currentEnv] ? currentEnv : "prod");
+    const sourceApiEnv = apiConfig.environments?.[sourceEnv] || {};
+    apiConfig.environments = {
+      ...(apiConfig.environments || {}),
+      [environment]: { ...sourceApiEnv },
+    };
+    apiConfig.active = {
+      ...(apiConfig.active || { environment: "prod", llm: "", asr: "", acoustic: "api" }),
+      environment,
+    };
+    host.configService.saveApiConfig(apiConfig);
+
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    const sourceTemplateEnv = templatesConfig.environments?.[sourceEnv];
+    if (sourceTemplateEnv) {
+      const cloned = JSON.parse(JSON.stringify(sourceTemplateEnv));
+      templatesConfig = host.configService.applyTemplateEnvConfig(
+        templatesConfig,
+        environment,
+        cloned,
+      );
+    } else {
+      templatesConfig = host.configService.ensureTemplateEnvironment(
+        templatesConfig,
+        environment,
+      );
+    }
+    host.configService.saveTemplatesConfig(templatesConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
+  host.webviewProtocol.on("it/deleteTemplateEnvironment", async (msg) => {
+    const environment = String(msg.data?.environment || "").trim();
+    if (!environment) {
+      throw new Error("missing environment");
+    }
+    host.configBundle = host.configService.loadBundle();
+    let apiConfig = { ...host.configBundle.api };
+    const envList = Object.keys(apiConfig.environments || {});
+    if (!apiConfig.environments?.[environment]) {
+      throw new Error("environment not found");
+    }
+    if (envList.length <= 1) {
+      throw new Error("cannot delete the last environment");
+    }
+    const nextEnvs = { ...(apiConfig.environments || {}) };
+    delete nextEnvs[environment];
+    apiConfig.environments = nextEnvs;
+    if (apiConfig.active?.environment === environment) {
+      const nextActive = envList.find((item) => item !== environment) || "prod";
+      apiConfig.active = {
+        ...(apiConfig.active || { environment: "prod", llm: "", asr: "", acoustic: "api" }),
+        environment: nextActive,
+      };
+    }
+    host.configService.saveApiConfig(apiConfig);
+
+    let templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    if (templatesConfig.environments?.[environment]) {
+      const nextTemplateEnvs = { ...(templatesConfig.environments || {}) };
+      delete nextTemplateEnvs[environment];
+      templatesConfig = {
+        ...templatesConfig,
+        environments: nextTemplateEnvs,
+      };
+      host.configService.saveTemplatesConfig(templatesConfig);
+    }
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
   host.webviewProtocol.on("it/updateTopicSettings", async (msg) => {
     const payload = msg.data || {};
     const incoming = payload.topics || {};

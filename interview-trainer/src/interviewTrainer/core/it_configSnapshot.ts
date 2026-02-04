@@ -127,6 +127,9 @@ export function it_buildConfigSnapshot(
     }))
     .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
   const templateBindings = templateEnv.bindings || { llm: {}, asr: {}, embedding: {} };
+  const templateSecrets = Array.isArray(templateEnv.secrets)
+    ? templateEnv.secrets.map((item: any) => String(item || "").trim()).filter(Boolean)
+    : [];
   const paramOptions = {
     reasoningEffort: Array.isArray(templateEnv.param_options?.reasoning_effort)
       ? templateEnv.param_options.reasoning_effort
@@ -140,6 +143,7 @@ export function it_buildConfigSnapshot(
     paramCatalog,
     paramUsage,
     paramOptions,
+    secretNames: templateSecrets,
   };
   const llmConfig = envConfig.llm ?? {};
   const asrConfig = envConfig.asr ?? {};

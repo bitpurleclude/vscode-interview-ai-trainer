@@ -30,10 +30,6 @@ export function it_registerRetrievalHandlers(host: ItWebviewHandlersHost): void 
     const current = host.configBundle.skill.retrieval || {};
     const currentVector = current.vector || {};
     const incomingVector = incoming.vector || {};
-    const env = host.configBundle.api.active?.environment || "prod";
-    const storedEmbeddingKey =
-      (await host.context.secrets.get(`interviewTrainer.${env}.embedding.apiKey`)) ||
-      "";
     host.configBundle.skill = {
       ...host.configBundle.skill,
       retrieval: {
@@ -56,26 +52,8 @@ export function it_registerRetrievalHandlers(host: ItWebviewHandlersHost): void 
           incoming.embeddingMaxConcurrency ?? current.embedding_max_concurrency ?? 1,
         ),
         min_score: Number(incoming.minScore ?? current.min_score ?? 0.2),
-        embedding_provider:
-          incoming.embeddingProvider ||
-          current.embedding_provider ||
-          incomingVector.provider ||
-          currentVector.provider,
         vector: {
           ...currentVector,
-          provider: incomingVector.provider ?? currentVector.provider ?? "volc_doubao",
-          base_url:
-            incomingVector.baseUrl ??
-            currentVector.base_url ??
-            "https://ark.cn-beijing.volces.com",
-          api_key: host.it_firstNonEmpty(
-            incomingVector.apiKey,
-            currentVector.api_key,
-            storedEmbeddingKey,
-          ),
-          model: incomingVector.model ?? currentVector.model ?? "doubao-embedding",
-          timeout_sec: Number(incomingVector.timeoutSec ?? currentVector.timeout_sec ?? 30),
-          max_retries: Number(incomingVector.maxRetries ?? currentVector.max_retries ?? 1),
           batch_size: Number(incomingVector.batchSize ?? currentVector.batch_size ?? 16),
           query_max_chars: Number(
             incomingVector.queryMaxChars ?? currentVector.query_max_chars ?? 1500,
@@ -83,44 +61,6 @@ export function it_registerRetrievalHandlers(host: ItWebviewHandlersHost): void 
         },
       },
     };
-    const embeddingProvider =
-      incoming.embeddingProvider ||
-      current.embedding_provider ||
-      incomingVector.provider ||
-      currentVector.provider;
-    if (embeddingProvider) {
-      const existing = host.configBundle.providers?.[embeddingProvider] || {
-        provider: embeddingProvider,
-      };
-      host.configService.saveProviderConfig(embeddingProvider, {
-        ...existing,
-        provider: embeddingProvider,
-        embedding: {
-          ...(existing.embedding || {}),
-          provider: incomingVector.provider ?? existing.embedding?.provider ?? embeddingProvider,
-          base_url: incomingVector.baseUrl ?? existing.embedding?.base_url ?? "",
-          api_key: host.it_firstNonEmpty(
-            incomingVector.apiKey,
-            existing.embedding?.api_key,
-            storedEmbeddingKey,
-          ),
-          model: incomingVector.model ?? existing.embedding?.model ?? "",
-          timeout_sec: Number(
-            incomingVector.timeoutSec ?? existing.embedding?.timeout_sec ?? 30,
-          ),
-          max_retries: Number(
-            incomingVector.maxRetries ?? existing.embedding?.max_retries ?? 1,
-          ),
-        },
-      });
-    }
-    const resolvedEmbeddingKey = host.configBundle.skill.retrieval?.vector?.api_key || "";
-    if (resolvedEmbeddingKey) {
-      await host.context.secrets.store(
-        `interviewTrainer.${env}.embedding.apiKey`,
-        resolvedEmbeddingKey,
-      );
-    }
     host.configService.saveSkillConfig(host.configBundle.skill);
     host.configSnapshot = await host.refreshConfigSnapshot();
     host.webviewProtocol.send("it/configUpdate", host.configSnapshot);

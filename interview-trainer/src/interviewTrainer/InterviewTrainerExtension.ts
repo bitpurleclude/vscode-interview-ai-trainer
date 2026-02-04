@@ -147,7 +147,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     await it_applyEmbeddingSecretOverrides(this);
   }
 
-  public it_getLlmConfig(profileId?: string): ItLlmConfig | null {
+  public it_getLlmConfig(
+    profileId?: string,
+    options?: { allowMissingAuth?: boolean },
+  ): ItLlmConfig | null {
     const env = this.configBundle.api.active?.environment || "prod";
     const envConfig = this.configBundle.api.environments?.[env] ?? {};
     const providerId =
@@ -171,10 +174,12 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       base_url: profile?.base_url || profile?.baseUrl || baseLlm.base_url,
       model: profile?.model || baseLlm.model,
     };
-    if (!llm.provider || !llm.api_key) {
+    const provider = llm.provider || providerId || "openai_compatible";
+    const apiKey = llm.api_key || "";
+    if (!provider || (!apiKey && !options?.allowMissingAuth)) {
       return null;
     }
-    const isDoubao = llm.provider === "volc_doubao";
+    const isDoubao = provider === "volc_doubao";
     const defaultBase = isDoubao
       ? "https://ark.cn-beijing.volces.com"
       : "https://qianfan.baidubce.com/v2";
@@ -188,8 +193,8 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       ? apiMode === "responses"
       : Boolean(llm.use_responses ?? llm.useResponses ?? (isDoubao ? true : false));
     return {
-      provider: llm.provider,
-      apiKey: llm.api_key || "",
+      provider,
+      apiKey,
       baseUrl: llm.base_url || defaultBase,
       model:
         llm.model ||

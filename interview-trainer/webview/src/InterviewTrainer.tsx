@@ -2,13 +2,19 @@
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
+  ItApiTemplate,
   ItConfigSnapshot,
   ItHistoryItem,
   ItState,
   ItStepState,
+  ItTemplateBindings,
+  ItTemplateCategory,
+  ItTemplateParamCatalog,
+  ItTemplateParamUsage,
 } from "./types";
 import { on, request } from "./messenger";
 import { StreamCard } from "./components/StreamCard";
+import { SettingsPage } from "./components/settings/SettingsPage";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -216,6 +222,36 @@ function it_bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function it_cloneTemplate(template: ItApiTemplate): ItApiTemplate {
+  return JSON.parse(JSON.stringify(template)) as ItApiTemplate;
+}
+
+function it_formatJson(value: unknown, fallback = "{}"): string {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return fallback;
+  }
+}
+
+function it_parseJson(text: string): { ok: true; value: any } | { ok: false; error: string } {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) {
+    return { ok: true, value: undefined };
+  }
+  try {
+    return { ok: true, value: JSON.parse(trimmed) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function it_parseQuestionsRemote(
   text: string,
 ): Promise<{ prompt: string; questions: string[]; source: string } | null> {
@@ -317,6 +353,41 @@ const InterviewTrainer: React.FC = () => {
     autoCollapse: true,
     previewChars: 200,
   });
+  const [templateCategory, setTemplateCategory] = useState<ItTemplateCategory>("llm");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateDraft, setTemplateDraft] = useState<ItApiTemplate | null>(null);
+  const [templateDraftOrigin, setTemplateDraftOrigin] = useState<string | null>(null);
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+  const [templateJsonDraft, setTemplateJsonDraft] = useState({
+    headers: "{\n  \"Content-Type\": \"application/json\"\n}",
+    query: "{}",
+    body: "{}",
+  });
+  const [templateJsonErrors, setTemplateJsonErrors] = useState<
+    Partial<Record<"headers" | "query" | "body", string>>
+  >({});
+  const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
+  const [templateBindings, setTemplateBindings] = useState<ItTemplateBindings>({
+    llm: {},
+    asr: {},
+    embedding: {},
+  });
+  const [templateParamOptions, setTemplateParamOptions] = useState<string[]>([]);
+  const [templateParamInput, setTemplateParamInput] = useState("");
+  const [templateSecrets, setTemplateSecrets] = useState<string[]>([]);
+  const [secretDraft, setSecretDraft] = useState({ name: "", value: "" });
+  const [secretMessage, setSecretMessage] = useState<string | null>(null);
+  const [envDraftName, setEnvDraftName] = useState("");
+  const [envMessage, setEnvMessage] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [savingBindings, setSavingBindings] = useState(false);
+  const [savingParamOptions, setSavingParamOptions] = useState(false);
+  const [savingSecret, setSavingSecret] = useState(false);
+  const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [savingLlmParams, setSavingLlmParams] = useState(false);
+  const [savingAsrParams, setSavingAsrParams] = useState(false);
+  const [llmParamsMessage, setLlmParamsMessage] = useState<string | null>(null);
+  const [asrParamsMessage, setAsrParamsMessage] = useState<string | null>(null);
   const [stepStreams, setStepStreams] = useState<
     Record<
       string,
@@ -350,62 +421,26 @@ const InterviewTrainer: React.FC = () => {
   const [selectedInput, setSelectedInput] = useState<string>("");
   const analysisRunRef = useRef(0);
   const analysisCancelledRef = useRef(false);
-  const [providerDraft, setProviderDraft] = useState({
-    id: "",
-    name: "",
-  });
   const [apiForm, setApiForm] = useState({
-    environment: "prod",
-    llmProfiles: {} as Record<string, any>,
-    asrProfiles: {} as Record<string, any>,
     llm: {
-      provider: "baidu_qianfan",
-      baseUrl: "https://qianfan.baidubce.com/v2",
-      model: "ernie-4.5-turbo-128k",
-      apiKey: "",
-      temperature: 0.8,
-      topP: 0.8,
+      model: "",
+      reasoningEffort: "",
+      webSearch: false,
+      stream: true,
       timeoutSec: 60,
       maxRetries: 1,
       antiRepeat: false,
-      useResponses: false,
-      apiMode: "chat",
-      responsesPath: "/v1/responses",
-      toolsPreset: "",
-      webSearch: false,
-      reasoningEffort: "medium",
-      maxOutputTokens: 800,
       reusePrefix: false,
-      stream: true,
     },
     asr: {
-      provider: "baidu_vop",
-      baseUrl: "https://vop.baidu.com/server_api",
-      apiKey: "",
-      secretKey: "",
       language: "zh",
       devPid: 1537,
-      mockText: "",
       maxChunkSec: 50,
       maxConcurrency: 1,
       timeoutSec: 120,
       maxRetries: 1,
     },
   });
-  const [llmTaskForm, setLlmTaskForm] = useState({
-    questionParse: "",
-    segment: "",
-    evaluation: "",
-  });
-  const [llmProfileDraft, setLlmProfileDraft] = useState({
-    id: "",
-    name: "",
-  });
-  const [selectedLlmProfileId, setSelectedLlmProfileId] = useState("");
-  const [savingLlmTasks, setSavingLlmTasks] = useState(false);
-  const [llmTaskSaveMessage, setLlmTaskSaveMessage] = useState<string | null>(null);
-  const [savingLlmProfile, setSavingLlmProfile] = useState(false);
-  const [llmProfileMessage, setLlmProfileMessage] = useState<string | null>(null);
   const [retrievalForm, setRetrievalForm] = useState({
     mode: "vector",
     topK: 5,
@@ -417,18 +452,10 @@ const InterviewTrainer: React.FC = () => {
     embeddingMaxConcurrency: 1,
     minScore: 0.2,
     vector: {
-      provider: "volc_doubao",
-      baseUrl: "https://ark.cn-beijing.volces.com",
-      model: "doubao-embedding",
-      apiKey: "",
-      timeoutSec: 30,
-      maxRetries: 1,
       batchSize: 16,
       queryMaxChars: 1500,
     },
   });
-  const [savingApiConfig, setSavingApiConfig] = useState(false);
-  const [apiSaveMessage, setApiSaveMessage] = useState<string | null>(null);
   const [savingRetrieval, setSavingRetrieval] = useState(false);
   const [retrievalSaveMessage, setRetrievalSaveMessage] = useState<string | null>(null);
   const [clearingEmbeddingCache, setClearingEmbeddingCache] = useState(false);
@@ -453,162 +480,36 @@ const InterviewTrainer: React.FC = () => {
     null,
   );
   const [showRawOutput, setShowRawOutput] = useState(false);
-  const [creatingProvider, setCreatingProvider] = useState(false);
-  const [providerCreateMessage, setProviderCreateMessage] = useState<string | null>(null);
-  const [testingLlm, setTestingLlm] = useState(false);
-  const [testingAsr, setTestingAsr] = useState(false);
-  const [llmTestMessage, setLlmTestMessage] = useState<string | null>(null);
-  const [asrTestMessage, setAsrTestMessage] = useState<string | null>(null);
-  const [asrTestRaw, setAsrTestRaw] = useState<string | null>(null);
-  const [testingEmbedding, setTestingEmbedding] = useState(false);
-  const [embeddingTestMessage, setEmbeddingTestMessage] = useState<string | null>(null);
-  const applyProfileToForm = useCallback(
-    (cfg: ItConfigSnapshot | null, targetProvider?: string, targetAsr?: string) => {
-      if (!cfg) return;
-      const provider = targetProvider || cfg.llmProvider || cfg.llm?.provider || "baidu_qianfan";
-      const asrProvider = targetAsr || cfg.asrProvider || cfg.asr?.provider || "baidu_vop";
-      const providerProfile = cfg.providerProfiles?.[provider] || null;
-      const asrProviderProfile = cfg.providerProfiles?.[asrProvider] || null;
-      const llmProfile =
-        (cfg.llm && cfg.llm.provider === provider ? cfg.llm : null) ||
-        (cfg.llmProfiles && cfg.llmProfiles[provider]) ||
-        (providerProfile?.llm as any);
-      const asrProfile =
-        (cfg.asr && cfg.asr.provider === asrProvider ? cfg.asr : null) ||
-        (cfg.asrProfiles && cfg.asrProfiles[asrProvider]) ||
-        (asrProviderProfile?.asr as any);
-      const isOpenAiCompat = provider === "openai_compatible";
-      const llmDefaults =
-        provider === "volc_doubao"
-          ? {
-              baseUrl: "https://ark.cn-beijing.volces.com",
-              model: "doubao-seed-1-8-251228",
-              useResponses: true,
-              apiMode: "responses",
-              responsesPath: "/api/v3/responses",
-              toolsPreset: "",
-              webSearch: true,
-              reasoningEffort: "medium",
-              maxOutputTokens: 800,
-              reusePrefix: true,
-              stream: true,
-            }
-          : {
-              baseUrl: "https://qianfan.baidubce.com/v2",
-              model: "ernie-4.5-turbo-128k",
-              useResponses: false,
-              apiMode: isOpenAiCompat ? "responses" : "chat",
-              responsesPath: "/v1/responses",
-              toolsPreset: isOpenAiCompat ? "codex_like" : "",
-              webSearch: false,
-              reasoningEffort: "medium",
-              maxOutputTokens: 800,
-              reusePrefix: false,
-              stream: true,
-            };
-      const asrDefaults = {
-        baseUrl: "https://vop.baidu.com/server_api",
-        language: "zh",
-        devPid: 1537,
-        mockText: "",
-        maxChunkSec: 50,
-        maxConcurrency: 1,
-        timeoutSec: 120,
-        maxRetries: 1,
-      };
-
-      setApiForm((prev) => ({
-        ...prev,
-        environment: cfg.activeEnvironment || "prod",
-        llmProfiles: cfg.llmProfiles || prev.llmProfiles,
-        asrProfiles: cfg.asrProfiles || prev.asrProfiles,
-        llm: {
-          provider,
-          baseUrl: llmProfile?.base_url || llmProfile?.baseUrl || llmDefaults.baseUrl,
-          model: llmProfile?.model || llmDefaults.model,
-          apiKey: llmProfile?.api_key || llmProfile?.apiKey || "",
-          temperature: Number(llmProfile?.temperature ?? 0.8),
-          topP: Number(llmProfile?.top_p ?? llmProfile?.topP ?? 0.8),
-          timeoutSec: Number(llmProfile?.timeout_sec ?? llmProfile?.timeoutSec ?? 60),
-          maxRetries: Number(llmProfile?.max_retries ?? llmProfile?.maxRetries ?? 1),
-          antiRepeat: Boolean(
-            llmProfile?.anti_repeat ?? llmProfile?.antiRepeat ?? prev.llm.antiRepeat ?? false,
-          ),
-          useResponses: Boolean(
-            llmProfile?.use_responses ??
-              llmProfile?.useResponses ??
-              llmDefaults.useResponses,
-          ),
-          apiMode: (() => {
-            const raw = llmProfile?.api_mode ?? llmProfile?.apiMode;
-            if (raw) {
-              return String(raw).toLowerCase() === "responses" ? "responses" : "chat";
-            }
-            const fallback = Boolean(
-              llmProfile?.use_responses ??
-                llmProfile?.useResponses ??
-                llmDefaults.useResponses,
-            );
-            return fallback ? "responses" : "chat";
-          })(),
-          responsesPath:
-            llmProfile?.responses_path ??
-            llmProfile?.responsesPath ??
-            llmDefaults.responsesPath,
-          toolsPreset:
-            llmProfile?.tools_preset ?? llmProfile?.toolsPreset ?? llmDefaults.toolsPreset,
-          webSearch: Boolean(
-            llmProfile?.web_search ?? llmProfile?.webSearch ?? llmDefaults.webSearch,
-          ),
-          reasoningEffort:
-            llmProfile?.reasoning_effort ??
-            llmProfile?.reasoningEffort ??
-            llmDefaults.reasoningEffort,
-          maxOutputTokens: Number(
-            llmProfile?.max_output_tokens ??
-              llmProfile?.maxOutputTokens ??
-              llmDefaults.maxOutputTokens,
-          ),
-          reusePrefix: Boolean(
-            llmProfile?.reuse_prefix ??
-              llmProfile?.reusePrefix ??
-              llmDefaults.reusePrefix,
-          ),
-          stream: Boolean(
-            llmProfile?.stream ??
-              llmProfile?.stream_enabled ??
-              llmDefaults.stream,
-          ),
-        },
-        asr: {
-          provider: asrProvider,
-          baseUrl: asrProfile?.base_url || asrProfile?.baseUrl || asrDefaults.baseUrl,
-          apiKey: asrProfile?.api_key || asrProfile?.apiKey || "",
-          secretKey: asrProfile?.secret_key || asrProfile?.secretKey || "",
-          language: asrProfile?.language || asrDefaults.language,
-          devPid: Number(asrProfile?.dev_pid ?? asrProfile?.devPid ?? asrDefaults.devPid),
-          mockText: asrProfile?.mock_text || asrProfile?.mockText || asrDefaults.mockText,
-          maxChunkSec: Number(asrProfile?.max_chunk_sec ?? asrProfile?.maxChunkSec ?? asrDefaults.maxChunkSec),
-          maxConcurrency: Number(
-            asrProfile?.max_concurrency ??
-              asrProfile?.maxConcurrency ??
-              asrDefaults.maxConcurrency,
-          ),
-          timeoutSec: Number(asrProfile?.timeout_sec ?? asrProfile?.timeoutSec ?? asrDefaults.timeoutSec),
-          maxRetries: Number(asrProfile?.max_retries ?? asrProfile?.maxRetries ?? asrDefaults.maxRetries),
-        },
-      }));
-    },
-    [],
-  );
+  const applyProfileToForm = useCallback((cfg: ItConfigSnapshot | null) => {
+    if (!cfg) return;
+    setApiForm((prev) => ({
+      ...prev,
+      llm: {
+        ...prev.llm,
+        model: cfg.llm?.model || "",
+        reasoningEffort: cfg.llm?.reasoningEffort || "",
+        webSearch: Boolean(cfg.llm?.webSearch ?? false),
+        stream: Boolean(cfg.llm?.stream ?? true),
+        timeoutSec: Number(cfg.llm?.timeoutSec ?? 60),
+        maxRetries: Number(cfg.llm?.maxRetries ?? 1),
+        antiRepeat: Boolean(cfg.llm?.antiRepeat ?? false),
+        reusePrefix: Boolean(cfg.llm?.reusePrefix ?? false),
+      },
+      asr: {
+        ...prev.asr,
+        language: cfg.asr?.language || "zh",
+        devPid: Number(cfg.asr?.devPid ?? 1537),
+        maxChunkSec: Number(cfg.asr?.maxChunkSec ?? 50),
+        maxConcurrency: Number(cfg.asr?.maxConcurrency ?? 1),
+        timeoutSec: Number(cfg.asr?.timeoutSec ?? 120),
+        maxRetries: Number(cfg.asr?.maxRetries ?? 1),
+      },
+    }));
+  }, []);
   const applyRetrievalToForm = useCallback((cfg: ItConfigSnapshot | null) => {
     if (!cfg) return;
     const retrieval = cfg.retrieval || ({} as ItConfigSnapshot["retrieval"]);
     const vector = retrieval.vector || ({} as ItConfigSnapshot["retrieval"]["vector"]);
-    const embeddingProvider =
-      retrieval.embeddingProvider || vector.provider || "volc_doubao";
-    const providerEmbedding =
-      (embeddingProvider && cfg.providerProfiles?.[embeddingProvider]?.embedding) || {};
     setRetrievalForm({
       mode: retrieval.mode || "vector",
       topK: Number(retrieval.topK ?? 5),
@@ -620,15 +521,6 @@ const InterviewTrainer: React.FC = () => {
       embeddingMaxConcurrency: Number(retrieval.embeddingMaxConcurrency ?? 1),
       minScore: Number(retrieval.minScore ?? 0.2),
       vector: {
-        provider: embeddingProvider,
-        baseUrl:
-          vector.baseUrl ||
-          providerEmbedding.base_url ||
-          "https://ark.cn-beijing.volces.com",
-        model: vector.model || providerEmbedding.model || "doubao-embedding",
-        apiKey: vector.apiKey || providerEmbedding.api_key || "",
-        timeoutSec: Number(vector.timeoutSec ?? providerEmbedding.timeout_sec ?? 30),
-        maxRetries: Number(vector.maxRetries ?? providerEmbedding.max_retries ?? 1),
         batchSize: Number(vector.batchSize ?? 16),
         queryMaxChars: Number(vector.queryMaxChars ?? 1500),
       },
@@ -643,114 +535,57 @@ const InterviewTrainer: React.FC = () => {
   });
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiLocked = !config;
-  const providerProfiles = config?.providerProfiles || {};
-  const providerList = useMemo(
-    () => Object.keys(providerProfiles).sort((a, b) => a.localeCompare(b)),
-    [providerProfiles],
+  const templatesSnapshot = config?.templates;
+  const templatesList = useMemo(
+    () => templatesSnapshot?.templates ?? [],
+    [templatesSnapshot],
   );
-  const llmProviders = useMemo(() => {
-    const base = providerList.length ? providerList : ["baidu_qianfan", "volc_doubao"];
-    return Array.from(new Set([...base, "heuristic"]));
-  }, [providerList]);
-  const asrProviders = useMemo(() => {
-    const filtered = providerList.filter((id) => providerProfiles?.[id]?.asr);
-    const base = filtered.length ? filtered : ["baidu_vop"];
-    return Array.from(new Set([...base, "mock"]));
-  }, [providerList, providerProfiles]);
-  const embeddingProviders = useMemo(() => {
-    const base = providerList.length ? providerList : ["volc_doubao", "baidu_qianfan", "openai_compatible"];
-    return Array.from(new Set(base));
-  }, [providerList]);
-  const getProviderLabel = useCallback(
-    (id: string) => providerProfiles[id]?.display_name || id,
-    [providerProfiles],
+  const templatesByCategory = useMemo(
+    () =>
+      templatesList.filter((template) => template.category === templateCategory),
+    [templatesList, templateCategory],
   );
-  const llmProfileList = useMemo(
-    () => Object.keys(apiForm.llmProfiles || {}).sort((a, b) => a.localeCompare(b)),
-    [apiForm.llmProfiles],
+  const selectedTemplate = useMemo(
+    () => templatesList.find((item) => item.id === selectedTemplateId) || null,
+    [templatesList, selectedTemplateId],
   );
-  const getLlmProfileLabel = useCallback(
-    (id: string) => apiForm.llmProfiles?.[id]?.display_name || id,
-    [apiForm.llmProfiles],
+  const templateParamCatalog: ItTemplateParamCatalog | undefined =
+    templatesSnapshot?.paramCatalog;
+  const templateParamUsage: ItTemplateParamUsage | undefined =
+    templatesSnapshot?.paramUsage?.[selectedTemplate?.id || ""];
+  const paramCatalogList = useMemo(() => {
+    const common = templateParamCatalog?.common ?? [];
+    const scoped =
+      templateCategory === "llm"
+        ? templateParamCatalog?.llm ?? []
+        : templateCategory === "asr"
+          ? templateParamCatalog?.asr ?? []
+          : templateCategory === "embedding"
+            ? templateParamCatalog?.embedding ?? []
+            : [];
+    return Array.from(new Set([...common, ...scoped]));
+  }, [templateParamCatalog, templateCategory]);
+  const templateUsageSets = useMemo(
+    () => ({
+      used: new Set(templateParamUsage?.used ?? []),
+      unused: new Set(templateParamUsage?.unused ?? []),
+      unknown: new Set(templateParamUsage?.unknown ?? []),
+      empty: new Set(templateParamUsage?.empty ?? []),
+    }),
+    [templateParamUsage],
   );
-  const resolveLlmApiMode = useCallback((raw: unknown, fallbackUseResponses: boolean) => {
-    if (raw) {
-      return String(raw).toLowerCase() === "responses" ? "responses" : "chat";
-    }
-    return fallbackUseResponses ? "responses" : "chat";
-  }, []);
-  const applyLlmProfileToForm = useCallback(
-    (profile: Record<string, any>) => {
-      if (!profile) {
-        return;
-      }
-      setApiForm((prev) => {
-        const fallbackUseResponses = Boolean(
-          profile.use_responses ?? profile.useResponses ?? prev.llm.useResponses,
-        );
-        const apiMode = resolveLlmApiMode(profile.api_mode ?? profile.apiMode, fallbackUseResponses);
-        return {
-          ...prev,
-          llm: {
-            ...prev.llm,
-            provider: profile.provider || prev.llm.provider,
-            baseUrl: profile.base_url || profile.baseUrl || prev.llm.baseUrl,
-            model: profile.model || prev.llm.model,
-            apiKey: profile.api_key || profile.apiKey || prev.llm.apiKey,
-            temperature: Number(profile.temperature ?? prev.llm.temperature),
-            topP: Number(profile.top_p ?? profile.topP ?? prev.llm.topP),
-            timeoutSec: Number(profile.timeout_sec ?? profile.timeoutSec ?? prev.llm.timeoutSec),
-            maxRetries: Number(profile.max_retries ?? profile.maxRetries ?? prev.llm.maxRetries),
-            antiRepeat: Boolean(
-              profile.anti_repeat ?? profile.antiRepeat ?? prev.llm.antiRepeat,
-            ),
-            useResponses: fallbackUseResponses,
-            apiMode,
-            responsesPath:
-              profile.responses_path ?? profile.responsesPath ?? prev.llm.responsesPath,
-            toolsPreset: profile.tools_preset ?? profile.toolsPreset ?? prev.llm.toolsPreset,
-            webSearch: Boolean(profile.web_search ?? profile.webSearch ?? prev.llm.webSearch),
-            reasoningEffort:
-              profile.reasoning_effort ?? profile.reasoningEffort ?? prev.llm.reasoningEffort,
-            maxOutputTokens: Number(
-              profile.max_output_tokens ??
-                profile.maxOutputTokens ??
-                prev.llm.maxOutputTokens,
-            ),
-            reusePrefix: Boolean(
-              profile.reuse_prefix ?? profile.reusePrefix ?? prev.llm.reusePrefix,
-            ),
-            stream: Boolean(profile.stream ?? profile.stream_enabled ?? prev.llm.stream),
-          },
-        };
-      });
-    },
-    [resolveLlmApiMode],
+  const llmTemplates = useMemo(
+    () => templatesList.filter((template) => template.category === "llm"),
+    [templatesList],
   );
-  const handleLoadLlmProfile = useCallback(
-    (profileId: string) => {
-      setSelectedLlmProfileId(profileId);
-      if (!profileId) {
-        return;
-      }
-      const profile = apiForm.llmProfiles?.[profileId];
-      if (!profile) {
-        return;
-      }
-      applyLlmProfileToForm(profile);
-      setLlmProfileDraft({
-        id: profileId,
-        name: profile.display_name || "",
-      });
-    },
-    [apiForm.llmProfiles, applyLlmProfileToForm],
+  const asrTemplates = useMemo(
+    () => templatesList.filter((template) => template.category === "asr"),
+    [templatesList],
   );
-  const handleResetLlmProfile = useCallback(() => {
-    if (config) {
-      applyProfileToForm(config);
-    }
-    setSelectedLlmProfileId("");
-  }, [applyProfileToForm, config]);
+  const embeddingTemplates = useMemo(
+    () => templatesList.filter((template) => template.category === "embedding"),
+    [templatesList],
+  );
   const embeddingWarmup = itState.embeddingWarmup;
   const showEmbeddingWarmup = Boolean(embeddingWarmup && embeddingWarmup.status !== "idle");
 
@@ -776,11 +611,6 @@ const InterviewTrainer: React.FC = () => {
         setPerQuestionDemoPrompts(
           resp.content.prompts?.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
         );
-        setLlmTaskForm({
-          questionParse: resp.content.llmTasks?.questionParse || "",
-          segment: resp.content.llmTasks?.segment || "",
-          evaluation: resp.content.llmTasks?.evaluation || "",
-        });
       } else {
         // fallback to unlock UI even if后端出错
         const fallbackConfig: ItConfigSnapshot = {
@@ -821,6 +651,30 @@ const InterviewTrainer: React.FC = () => {
             maxOutputTokens: 800,
             reusePrefix: false,
             stream: true,
+          },
+          templates: {
+            templates: [],
+            bindings: { llm: {}, asr: {}, embedding: {} },
+            paramCatalog: {
+              common: ["apiKey", "secretKey", "timeoutSec", "stream"],
+              llm: [
+                "model",
+                "messages",
+                "input",
+                "instructions",
+                "temperature",
+                "topP",
+                "reasoningEffort",
+                "maxOutputTokens",
+                "webSearch",
+                "reusePrefix",
+              ],
+              asr: ["audioFile", "asr.lang", "asr.dev_pid"],
+              embedding: ["embeddingInput", "model"],
+            },
+            paramUsage: {},
+            paramOptions: { reasoningEffort: ["low", "medium", "high", "xhigh"] },
+            secretNames: [],
           },
           asr: {
             provider: "baidu_vop",
@@ -908,7 +762,48 @@ const InterviewTrainer: React.FC = () => {
         previewChars: Number.isFinite(nextPreview) ? Math.max(50, nextPreview) : 200,
       });
     }
+    if (config.templates) {
+      setTemplateBindings(config.templates.bindings || { llm: {}, asr: {}, embedding: {} });
+      setTemplateParamOptions(
+        config.templates.paramOptions?.reasoningEffort ?? ["low", "medium", "high", "xhigh"],
+      );
+      setTemplateSecrets(config.templates.secretNames ?? []);
+    }
   }, [config, applyProfileToForm, applyRetrievalToForm]);
+
+  useEffect(() => {
+    if (isCreatingTemplate) {
+      return;
+    }
+    if (!templatesByCategory.length) {
+      setSelectedTemplateId("");
+      setTemplateDraft(null);
+      setTemplateDraftOrigin(null);
+      return;
+    }
+    if (!selectedTemplateId || !templatesByCategory.some((item) => item.id === selectedTemplateId)) {
+      setSelectedTemplateId(templatesByCategory[0].id);
+    }
+  }, [templatesByCategory, selectedTemplateId, isCreatingTemplate]);
+
+  useEffect(() => {
+    if (isCreatingTemplate) {
+      return;
+    }
+    if (!selectedTemplate) {
+      setTemplateDraft(null);
+      setTemplateDraftOrigin(null);
+      return;
+    }
+    setTemplateDraft(it_cloneTemplate(selectedTemplate));
+    setTemplateDraftOrigin(selectedTemplate.id);
+    setTemplateJsonDraft({
+      headers: it_formatJson(selectedTemplate.request?.headers, "{}"),
+      query: it_formatJson(selectedTemplate.request?.query, "{}"),
+      body: it_formatJson(selectedTemplate.request?.body, "{}"),
+    });
+    setTemplateJsonErrors({});
+  }, [selectedTemplate, isCreatingTemplate]);
 
   useEffect(() => {
     const disposeState = on("it/stateUpdate", (data) => {
@@ -1000,12 +895,6 @@ const InterviewTrainer: React.FC = () => {
   useEffect(() => {
     setShowRawOutput(false);
   }, [analysisResult]);
-
-  useEffect(() => {
-    if (selectedLlmProfileId && !apiForm.llmProfiles?.[selectedLlmProfileId]) {
-      setSelectedLlmProfileId("");
-    }
-  }, [apiForm.llmProfiles, selectedLlmProfileId]);
 
   const thinkingVisible = useMemo(() => {
     return itState.steps.some(
@@ -1640,396 +1529,17 @@ const InterviewTrainer: React.FC = () => {
     key: string,
     value: string | number | boolean,
   ) => {
-    setLlmTestMessage(null);
-    setAsrTestMessage(null);
-    setAsrTestRaw(null);
-    setApiForm((prev) => {
-      if (scope === "llm" && key === "provider") {
-        const provider = String(value);
-        const providerProfile = providerProfiles?.[provider]?.llm || {};
-        const isOpenAiCompat = provider === "openai_compatible";
-        const defaults =
-          provider === "volc_doubao"
-              ? {
-                  baseUrl: "https://ark.cn-beijing.volces.com",
-                  model: "doubao-seed-1-8-251228",
-                  useResponses: true,
-                  apiMode: "responses",
-                  responsesPath: "/api/v3/responses",
-                  toolsPreset: "",
-                  webSearch: true,
-                  reasoningEffort: "medium",
-                  maxOutputTokens: 800,
-                  reusePrefix: true,
-                  stream: true,
-                }
-              : {
-                  baseUrl: "https://qianfan.baidubce.com/v2",
-                  model: "ernie-4.5-turbo-128k",
-                  useResponses: false,
-                  apiMode: isOpenAiCompat ? "responses" : "chat",
-                  responsesPath: "/v1/responses",
-                  toolsPreset: isOpenAiCompat ? "codex_like" : "",
-                  webSearch: false,
-                  reasoningEffort: "medium",
-                  maxOutputTokens: 800,
-                  reusePrefix: false,
-                  stream: true,
-                };
-        const nextProfile =
-          (provider === prev.llm.provider ? prev.llm : undefined) ||
-          (prev.llmProfiles && prev.llmProfiles[provider]) ||
-          providerProfile ||
-          {};
-        return {
-          ...prev,
-          llmProfiles: {
-            ...prev.llmProfiles,
-          },
-          llm: {
-            ...prev.llm,
-            provider,
-            baseUrl: nextProfile.base_url || nextProfile.baseUrl || defaults.baseUrl,
-            model: nextProfile.model || defaults.model,
-            apiKey: nextProfile.api_key || nextProfile.apiKey || prev.llm.apiKey,
-            temperature: Number(
-              nextProfile.temperature ?? prev.llm.temperature ?? 0.8,
-            ),
-            topP: Number(nextProfile.top_p ?? nextProfile.topP ?? prev.llm.topP ?? 0.8),
-            timeoutSec: Number(
-              nextProfile.timeout_sec ?? nextProfile.timeoutSec ?? prev.llm.timeoutSec ?? 60,
-            ),
-            maxRetries: Number(
-              nextProfile.max_retries ?? nextProfile.maxRetries ?? prev.llm.maxRetries ?? 1,
-            ),
-            antiRepeat: Boolean(
-              nextProfile.anti_repeat ?? nextProfile.antiRepeat ?? prev.llm.antiRepeat ?? false,
-            ),
-            useResponses: Boolean(
-              nextProfile.use_responses ??
-                nextProfile.useResponses ??
-                defaults.useResponses ??
-                prev.llm.useResponses,
-            ),
-            apiMode: (() => {
-              const raw = nextProfile.api_mode ?? nextProfile.apiMode;
-              if (raw) {
-                return String(raw).toLowerCase() === "responses" ? "responses" : "chat";
-              }
-              const fallback = Boolean(
-                nextProfile.use_responses ??
-                  nextProfile.useResponses ??
-                  defaults.useResponses ??
-                  prev.llm.useResponses,
-              );
-              return fallback ? "responses" : "chat";
-            })(),
-            responsesPath:
-              nextProfile.responses_path ??
-              nextProfile.responsesPath ??
-              defaults.responsesPath,
-            toolsPreset:
-              nextProfile.tools_preset ?? nextProfile.toolsPreset ?? defaults.toolsPreset,
-            webSearch: Boolean(
-              nextProfile.web_search ??
-                nextProfile.webSearch ??
-                defaults.webSearch ??
-                prev.llm.webSearch,
-            ),
-            reasoningEffort:
-              nextProfile.reasoning_effort ??
-              nextProfile.reasoningEffort ??
-              defaults.reasoningEffort ??
-              prev.llm.reasoningEffort,
-            maxOutputTokens: Number(
-              nextProfile.max_output_tokens ??
-                nextProfile.maxOutputTokens ??
-                defaults.maxOutputTokens ??
-                prev.llm.maxOutputTokens,
-            ),
-            reusePrefix: Boolean(
-              nextProfile.reuse_prefix ??
-                nextProfile.reusePrefix ??
-                defaults.reusePrefix ??
-                prev.llm.reusePrefix,
-            ),
-            stream: Boolean(
-              nextProfile.stream ??
-                nextProfile.stream_enabled ??
-                defaults.stream ??
-                prev.llm.stream,
-            ),
-          },
-        };
-      }
-      if (scope === "llm" && key === "apiMode") {
-        const mode = String(value || "chat");
-        const resolved = mode === "responses" ? "responses" : "chat";
-        return {
-          ...prev,
-          llm: {
-            ...prev.llm,
-            apiMode: resolved,
-            useResponses: resolved === "responses",
-          },
-        };
-      }
-      if (scope === "asr" && key === "provider") {
-        const provider = String(value);
-        const providerProfile = providerProfiles?.[provider]?.asr || {};
-        const nextProfile =
-          (provider === prev.asr.provider ? prev.asr : undefined) ||
-          (prev.asrProfiles && prev.asrProfiles[provider]) ||
-          providerProfile ||
-          {};
-        const defaults = {
-          baseUrl: "https://vop.baidu.com/server_api",
-          language: "zh",
-          devPid: 1537,
-          mockText: "",
-          maxChunkSec: 50,
-          maxConcurrency: 1,
-          timeoutSec: 120,
-          maxRetries: 1,
-        };
-        return {
-          ...prev,
-          asrProfiles: {
-            ...prev.asrProfiles,
-          },
-          asr: {
-            ...prev.asr,
-            provider,
-            baseUrl: nextProfile.base_url || nextProfile.baseUrl || defaults.baseUrl,
-            apiKey: nextProfile.api_key || nextProfile.apiKey || prev.asr.apiKey,
-            secretKey: nextProfile.secret_key || nextProfile.secretKey || prev.asr.secretKey,
-            language: nextProfile.language || prev.asr.language || defaults.language,
-            devPid: Number(nextProfile.dev_pid ?? nextProfile.devPid ?? prev.asr.devPid ?? defaults.devPid),
-            mockText: nextProfile.mock_text || nextProfile.mockText || prev.asr.mockText || defaults.mockText,
-            maxChunkSec: Number(
-              nextProfile.max_chunk_sec ?? nextProfile.maxChunkSec ?? prev.asr.maxChunkSec ?? defaults.maxChunkSec,
-            ),
-            maxConcurrency: Number(
-              nextProfile.max_concurrency ??
-                nextProfile.maxConcurrency ??
-                prev.asr.maxConcurrency ??
-                defaults.maxConcurrency,
-            ),
-            timeoutSec: Number(
-              nextProfile.timeout_sec ?? nextProfile.timeoutSec ?? prev.asr.timeoutSec ?? defaults.timeoutSec,
-            ),
-            maxRetries: Number(
-              nextProfile.max_retries ?? nextProfile.maxRetries ?? prev.asr.maxRetries ?? defaults.maxRetries,
-            ),
-          },
-        };
-      }
-      return {
-        ...prev,
-        [scope]: {
-          ...prev[scope],
-          [key]: value,
-        },
-      };
-    });
-  };
-  const handleSaveApiConfig = async () => {
-    if (!apiForm.environment.trim()) {
-      setApiSaveMessage("请填写环境名称（如 prod / test）。");
-      return;
-    }
-    setSavingApiConfig(true);
-    setApiSaveMessage(null);
-    const payload = {
-      environment: apiForm.environment.trim(),
-      llm: {
-        provider: apiForm.llm.provider,
-        baseUrl: apiForm.llm.baseUrl,
-        model: apiForm.llm.model,
-        apiKey: apiForm.llm.apiKey,
-        temperature: Number(apiForm.llm.temperature),
-        topP: Number(apiForm.llm.topP),
-        timeoutSec: Number(apiForm.llm.timeoutSec),
-        maxRetries: Number(apiForm.llm.maxRetries),
-        antiRepeat: Boolean(apiForm.llm.antiRepeat),
-        useResponses: Boolean(apiForm.llm.useResponses),
-        apiMode: apiForm.llm.apiMode,
-        responsesPath: apiForm.llm.responsesPath,
-        toolsPreset: apiForm.llm.toolsPreset,
-        webSearch: Boolean(apiForm.llm.webSearch),
-        reasoningEffort: apiForm.llm.reasoningEffort,
-        maxOutputTokens: Number(apiForm.llm.maxOutputTokens),
-        reusePrefix: Boolean(apiForm.llm.reusePrefix),
-        stream: Boolean(apiForm.llm.stream),
+    setLlmParamsMessage(null);
+    setAsrParamsMessage(null);
+    setApiForm((prev) => ({
+      ...prev,
+      [scope]: {
+        ...prev[scope],
+        [key]: value,
       },
-      asr: {
-        provider: apiForm.asr.provider,
-        baseUrl: apiForm.asr.baseUrl,
-        apiKey: apiForm.asr.apiKey,
-        secretKey: apiForm.asr.secretKey,
-        language: apiForm.asr.language,
-        devPid: Number(apiForm.asr.devPid),
-        mockText: apiForm.asr.mockText,
-        maxChunkSec: Number(apiForm.asr.maxChunkSec),
-        maxConcurrency: Number(apiForm.asr.maxConcurrency),
-        timeoutSec: Number(apiForm.asr.timeoutSec),
-        maxRetries: Number(apiForm.asr.maxRetries),
-      },
-      llmProfiles: {
-        ...apiForm.llmProfiles,
-        [apiForm.llm.provider]: {
-          provider: apiForm.llm.provider,
-          base_url: apiForm.llm.baseUrl,
-          model: apiForm.llm.model,
-          api_key: apiForm.llm.apiKey,
-          temperature: Number(apiForm.llm.temperature),
-          top_p: Number(apiForm.llm.topP),
-          timeout_sec: Number(apiForm.llm.timeoutSec),
-          max_retries: Number(apiForm.llm.maxRetries),
-          anti_repeat: Boolean(apiForm.llm.antiRepeat),
-          use_responses: Boolean(apiForm.llm.useResponses),
-          api_mode: apiForm.llm.apiMode,
-          responses_path: apiForm.llm.responsesPath,
-          tools_preset: apiForm.llm.toolsPreset,
-          web_search: Boolean(apiForm.llm.webSearch),
-          reasoning_effort: apiForm.llm.reasoningEffort,
-          max_output_tokens: Number(apiForm.llm.maxOutputTokens),
-          reuse_prefix: Boolean(apiForm.llm.reusePrefix),
-          stream: Boolean(apiForm.llm.stream),
-        },
-      },
-      asrProfiles: {
-        ...apiForm.asrProfiles,
-        [apiForm.asr.provider]: {
-          provider: apiForm.asr.provider,
-          base_url: apiForm.asr.baseUrl,
-          api_key: apiForm.asr.apiKey,
-          secret_key: apiForm.asr.secretKey,
-          language: apiForm.asr.language,
-          dev_pid: Number(apiForm.asr.devPid),
-          mock_text: apiForm.asr.mockText,
-          max_chunk_sec: Number(apiForm.asr.maxChunkSec),
-          max_concurrency: Number(apiForm.asr.maxConcurrency),
-          timeout_sec: Number(apiForm.asr.timeoutSec),
-          max_retries: Number(apiForm.asr.maxRetries),
-        },
-      },
-    };
-    try {
-      const resp = await request("it/updateApiSettings", payload);
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-          applyProfileToForm(resp.content, payload.llm.provider, payload.asr.provider);
-        }
-        setApiSaveMessage("已保存，重试录音即可生效。");
-      } else {
-        setApiSaveMessage("保存失败，请检查输入后重试。");
-      }
-    } catch (err) {
-      setApiSaveMessage(
-        `保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingApiConfig(false);
+    }));
   };
-  const handleSaveLlmTasks = async () => {
-    setSavingLlmTasks(true);
-    setLlmTaskSaveMessage(null);
-    try {
-      const resp = await request("it/updateLlmTaskProfiles", {
-        tasks: {
-          questionParse: llmTaskForm.questionParse,
-          segment: llmTaskForm.segment,
-          evaluation: llmTaskForm.evaluation,
-        },
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-          setLlmTaskForm({
-            questionParse: resp.content.llmTasks?.questionParse || "",
-            segment: resp.content.llmTasks?.segment || "",
-            evaluation: resp.content.llmTasks?.evaluation || "",
-          });
-        }
-        setLlmTaskSaveMessage("分阶段配置已保存");
-      } else {
-        setLlmTaskSaveMessage("分阶段配置保存失败，请重试。");
-      }
-    } catch (err) {
-      setLlmTaskSaveMessage(
-        `分阶段配置保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingLlmTasks(false);
-  };
-  const handleSaveLlmProfile = async () => {
-    const profileId = llmProfileDraft.id.trim();
-    if (!profileId) {
-      setLlmProfileMessage("请填写 Profile ID。");
-      return;
-    }
-    setSavingLlmProfile(true);
-    setLlmProfileMessage(null);
-    try {
-      const resp = await request("it/saveLlmProfile", {
-        environment: apiForm.environment,
-        profileId,
-        displayName: llmProfileDraft.name.trim(),
-        profile: apiForm.llm,
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-          setApiForm((prev) => ({
-            ...prev,
-            llmProfiles: resp.content.llmProfiles || prev.llmProfiles,
-          }));
-        }
-        setLlmProfileMessage("Profile 已保存/覆盖。");
-      } else {
-        setLlmProfileMessage("保存失败，请检查输入。");
-      }
-    } catch (err) {
-      setLlmProfileMessage(
-        `保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingLlmProfile(false);
-  };
-  const handleDeleteLlmProfile = async () => {
-    const profileId = llmProfileDraft.id.trim();
-    if (!profileId) {
-      setLlmProfileMessage("请填写要删除的 Profile ID。");
-      return;
-    }
-    setSavingLlmProfile(true);
-    setLlmProfileMessage(null);
-    try {
-      const resp = await request("it/deleteLlmProfile", {
-        environment: apiForm.environment,
-        profileId,
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-          setApiForm((prev) => ({
-            ...prev,
-            llmProfiles: resp.content.llmProfiles || prev.llmProfiles,
-          }));
-        }
-        setLlmProfileMessage("Profile 已删除。");
-      } else {
-        setLlmProfileMessage("删除失败，请检查输入。");
-      }
-    } catch (err) {
-      setLlmProfileMessage(
-        `删除失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingLlmProfile(false);
-  };
+
   const handleSavePrompts = async (
     scope: "evaluation" | "demo" | "per-question",
   ) => {
@@ -2099,6 +1609,476 @@ const InterviewTrainer: React.FC = () => {
     }
     setSavingStreamingSettings(false);
   };
+  const buildDefaultTemplate = useCallback(
+    (category: ItTemplateCategory): ItApiTemplate => {
+      const mode = category === "llm" ? "sse" : "json";
+      return {
+        id: "",
+        name: "",
+        category,
+        request: {
+          method: "POST",
+          url: "",
+          headers: {
+            Authorization: "Bearer {{apiKey}}",
+            "Content-Type": "application/json",
+          },
+          body: {},
+          stream: mode === "sse",
+        },
+        response: {
+          mode,
+          textPath: "",
+        },
+        streaming:
+          mode === "sse"
+            ? {
+                eventDelimiter: "\n\n",
+                dataPrefix: "data:",
+                deltaPath: "",
+                doneSignals: ["[DONE]"],
+              }
+            : undefined,
+        updatedAt: new Date().toISOString(),
+      };
+    },
+    [],
+  );
+  const updateTemplateRequest = useCallback(
+    (patch: Partial<ItApiTemplate["request"]>) => {
+      setTemplateDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              request: {
+                ...(prev.request || { method: "POST", url: "" }),
+                ...patch,
+              },
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+  const updateTemplateResponse = useCallback(
+    (patch: Partial<NonNullable<ItApiTemplate["response"]>>) => {
+      setTemplateDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              response: {
+                ...(prev.response || { mode: "json" }),
+                ...patch,
+              },
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+  const updateTemplateStreaming = useCallback(
+    (patch: Partial<NonNullable<ItApiTemplate["streaming"]>>) => {
+      setTemplateDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              streaming: {
+                ...(prev.streaming || {}),
+                ...patch,
+              },
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+  const handleCreateTemplate = useCallback(() => {
+    const next = buildDefaultTemplate(templateCategory);
+    setIsCreatingTemplate(true);
+    setSelectedTemplateId("");
+    setTemplateDraft(next);
+    setTemplateDraftOrigin(null);
+    setTemplateJsonDraft({
+      headers: it_formatJson(next.request?.headers, "{}"),
+      query: it_formatJson(next.request?.query, "{}"),
+      body: it_formatJson(next.request?.body, "{}"),
+    });
+    setTemplateJsonErrors({});
+    setTemplateSaveMessage(null);
+  }, [buildDefaultTemplate, templateCategory]);
+  const handleDuplicateTemplate = useCallback(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+    const next = it_cloneTemplate(selectedTemplate);
+    next.id = "";
+    next.name = `${next.name || selectedTemplate.id}-copy`;
+    next.updatedAt = new Date().toISOString();
+    setIsCreatingTemplate(true);
+    setSelectedTemplateId("");
+    setTemplateDraft(next);
+    setTemplateDraftOrigin(null);
+    setTemplateJsonDraft({
+      headers: it_formatJson(next.request?.headers, "{}"),
+      query: it_formatJson(next.request?.query, "{}"),
+      body: it_formatJson(next.request?.body, "{}"),
+    });
+    setTemplateJsonErrors({});
+    setTemplateSaveMessage(null);
+  }, [selectedTemplate]);
+  const handleCancelTemplateDraft = useCallback(() => {
+    setIsCreatingTemplate(false);
+    setTemplateSaveMessage(null);
+    if (templatesByCategory.length) {
+      setSelectedTemplateId(templatesByCategory[0].id);
+    } else {
+      setSelectedTemplateId("");
+      setTemplateDraft(null);
+      setTemplateDraftOrigin(null);
+    }
+  }, [templatesByCategory]);
+  const handleSaveTemplate = async () => {
+    if (!templateDraft) {
+      return;
+    }
+    const id = String(templateDraft.id || "").trim();
+    if (!id) {
+      setTemplateSaveMessage("请填写模板 ID。");
+      return;
+    }
+    const headersParsed = it_parseJson(templateJsonDraft.headers);
+    const queryParsed = it_parseJson(templateJsonDraft.query);
+    const bodyParsed = it_parseJson(templateJsonDraft.body);
+    const errors: Partial<Record<"headers" | "query" | "body", string>> = {};
+    if (!headersParsed.ok) {
+      errors.headers = headersParsed.error;
+    }
+    if (!queryParsed.ok) {
+      errors.query = queryParsed.error;
+    }
+    if (!bodyParsed.ok) {
+      errors.body = bodyParsed.error;
+    }
+    setTemplateJsonErrors(errors);
+    if (Object.keys(errors).length) {
+      setTemplateSaveMessage("模板 JSON 格式错误，请修正后再保存。");
+      return;
+    }
+    const responseMode = templateDraft.response?.mode || "json";
+    const nextTemplate: ItApiTemplate = {
+      ...templateDraft,
+      id,
+      name: String(templateDraft.name || id).trim() || id,
+      request: {
+        ...(templateDraft.request || { method: "POST", url: "" }),
+        headers: headersParsed.ok ? headersParsed.value : undefined,
+        query: queryParsed.ok ? queryParsed.value : undefined,
+        body: bodyParsed.ok ? bodyParsed.value : undefined,
+      },
+      response: {
+        mode: responseMode,
+        textPath: templateDraft.response?.textPath || undefined,
+        jsonPath: templateDraft.response?.jsonPath || undefined,
+        errorPath: templateDraft.response?.errorPath || undefined,
+        statusPath: templateDraft.response?.statusPath || undefined,
+        doneSignal: templateDraft.response?.doneSignal || undefined,
+      },
+      streaming:
+        responseMode === "sse"
+          ? {
+              eventDelimiter: templateDraft.streaming?.eventDelimiter || undefined,
+              dataPrefix: templateDraft.streaming?.dataPrefix || undefined,
+              deltaPath: templateDraft.streaming?.deltaPath || undefined,
+              doneSignals:
+                templateDraft.streaming?.doneSignals &&
+                templateDraft.streaming.doneSignals.filter(Boolean).length
+                  ? templateDraft.streaming.doneSignals.filter(Boolean)
+                  : undefined,
+              heartbeatPattern: templateDraft.streaming?.heartbeatPattern || undefined,
+            }
+          : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    setSavingTemplate(true);
+    setTemplateSaveMessage(null);
+    try {
+      const resp = await request("it/saveTemplate", { template: nextTemplate });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setIsCreatingTemplate(false);
+        setSelectedTemplateId(nextTemplate.id);
+        setTemplateSaveMessage("模板已保存。");
+      } else {
+        setTemplateSaveMessage("模板保存失败，请检查输入。");
+      }
+    } catch (err) {
+      setTemplateSaveMessage(
+        `模板保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingTemplate(false);
+  };
+  const handleDeleteTemplate = async () => {
+    const templateId = selectedTemplate?.id || "";
+    if (!templateId) {
+      return;
+    }
+    const confirmed = window.confirm(`确认删除模板 ${templateId}？`);
+    if (!confirmed) {
+      return;
+    }
+    setSavingTemplate(true);
+    setTemplateSaveMessage(null);
+    try {
+      const resp = await request("it/deleteTemplate", { templateId });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setTemplateSaveMessage("模板已删除。");
+      } else {
+        setTemplateSaveMessage("删除失败，请重试。");
+      }
+    } catch (err) {
+      setTemplateSaveMessage(
+        `删除失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingTemplate(false);
+  };
+  const handleSaveTemplateBindings = async () => {
+    setSavingBindings(true);
+    try {
+      const resp = await request("it/saveTemplateBindings", { bindings: templateBindings });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setTemplateSaveMessage("绑定已保存。");
+      } else {
+        setTemplateSaveMessage("绑定保存失败，请重试。");
+      }
+    } catch (err) {
+      setTemplateSaveMessage(
+        `绑定保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingBindings(false);
+  };
+  const handleSaveParamOptions = async () => {
+    setSavingParamOptions(true);
+    try {
+      const options = Array.from(new Set(templateParamOptions.map((item) => String(item).trim())))
+        .filter(Boolean);
+      const resp = await request("it/saveTemplateParamOptions", {
+        options: { reasoning_effort: options },
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setTemplateSaveMessage("参数选项已保存。");
+      } else {
+        setTemplateSaveMessage("参数选项保存失败，请重试。");
+      }
+    } catch (err) {
+      setTemplateSaveMessage(
+        `参数选项保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingParamOptions(false);
+  };
+  const handleAddParamOption = () => {
+    const raw = templateParamInput.trim();
+    if (!raw) {
+      return;
+    }
+    if (!templateParamOptions.includes(raw)) {
+      setTemplateParamOptions((prev) => [...prev, raw]);
+    }
+    setTemplateParamInput("");
+  };
+  const handleSaveSecret = async () => {
+    const name = secretDraft.name.trim();
+    if (!name) {
+      setSecretMessage("请填写密钥名称。");
+      return;
+    }
+    setSavingSecret(true);
+    setSecretMessage(null);
+    try {
+      const resp = await request("it/saveTemplateSecret", {
+        name,
+        value: secretDraft.value,
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setSecretMessage("密钥已保存。");
+        setSecretDraft({ name: "", value: "" });
+      } else {
+        setSecretMessage("密钥保存失败，请重试。");
+      }
+    } catch (err) {
+      setSecretMessage(`密钥保存失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+    setSavingSecret(false);
+  };
+  const handleDeleteSecret = async (name: string) => {
+    const confirmed = window.confirm(`确认删除密钥 ${name}？`);
+    if (!confirmed) {
+      return;
+    }
+    setSavingSecret(true);
+    setSecretMessage(null);
+    try {
+      const resp = await request("it/deleteTemplateSecret", { name });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setSecretMessage("密钥已删除。");
+      } else {
+        setSecretMessage("密钥删除失败，请重试。");
+      }
+    } catch (err) {
+      setSecretMessage(`密钥删除失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+    setSavingSecret(false);
+  };
+  const handleSetActiveEnvironment = async (environment: string) => {
+    if (!environment) {
+      return;
+    }
+    setSavingEnvironment(true);
+    setEnvMessage(null);
+    try {
+      const resp = await request("it/setActiveEnvironment", { environment });
+      if (resp?.status === "success" && resp.content) {
+        setConfig(resp.content);
+        setEnvMessage(`已切换到 ${environment}`);
+      } else {
+        setEnvMessage("环境切换失败。");
+      }
+    } catch (err) {
+      setEnvMessage(`环境切换失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+    setSavingEnvironment(false);
+  };
+  const handleCreateEnvironment = async (cloneFrom?: string) => {
+    const environment = envDraftName.trim();
+    if (!environment) {
+      setEnvMessage("请填写环境名称。");
+      return;
+    }
+    setSavingEnvironment(true);
+    setEnvMessage(null);
+    try {
+      const resp = await request("it/createTemplateEnvironment", {
+        environment,
+        cloneFrom: cloneFrom || "",
+      });
+      if (resp?.status === "success" && resp.content) {
+        setConfig(resp.content);
+        setEnvDraftName("");
+        setEnvMessage("环境已创建并切换。");
+      } else {
+        setEnvMessage("环境创建失败。");
+      }
+    } catch (err) {
+      setEnvMessage(`环境创建失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+    setSavingEnvironment(false);
+  };
+  const handleDeleteEnvironment = async (environment: string) => {
+    if (!environment) {
+      return;
+    }
+    const confirmed = window.confirm(`确认删除环境 ${environment}？`);
+    if (!confirmed) {
+      return;
+    }
+    setSavingEnvironment(true);
+    setEnvMessage(null);
+    try {
+      const resp = await request("it/deleteTemplateEnvironment", { environment });
+      if (resp?.status === "success" && resp.content) {
+        setConfig(resp.content);
+        setEnvMessage("环境已删除。");
+      } else {
+        setEnvMessage("环境删除失败。");
+      }
+    } catch (err) {
+      setEnvMessage(`环境删除失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+    setSavingEnvironment(false);
+  };
+  const handleSaveLlmParams = async () => {
+    setSavingLlmParams(true);
+    setLlmParamsMessage(null);
+    try {
+      const reasoningEffort = String(apiForm.llm.reasoningEffort || "").trim();
+      const resp = await request("it/updateApiSettings", {
+        environment: config?.activeEnvironment,
+        llm: {
+          model: apiForm.llm.model,
+          reasoningEffort: reasoningEffort || undefined,
+          timeoutSec: Number(apiForm.llm.timeoutSec),
+          maxRetries: Number(apiForm.llm.maxRetries),
+          antiRepeat: Boolean(apiForm.llm.antiRepeat),
+          webSearch: Boolean(apiForm.llm.webSearch),
+          reusePrefix: Boolean(apiForm.llm.reusePrefix),
+          stream: Boolean(apiForm.llm.stream),
+        },
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setLlmParamsMessage("LLM 参数已保存。");
+      } else {
+        setLlmParamsMessage("LLM 参数保存失败，请重试。");
+      }
+    } catch (err) {
+      setLlmParamsMessage(
+        `LLM 参数保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingLlmParams(false);
+  };
+  const handleSaveAsrParams = async () => {
+    setSavingAsrParams(true);
+    setAsrParamsMessage(null);
+    try {
+      const resp = await request("it/updateApiSettings", {
+        environment: config?.activeEnvironment,
+        asr: {
+          language: apiForm.asr.language,
+          devPid: Number(apiForm.asr.devPid),
+          maxChunkSec: Number(apiForm.asr.maxChunkSec),
+          maxConcurrency: Number(apiForm.asr.maxConcurrency),
+          timeoutSec: Number(apiForm.asr.timeoutSec),
+          maxRetries: Number(apiForm.asr.maxRetries),
+        },
+      });
+      if (resp?.status === "success") {
+        if (resp.content) {
+          setConfig(resp.content);
+        }
+        setAsrParamsMessage("ASR 参数已保存。");
+      } else {
+        setAsrParamsMessage("ASR 参数保存失败，请重试。");
+      }
+    } catch (err) {
+      setAsrParamsMessage(
+        `ASR 参数保存失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    setSavingAsrParams(false);
+  };
   const handleRetrievalFieldChange = (
     key:
       | "mode"
@@ -2142,14 +2122,7 @@ const InterviewTrainer: React.FC = () => {
           maxConcurrency: Number(retrievalForm.maxConcurrency),
           embeddingMaxConcurrency: Number(retrievalForm.embeddingMaxConcurrency),
           minScore: Number(retrievalForm.minScore),
-          embeddingProvider: retrievalForm.vector.provider,
           vector: {
-            provider: retrievalForm.vector.provider,
-            baseUrl: retrievalForm.vector.baseUrl,
-            apiKey: retrievalForm.vector.apiKey,
-            model: retrievalForm.vector.model,
-            timeoutSec: Number(retrievalForm.vector.timeoutSec),
-            maxRetries: Number(retrievalForm.vector.maxRetries),
             batchSize: Number(retrievalForm.vector.batchSize),
             queryMaxChars: Number(retrievalForm.vector.queryMaxChars),
           },
@@ -2171,65 +2144,6 @@ const InterviewTrainer: React.FC = () => {
       );
     }
     setSavingRetrieval(false);
-  };
-  const handleTestEmbedding = async () => {
-    setTestingEmbedding(true);
-    setEmbeddingTestMessage(null);
-    try {
-      const resp = await request("it/testEmbedding", {
-        embedding: {
-          provider: retrievalForm.vector.provider,
-          baseUrl: retrievalForm.vector.baseUrl,
-          model: retrievalForm.vector.model,
-          apiKey: retrievalForm.vector.apiKey,
-          timeoutSec: retrievalForm.vector.timeoutSec,
-          maxRetries: retrievalForm.vector.maxRetries,
-        },
-      });
-      if (resp?.status === "success") {
-        const length = resp.content?.length ?? 0;
-        setEmbeddingTestMessage(`Embedding 接口正常：向量维度 ${length}`);
-      } else {
-        setEmbeddingTestMessage("Embedding 测试失败，请检查配置。");
-      }
-    } catch (err) {
-      setEmbeddingTestMessage(
-        `Embedding 测试失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setTestingEmbedding(false);
-  };
-  const handleCreateProviderConfig = async () => {
-    const providerId = providerDraft.id.trim();
-    if (!providerId) {
-      setProviderCreateMessage("请先填写 Provider Key。");
-      return;
-    }
-    setCreatingProvider(true);
-    setProviderCreateMessage(null);
-    try {
-      const resp = await request("it/createProviderConfig", {
-        providerId,
-        displayName: providerDraft.name.trim(),
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setProviderDraft({ id: "", name: "" });
-        setProviderCreateMessage("已创建提供者配置。");
-      } else {
-        setProviderCreateMessage("创建失败，请检查名称是否重复。");
-      }
-    } catch (err) {
-      setProviderCreateMessage(
-        `创建失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setCreatingProvider(false);
-  };
-  const handleOpenProviderConfig = async (providerId: string) => {
-    await request("it/openProviderConfig", { providerId });
   };
   const handleClearEmbeddingCache = async () => {
     setClearingEmbeddingCache(true);
@@ -2277,73 +2191,10 @@ const InterviewTrainer: React.FC = () => {
     }
     setClearingCorpusCache(false);
   };
-  const handleTestLlm = async () => {
-    setTestingLlm(true);
-    setLlmTestMessage(null);
-    try {
-      const resp = await request("it/testLlm", {
-        environment: apiForm.environment,
-        llm: apiForm.llm,
-      });
-      if (resp?.status === "success") {
-        const content = resp.content?.content || resp.content;
-        setLlmTestMessage(`LLM 接口正常：${String(content || "").slice(0, 80)}`);
-      } else {
-        setLlmTestMessage("LLM 测试失败，请检查配置。");
-      }
-    } catch (err) {
-      setLlmTestMessage(
-        `LLM 测试失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setTestingLlm(false);
-  };
-  const handleTestAsr = async () => {
-    setTestingAsr(true);
-    setAsrTestMessage(null);
-    setAsrTestRaw(null);
-    try {
-      const resp = await request("it/testAsr", { asr: apiForm.asr });
-      if (resp?.status === "success") {
-        const ok = resp.content?.ok !== false;
-        if (ok) {
-          const content = resp.content?.content ?? resp.content;
-          setAsrTestMessage(
-            `ASR 接口正常：${String(content || "").slice(0, 40) || "(无识别结果)"}`,
-          );
-        } else {
-          const error = resp.content?.error || "ASR 测试失败，请检查配置。";
-          setAsrTestMessage(`ASR 测试失败：${error}`);
-          if (resp.content?.raw) {
-            setAsrTestRaw(
-              typeof resp.content.raw === "string"
-                ? resp.content.raw
-                : JSON.stringify(resp.content.raw, null, 2),
-            );
-          }
-        }
-      } else {
-        const error = resp?.error || "ASR 测试失败，请检查配置。";
-        setAsrTestMessage(`ASR 测试失败：${error}`);
-        if (resp?.raw) {
-          setAsrTestRaw(
-            typeof resp.raw === "string" ? resp.raw : JSON.stringify(resp.raw, null, 2),
-          );
-        }
-      }
-    } catch (err) {
-      setAsrTestMessage(
-        `ASR 测试失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-      setAsrTestRaw(err instanceof Error ? err.stack || err.message : String(err));
-    }
-    setTestingAsr(false);
-  };
   const handleReloadConfig = async () => {
     const resp = await request("it/getConfig", undefined);
     if (resp?.status === "success" && resp.content) {
       setConfig(resp.content);
-      setApiSaveMessage("已重新加载配置。");
       applyProfileToForm(resp.content);
       applyRetrievalToForm(resp.content);
       setCustomPrompt(
@@ -3077,1318 +2928,126 @@ const InterviewTrainer: React.FC = () => {
         </>
       )}
 
-      {activePage === "settings" && (
-        <div className="it-settings">
-          <div className="it-settings__grid">
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">提供者配置</div>
-                  <div className="it-settings__desc">每个 Provider 独立文件，可包含 LLM/Embedding/ASR</div>
-                </div>
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 110 }}>Provider Key</div>
-                <input
-                  className="it-input"
-                  value={providerDraft.id}
-                  onChange={(event) =>
-                    setProviderDraft((prev) => ({ ...prev, id: event.target.value }))
-                  }
-                  placeholder="例如 volc_doubao"
-                />
-                <div style={{ minWidth: 80 }}>显示名</div>
-                <input
-                  className="it-input"
-                  value={providerDraft.name}
-                  onChange={(event) =>
-                    setProviderDraft((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  placeholder="可选"
-                />
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || creatingProvider}
-                  onClick={handleCreateProviderConfig}
-                >
-                  {creatingProvider ? "添加中..." : "添加提供者配置"}
-                </button>
-              </div>
-              {providerCreateMessage && (
-                <div className="it-settings__hint">{providerCreateMessage}</div>
-              )}
-              <div className="it-settings__hint" style={{ whiteSpace: "pre-wrap" }}>
-                {"教程：Provider 文件在 `interview_trainer/providers/` 下。模板示例：\n" +
-                  "provider: your_provider\n" +
-                  "llm: { provider: your_provider, base_url: https://..., model: ..., api_key: ... }\n" +
-                  "embedding: { provider: your_provider, base_url: https://..., model: ..., api_key: ... }\n" +
-                  "asr: { provider: ..., base_url: ..., api_key: ..., secret_key: ... }"}
-              </div>
-              {providerList.length > 0 && (
-                <div className="it-retrieval__list">
-                  {providerList.map((item) => (
-                    <div key={item} className="it-retrieval__item">
-                      <div className="it-retrieval__label">{getProviderLabel(item)}</div>
-                      <div className="it-retrieval__path">{item}</div>
-                      <button
-                        className="it-button it-button--secondary it-button--compact"
-                        disabled={uiLocked}
-                        onClick={() => handleOpenProviderConfig(item)}
-                      >
-                        打开文件
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">通用配置</div>
-                  <div className="it-settings__desc">ASR / LLM / 保存目录 · 直接在此修改</div>
-                </div>
-                <div className="it-settings__actions">
-                  <button
-                    className="it-button it-button--primary it-button--compact"
-                    disabled={uiLocked || savingApiConfig}
-                    onClick={handleSaveApiConfig}
-                  >
-                    {savingApiConfig ? "保存中..." : "保存接口配置"}
-                  </button>
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked}
-                    onClick={handleReloadConfig}
-                  >
-                    重载配置
-                  </button>
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    onClick={() => request("it/openSettings", undefined)}
-                  >
-                    查看配置文件
-                  </button>
-                </div>
-              </div>
-              {config ? (
-                <>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 64 }}>环境</div>
-                    <input
-                      className="it-input"
-                      list="it-env-list"
-                      value={apiForm.environment}
-                      onChange={(event) =>
-                        setApiForm((prev) => ({ ...prev, environment: event.target.value }))
-                      }
-                      placeholder="prod / test / dev"
-                    />
-                    <datalist id="it-env-list">
-                      {(config.envList || []).map((env) => (
-                        <option key={env} value={env} />
-                      ))}
-                    </datalist>
-                    <span className="it-settings__hint">
-                      可直接输入新环境名称，保存后自动创建并切换
-                    </span>
-                  </div>
-                  <div className="it-settings__meta">
-                    <span>ASR: {config.asrProvider}</span>
-                    <span>LLM: {config.llmProvider}</span>
-                    <span>当前环境: {config.activeEnvironment}</span>
-                    <span>保存目录: {config.sessionsDir}</span>
-                  </div>
-                  <div className="it-settings__hint">
-                    API Key 会保存到本地配置并同步到 VS Code Secret，请注意保管。
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                      gap: "10px",
-                    }}
-                  >
-                    <div className="it-question">
-                      <div className="it-settings__title">LLM（评分/问答）</div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Provider</div>
-                        <select
-                          className="it-select"
-                          value={apiForm.llm.provider}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "provider", event.target.value)
-                          }
-                        >
-                          {llmProviders.map((item) => (
-                            <option key={item} value={item}>
-                              {item === "heuristic" ? "heuristic（本地规则）" : getProviderLabel(item)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Model</div>
-                        <input
-                          className="it-input"
-                          value={apiForm.llm.model}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "model", event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Base URL</div>
-                        <input
-                          className="it-input"
-                          value={apiForm.llm.baseUrl}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "baseUrl", event.target.value)
-                          }
-                          placeholder="https://qianfan.baidubce.com/v2"
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>API Key</div>
-                        <input
-                          className="it-input"
-                          type="text"
-                          value={apiForm.llm.apiKey}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "apiKey", event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 80 }}>温度</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          step="0.05"
-                          value={apiForm.llm.temperature}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "temperature", Number(event.target.value))
-                          }
-                        />
-                        <div style={{ minWidth: 70 }}>Top P</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          step="0.05"
-                          value={apiForm.llm.topP}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "topP", Number(event.target.value))
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 80 }}>超时(s)</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.llm.timeoutSec}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "timeoutSec", Number(event.target.value))
-                          }
-                        />
-                        <div style={{ minWidth: 80 }}>重试</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.llm.maxRetries}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "maxRetries", Number(event.target.value))
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>防重复</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(apiForm.llm.antiRepeat)}
-                            onChange={(event) =>
-                              handleApiFieldChange("llm", "antiRepeat", event.target.checked)
-                            }
-                          />
-                          <span>加入随机标记</span>
-                        </label>
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 80 }}>API 模式</div>
-                        <select
-                          className="it-select"
-                          value={apiForm.llm.apiMode || (apiForm.llm.useResponses ? "responses" : "chat")}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "apiMode", event.target.value)
-                          }
-                        >
-                          <option value="chat">Chat Completions</option>
-                          <option value="responses">Responses</option>
-                        </select>
-                      </div>
-                      {String(apiForm.llm.apiMode || "") === "responses" && (
-                        <>
-                          <div className="it-input-row it-input-row--nowrap">
-                            <div style={{ minWidth: 80 }}>Responses Path</div>
-                            <input
-                              className="it-input"
-                              value={apiForm.llm.responsesPath}
-                              placeholder="/v1/responses 或 /responses"
-                              onChange={(event) =>
-                                handleApiFieldChange("llm", "responsesPath", event.target.value)
-                              }
-                            />
-                          </div>
-                          <div className="it-input-row it-input-row--nowrap">
-                            <div style={{ minWidth: 80 }}>Tools 预设</div>
-                            <select
-                              className="it-select"
-                              value={apiForm.llm.toolsPreset || ""}
-                              onChange={(event) =>
-                                handleApiFieldChange("llm", "toolsPreset", event.target.value)
-                              }
-                            >
-                              <option value="">不使用</option>
-                              <option value="codex_like">codex_like（GMN 网关）</option>
-                            </select>
-                          </div>
-                          <div className="it-settings__hint">
-                            Responses 路径可填完整 URL（如 https://gmn.chuangzuoli.com/responses），
-                            或相对路径（/v1/responses、/responses）。GMN 网关需要 toolsPreset=codex_like。
-                          </div>
-                        </>
-                      )}
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>流式输出</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(apiForm.llm.stream)}
-                            onChange={(event) =>
-                              handleApiFieldChange("llm", "stream", event.target.checked)
-                            }
-                          />
-                          <span>启用流式</span>
-                        </label>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>前缀复用</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(apiForm.llm.reusePrefix)}
-                            onChange={(event) =>
-                              handleApiFieldChange("llm", "reusePrefix", event.target.checked)
-                            }
-                          />
-                          <span>仅复用提示词与题干</span>
-                        </label>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>联网检索</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(apiForm.llm.webSearch)}
-                            onChange={(event) =>
-                              handleApiFieldChange("llm", "webSearch", event.target.checked)
-                            }
-                          />
-                          <span>启用 web_search</span>
-                        </label>
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 80 }}>深度思考</div>
-                        <select
-                          className="it-select"
-                          value={apiForm.llm.reasoningEffort || "medium"}
-                          onChange={(event) =>
-                            handleApiFieldChange("llm", "reasoningEffort", event.target.value)
-                          }
-                        >
-                          <option value="minimal">minimal</option>
-                          <option value="low">low</option>
-                          <option value="medium">medium</option>
-                          <option value="high">high</option>
-                          <option value="xhigh">xhigh</option>
-                        </select>
-                        <div style={{ minWidth: 90 }}>输出上限</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={apiForm.llm.maxOutputTokens}
-                          onChange={(event) =>
-                            handleApiFieldChange(
-                              "llm",
-                              "maxOutputTokens",
-                              Number(event.target.value),
-                            )
-                          }
-                        />
-                      </div>
-                      <div className="it-settings__hint">
-                        Responses、深度思考与 web_search 会增加调用耗时与费用；前缀复用仅当前会话有效。
-                      </div>
-                      <div className="it-settings__actions">
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={uiLocked || testingLlm}
-                          onClick={handleTestLlm}
-                        >
-                          {testingLlm ? "测试中..." : "测试 LLM 接口"}
-                        </button>
-                      </div>
-                      {llmTestMessage && (
-                        <div className="it-settings__hint">{llmTestMessage}</div>
-                      )}
-                    </div>
 
-                    <div className="it-question">
-                      <div className="it-settings__title">实时输出</div>
-                      <div className="it-settings__desc">
-                        在题目解析/多题分段/面试评价时显示当前输出内容
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>显示</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(streamingSettings.enabled)}
-                            onChange={(event) =>
-                              setStreamingSettings((prev) => ({
-                                ...prev,
-                                enabled: event.target.checked,
-                              }))
-                            }
-                          />
-                          <span>启用实时输出</span>
-                        </label>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>自动折叠</div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(streamingSettings.autoCollapse)}
-                            onChange={(event) =>
-                              setStreamingSettings((prev) => ({
-                                ...prev,
-                                autoCollapse: event.target.checked,
-                              }))
-                            }
-                          />
-                          <span>完成后自动收起</span>
-                        </label>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>预览字数</div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          min={50}
-                          value={streamingSettings.previewChars}
-                          onChange={(event) =>
-                            setStreamingSettings((prev) => ({
-                              ...prev,
-                              previewChars: Number(event.target.value),
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="it-settings__actions">
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={uiLocked || savingStreamingSettings}
-                          onClick={handleSaveStreamingSettings}
-                        >
-                          {savingStreamingSettings ? "保存中..." : "保存设置"}
-                        </button>
-                      </div>
-                      {streamingSaveMessage && (
-                        <div className="it-settings__hint">{streamingSaveMessage}</div>
-                      )}
-                    </div>
 
-                    <div className="it-question">
-                      <div className="it-settings__title">LLM Profiles</div>
-                      <div className="it-settings__desc">
-                        保存当前 LLM 参数为可复用 Profile；可一键载入已有 Profile 到左侧表单
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 90 }}>载入 Profile</div>
-                        <select
-                          className="it-select"
-                          value={selectedLlmProfileId}
-                          onChange={(event) => handleLoadLlmProfile(event.target.value)}
-                        >
-                          <option value="">不载入（手动编辑）</option>
-                          {llmProfileList.map((item) => (
-                            <option key={item} value={item}>
-                              {getLlmProfileLabel(item)}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={uiLocked}
-                          onClick={handleResetLlmProfile}
-                        >
-                          载入默认
-                        </button>
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 90 }}>Profile ID</div>
-                        <input
-                          className="it-input"
-                          value={llmProfileDraft.id}
-                          onChange={(event) =>
-                            setLlmProfileDraft((prev) => ({ ...prev, id: event.target.value }))
-                          }
-                          placeholder="doubao_seed_1_8"
-                        />
-                        <div style={{ minWidth: 70 }}>名称</div>
-                        <input
-                          className="it-input"
-                          value={llmProfileDraft.name}
-                          onChange={(event) =>
-                            setLlmProfileDraft((prev) => ({ ...prev, name: event.target.value }))
-                          }
-                          placeholder="可选"
-                        />
-                      </div>
-                      <div className="it-settings__actions">
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={uiLocked || savingLlmProfile}
-                          onClick={handleSaveLlmProfile}
-                        >
-                          {savingLlmProfile ? "保存中..." : "保存/覆盖"}
-                        </button>
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={uiLocked || savingLlmProfile}
-                          onClick={handleDeleteLlmProfile}
-                        >
-                          删除
-                        </button>
-                      </div>
-                      {llmProfileMessage && (
-                        <div className="it-settings__hint">{llmProfileMessage}</div>
-                      )}
-                      <div className="it-settings__hint">
-                        保存时会使用左侧 LLM（评分/问答）表单的参数；同名 Profile 会被覆盖。
-                      </div>
-                      {llmProfileList.length > 0 && (
-                        <div className="it-retrieval__list">
-                          {llmProfileList.map((item) => (
-                            <div key={item} className="it-retrieval__item">
-                              <div className="it-retrieval__label">
-                                {getLlmProfileLabel(item)}
-                              </div>
-                              <div className="it-retrieval__path">{item}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="it-question">
-                      <div className="it-settings__title">分阶段 LLM</div>
-                      <div className="it-settings__desc">
-                        为题目解析 / 多题分段 / 面试评价分别指定 Profile（留空=默认 LLM）
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 90 }}>题目解析</div>
-                        <select
-                          className="it-select"
-                          value={llmTaskForm.questionParse}
-                          onChange={(event) =>
-                            setLlmTaskForm((prev) => ({
-                              ...prev,
-                              questionParse: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">默认</option>
-                          {llmProfileList.map((item) => (
-                            <option key={item} value={item}>
-                              {getLlmProfileLabel(item)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 90 }}>多题分段</div>
-                        <select
-                          className="it-select"
-                          value={llmTaskForm.segment}
-                          onChange={(event) =>
-                            setLlmTaskForm((prev) => ({
-                              ...prev,
-                              segment: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">默认</option>
-                          {llmProfileList.map((item) => (
-                            <option key={item} value={item}>
-                              {getLlmProfileLabel(item)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 90 }}>面试评价</div>
-                        <select
-                          className="it-select"
-                          value={llmTaskForm.evaluation}
-                          onChange={(event) =>
-                            setLlmTaskForm((prev) => ({
-                              ...prev,
-                              evaluation: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">默认</option>
-                          {llmProfileList.map((item) => (
-                            <option key={item} value={item}>
-                              {getLlmProfileLabel(item)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="it-settings__actions">
-                        <button
-                          className="it-button it-button--secondary it-button--compact"
-                          disabled={uiLocked || savingLlmTasks}
-                          onClick={handleSaveLlmTasks}
-                        >
-                          {savingLlmTasks ? "保存中..." : "保存分阶段配置"}
-                        </button>
-                      </div>
-                      {llmTaskSaveMessage && (
-                        <div className="it-settings__hint">{llmTaskSaveMessage}</div>
-                      )}
-                      <div className="it-settings__hint">
-                        最佳实践：为“解析/分段”选高上下文模型（如 doubao-1.5-pro-32k），为“评价”选
-                        高质量模型（如 doubao-seed-1.8）。Profile 命名建议：
-                        provider-model-purpose，例如 doubao_seed_1_8_eval。
-                      </div>
-                    </div>
-
-                    <div className="it-question">
-                      <div className="it-settings__title">ASR（语音转写）</div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Provider</div>
-                        <select
-                          className="it-select"
-                          value={apiForm.asr.provider}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "provider", event.target.value)
-                          }
-                        >
-                          {asrProviders.map((item) => (
-                            <option key={item} value={item}>
-                              {item === "mock" ? "mock（使用示例文本）" : getProviderLabel(item)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Base URL</div>
-                        <input
-                          className="it-input"
-                          value={apiForm.asr.baseUrl}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "baseUrl", event.target.value)
-                          }
-                          placeholder="https://vop.baidu.com/server_api"
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>API Key</div>
-                        <input
-                          className="it-input"
-                          type="text"
-                          value={apiForm.asr.apiKey}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "apiKey", event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Secret</div>
-                        <input
-                          className="it-input"
-                          type="text"
-                          value={apiForm.asr.secretKey}
-                          onChange={(event) =>
-                            handleApiFieldChange("asr", "secretKey", event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row it-input-row--pairs">
-                        <div className="it-input-pair">
-                          <div>语言</div>
-                          <input
-                            className="it-input"
-                            value={apiForm.asr.language}
-                            onChange={(event) =>
-                              handleApiFieldChange("asr", "language", event.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="it-input-pair">
-                          <div>dev_pid</div>
-                          <input
-                            className="it-input"
-                            type="number"
-                            value={apiForm.asr.devPid}
-                            onChange={(event) =>
-                              handleApiFieldChange("asr", "devPid", Number(event.target.value))
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="it-input-row it-input-row--pairs">
-                        <div className="it-input-pair">
-                          <div>分片(s)</div>
-                          <input
-                            className="it-input"
-                            type="number"
-                            value={apiForm.asr.maxChunkSec}
-                            onChange={(event) =>
-                              handleApiFieldChange("asr", "maxChunkSec", Number(event.target.value))
-                            }
-                          />
-                        </div>
-                        <div className="it-input-pair">
-                          <div>并发</div>
-                          <input
-                            className="it-input"
-                            type="number"
-                            value={apiForm.asr.maxConcurrency}
-                            onChange={(event) =>
-                              handleApiFieldChange(
-                                "asr",
-                                "maxConcurrency",
-                                Number(event.target.value),
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="it-input-row it-input-row--pairs">
-                        <div className="it-input-pair">
-                          <div>超时(s)</div>
-                          <input
-                            className="it-input"
-                            type="number"
-                            value={apiForm.asr.timeoutSec}
-                            onChange={(event) =>
-                              handleApiFieldChange("asr", "timeoutSec", Number(event.target.value))
-                            }
-                          />
-                        </div>
-                        <div className="it-input-pair">
-                          <div>重试</div>
-                          <input
-                            className="it-input"
-                            type="number"
-                            value={apiForm.asr.maxRetries}
-                            onChange={(event) =>
-                              handleApiFieldChange("asr", "maxRetries", Number(event.target.value))
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 80 }}>Mock 文本</div>
-                        <input
-                          className="it-input"
-                          value={apiForm.asr.mockText}
-                        onChange={(event) =>
-                          handleApiFieldChange("asr", "mockText", event.target.value)
-                        }
-                        placeholder="仅在 provider=mock 时使用"
-                      />
-                    </div>
-                    <div className="it-settings__actions">
-                      <button
-                        className="it-button it-button--secondary it-button--compact"
-                        disabled={uiLocked || testingAsr}
-                        onClick={handleTestAsr}
-                      >
-                        {testingAsr ? "测试中..." : "测试 ASR 接口"}
-                      </button>
-                    </div>
-                    {asrTestMessage && (
-                      <div className="it-settings__hint">{asrTestMessage}</div>
-                    )}
-                    {asrTestRaw && (
-                      <pre className="it-settings__raw">{asrTestRaw}</pre>
-                    )}
-                  </div>
-                </div>
-                  {apiSaveMessage && <div className="it-settings__hint">{apiSaveMessage}</div>}
-                </>
-              ) : (
-                <div className="it-placeholder">配置加载中...</div>
-              )}
-            </div>
-
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">评分提示词</div>
-                  <div className="it-settings__desc">严格高标准，不输出安慰语</div>
-                </div>
-                <div className="it-settings__actions">
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked}
-                    onClick={() => handleSavePrompts("evaluation")}
-                  >
-                    保存提示词
-                  </button>
-                </div>
-              </div>
-              <textarea
-                className="it-textarea it-textarea--prompt"
-                value={customPrompt}
-                onChange={(event) => setCustomPrompt(event.target.value)}
-              />
-              {promptSaveScope === "evaluation" && promptSaveMessage && (
-                <div className="it-settings__hint">{promptSaveMessage}</div>
-              )}
-            </div>
-
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">示范答案提示词</div>
-                  <div className="it-settings__desc">控制总时长≤10分钟，公务员思维、结构清晰</div>
-                </div>
-                <div className="it-settings__actions">
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked}
-                    onClick={() => handleSavePrompts("demo")}
-                  >
-                    保存提示词
-                  </button>
-                </div>
-              </div>
-              <textarea
-                className="it-textarea it-textarea--prompt"
-                value={demoPrompt}
-                onChange={(event) => setDemoPrompt(event.target.value)}
-              />
-              <div className="it-input-row">
-                <div style={{ minWidth: 120 }}>示范生成方式</div>
-                <select
-                  className="it-select"
-                  value={answerMode}
-                  onChange={(event) =>
-                    setAnswerMode(event.target.value === "single" ? "single" : "two-step")
-                  }
-                >
-                  <option value="two-step">两步法：先提纲后整篇</option>
-                  <option value="single">单次：提纲+整篇一次输出</option>
-                </select>
-              </div>
-              <div className="it-settings__hint">
-                两步法会额外调用一次 LLM，成本与耗时更高，但更稳定。
-              </div>
-              {promptSaveScope === "demo" && promptSaveMessage && (
-                <div className="it-settings__hint">{promptSaveMessage}</div>
-              )}
-            </div>
-
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">每题独立提示词（最多3题）</div>
-                  <div className="it-settings__desc">持久化保存，逐题覆盖总体提示词</div>
-                </div>
-                <div className="it-settings__actions">
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked}
-                    onClick={() => handleSavePrompts("per-question")}
-                  >
-                    保存提示词
-                  </button>
-                </div>
-              </div>
-              <div className="it-question-prompts">
-                {[0, 1, 2].map((idx) => (
-                  <div key={idx} className="it-question-prompts__item">
-                    <div className="it-question-prompts__title">第 {idx + 1} 题</div>
-                    <div className="it-question-prompts__pair">
-                      <textarea
-                        className="it-textarea it-textarea--prompt"
-                        placeholder="本题评分提示词（可选）"
-                        value={perQuestionSystemPrompts[idx] || ""}
-                        onChange={(event) => {
-                          const next = [...perQuestionSystemPrompts];
-                          next[idx] = event.target.value;
-                          setPerQuestionSystemPrompts(next);
-                        }}
-                      />
-                      <textarea
-                        className="it-textarea it-textarea--prompt"
-                        placeholder="本题示范提示词（可选）"
-                        value={perQuestionDemoPrompts[idx] || ""}
-                        onChange={(event) => {
-                          const next = [...perQuestionDemoPrompts];
-                          next[idx] = event.target.value;
-                          setPerQuestionDemoPrompts(next);
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {promptSaveScope === "per-question" && promptSaveMessage && (
-                <div className="it-settings__hint">{promptSaveMessage}</div>
-              )}
-            </div>
-
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">输入设备</div>
-                  <div className="it-settings__desc">选择录音采集的麦克风来源</div>
-                </div>
-                <div className="it-settings__actions">
-                  <button
-                    className="it-button it-button--secondary it-button--compact"
-                    disabled={uiLocked}
-                    onClick={handleRefreshInputs}
-                  >
-                    刷新列表
-                  </button>
-                </div>
-              </div>
-              <div className="it-input-row">
-                <select
-                  className="it-select"
-                  value={selectedInput}
-                  onChange={(event) => setSelectedInput(event.target.value)}
-                  disabled={uiLocked}
-                >
-                  <option value="">系统默认</option>
-                  {nativeInputs.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="it-settings__hint">
-                未选择时使用系统默认输入设备；若需要手动指定 ffmpeg 输入，可在环境变量 IT_FFMPEG_INPUT 中填 audio=设备名。
-              </div>
-            </div>
-
-            <div className="it-settings__section">
-              <div className="it-settings__header">
-                <div>
-                  <div className="it-settings__title">检索配置</div>
-                  <div className="it-settings__desc">知识库目录与开关</div>
-                </div>
-                <label className="it-toggle">
-                  <input
-                    type="checkbox"
-                    checked={config?.retrievalEnabled ?? true}
-                    disabled={uiLocked}
-                    onChange={(event) => handleToggleRetrieval(event.target.checked)}
-                  />
-                  <span>启用检索</span>
-                </label>
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>模式</div>
-                <select
-                  className="it-select"
-                  value={retrievalForm.mode}
-                  disabled={uiLocked}
-                  onChange={(event) => handleRetrievalFieldChange("mode", event.target.value)}
-                >
-                  <option value="vector">向量语义</option>
-                  <option value="keyword">词面匹配</option>
-                </select>
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 80 }}>Top K</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.topK}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange("topK", Number(event.target.value))
-                  }
-                />
-                <div style={{ minWidth: 90 }}>Min Score</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  step="0.05"
-                  value={retrievalForm.minScore}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange("minScore", Number(event.target.value))
-                  }
-                />
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>检索并行</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.maxConcurrency}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange(
-                      "maxConcurrency",
-                      Number(event.target.value),
-                    )
-                  }
-                />
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 80 }}>笔记TopK</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.topKNotes}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange("topKNotes", Number(event.target.value))
-                  }
-                />
-                <div style={{ minWidth: 90 }}>知识库TopK</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.topKKnowledge}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange("topKKnowledge", Number(event.target.value))
-                  }
-                />
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 80 }}>评分标准TopK</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.topKRubrics}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange("topKRubrics", Number(event.target.value))
-                  }
-                />
-                <div style={{ minWidth: 90 }}>示例答案TopK</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.topKExamples}
-                  disabled={uiLocked}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange("topKExamples", Number(event.target.value))
-                  }
-                />
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>Provider</div>
-                <select
-                  className="it-select"
-                  value={retrievalForm.vector.provider}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("provider", event.target.value)
-                  }
-                >
-                  {embeddingProviders.map((item) => (
-                    <option key={item} value={item}>
-                      {getProviderLabel(item)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>Model</div>
-                <input
-                  className="it-input"
-                  value={retrievalForm.vector.model}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("model", event.target.value)
-                  }
-                  placeholder="按平台填写 embedding 模型"
-                />
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>Base URL</div>
-                <input
-                  className="it-input"
-                  value={retrievalForm.vector.baseUrl}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("baseUrl", event.target.value)
-                  }
-                />
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>API Key</div>
-                <input
-                  className="it-input"
-                  value={retrievalForm.vector.apiKey}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("apiKey", event.target.value)
-                  }
-                />
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 80 }}>超时(s)</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.vector.timeoutSec}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("timeoutSec", Number(event.target.value))
-                  }
-                />
-                <div style={{ minWidth: 70 }}>重试</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.vector.maxRetries}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("maxRetries", Number(event.target.value))
-                  }
-                />
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 80 }}>批大小</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.vector.batchSize}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("batchSize", Number(event.target.value))
-                  }
-                />
-                <div style={{ minWidth: 80 }}>Query 上限</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.vector.queryMaxChars}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalVectorChange("queryMaxChars", Number(event.target.value))
-                  }
-                />
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>学习并行</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  value={retrievalForm.embeddingMaxConcurrency}
-                  disabled={uiLocked || retrievalForm.mode !== "vector"}
-                  onChange={(event) =>
-                    handleRetrievalFieldChange(
-                      "embeddingMaxConcurrency",
-                      Number(event.target.value),
-                    )
-                  }
-                />
-              </div>
-              <div className="it-settings__actions">
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || savingRetrieval}
-                  onClick={handleSaveRetrievalSettings}
-                >
-                  {savingRetrieval ? "保存中..." : "保存检索配置"}
-                </button>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || testingEmbedding}
-                  onClick={handleTestEmbedding}
-                >
-                  {testingEmbedding ? "测试中..." : "测试 Embedding 接口"}
-                </button>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || clearingEmbeddingCache}
-                  onClick={handleClearEmbeddingCache}
-                >
-                  {clearingEmbeddingCache ? "清理中..." : "清理向量缓存"}
-                </button>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || clearingCorpusCache}
-                  onClick={handleClearCorpusCache}
-                >
-                  {clearingCorpusCache ? "清理中..." : "清理语料索引缓存"}
-                </button>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || traceLogEnabled}
-                  onClick={handleEnableTraceLogs}
-                >
-                  {traceLogEnabled ? "日志已开启" : "开启日志输出"}
-                </button>
-              </div>
-              {retrievalSaveMessage && (
-                <div className="it-settings__hint">{retrievalSaveMessage}</div>
-              )}
-              {embeddingTestMessage && (
-                <div className="it-settings__hint">{embeddingTestMessage}</div>
-              )}
-              {embeddingCacheMessage && (
-                <div className="it-settings__hint">{embeddingCacheMessage}</div>
-              )}
-              {corpusCacheMessage && (
-                <div className="it-settings__hint">{corpusCacheMessage}</div>
-              )}
-              {showEmbeddingWarmup && embeddingWarmup && (
-                <div className="it-progress it-progress--compact">
-                  <div className="it-progress__label">
-                    <span>向量预计算</span>
-                    <span>
-                      {embeddingWarmup.message ||
-                        `${embeddingWarmup.done}/${embeddingWarmup.total}`}
-                    </span>
-                  </div>
-                  <div className="it-progress__bar">
-                    <div
-                      className="it-progress__fill"
-                      style={{ width: `${embeddingWarmup.progress || 0}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="it-settings__hint">
-                索引与向量缓存会落盘保存，目录变更后会自动重新索引。
-              </div>
-              <div className="it-settings__hint">
-                需要排查笔记学习时，点击“开启日志输出”后会在输出面板显示相关日志。
-              </div>
-              {retrievalCacheInfo && (
-                <>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 80 }}>语料缓存</div>
-                    <div className="it-settings__meta" style={{ flex: 1 }}>
-                      {corpusCachePath || "-"}
-                    </div>
-                  </div>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 80 }}>向量缓存</div>
-                    <div className="it-settings__meta" style={{ flex: 1 }}>
-                      {embeddingCachePath || "-"}
-                    </div>
-                  </div>
-                  <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 80 }}>缓存上限</div>
-                    <div className="it-settings__meta" style={{ flex: 1 }}>
-                      {typeof corpusCacheMb === "number" ? `${corpusCacheMb} MB` : "-"}
-                    </div>
-                    <div style={{ minWidth: 80 }}>并发</div>
-                    <div className="it-settings__meta" style={{ flex: 1 }}>
-                      {typeof maxConcurrency === "number" ? maxConcurrency : "-"}
-                    </div>
-                  </div>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 80 }}>Query 缓存</div>
-                    <div className="it-settings__meta" style={{ flex: 1 }}>
-                      {typeof queryCacheSize === "number" ? queryCacheSize : "-"}
-                    </div>
-                  </div>
-                </>
-              )}
-              <div className="it-settings__hint">
-                向量检索会调用 embedding 接口，模型名称请按平台实际填入。
-              </div>
-              <div className="it-input-row">
-                <div style={{ minWidth: 80 }}>保存目录</div>
-                <div className="it-settings__meta" style={{ flex: 1 }}>
-                  {config?.sessionsDir || "sessions"}
-                </div>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked}
-                  onClick={() => request("it/selectSessionsDir", undefined)}
-                >
-                  选择保存目录
-                </button>
-              </div>
-              <div className="it-input-row it-input-row--nowrap">
-                <div style={{ minWidth: 80 }}>历史命名</div>
-                <select
-                  className="it-select"
-                  value={topicTitleMode}
-                  disabled={uiLocked || savingTopicSettings}
-                  onChange={(event) =>
-                    setTopicTitleMode(event.target.value === "simple" ? "simple" : "llm")
-                  }
-                >
-                  <option value="llm">LLM 摘要</option>
-                  <option value="simple">题干前缀</option>
-                </select>
-                <div style={{ minWidth: 60 }}>长度</div>
-                <input
-                  className="it-input"
-                  type="number"
-                  min={4}
-                  max={18}
-                  value={topicTitleLen}
-                  disabled={uiLocked || savingTopicSettings}
-                  onChange={(event) => setTopicTitleLen(Number(event.target.value))}
-                  style={{ width: 90 }}
-                />
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || savingTopicSettings}
-                  onClick={handleSaveTopicSettings}
-                >
-                  {savingTopicSettings ? "保存中..." : "保存命名"}
-                </button>
-              </div>
-              <div className="it-settings__hint">
-                选择“LLM 摘要”会额外调用一次 LLM，增加耗时与费用。
-              </div>
-              {topicSaveMessage && (
-                <div className="it-settings__hint">{topicSaveMessage}</div>
-              )}
-              <div className="it-retrieval__list">
-                {retrievalDirs.map((item) => (
-                  <div key={item.key} className="it-retrieval__item">
-                    <div className="it-retrieval__label">{item.label}</div>
-                    <div className="it-retrieval__path">{item.value}</div>
-                    <button
-                      className="it-button it-button--secondary it-button--compact"
-                      disabled={uiLocked}
-                      onClick={() => handleSelectWorkspaceDir(item.key)}
-                    >
-                      选择目录
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        </div>
+            {activePage === "settings" && (
+        <SettingsPage
+          uiLocked={uiLocked}
+          config={config}
+          streamingSettings={streamingSettings}
+          setStreamingSettings={setStreamingSettings}
+          savingStreamingSettings={savingStreamingSettings}
+          streamingSaveMessage={streamingSaveMessage}
+          handleSaveStreamingSettings={handleSaveStreamingSettings}
+          envDraftName={envDraftName}
+          setEnvDraftName={setEnvDraftName}
+          envMessage={envMessage}
+          savingEnvironment={savingEnvironment}
+          handleSetActiveEnvironment={handleSetActiveEnvironment}
+          handleCreateEnvironment={handleCreateEnvironment}
+          handleDeleteEnvironment={handleDeleteEnvironment}
+          handleReloadConfig={handleReloadConfig}
+          traceLogEnabled={traceLogEnabled}
+          handleEnableTraceLogs={handleEnableTraceLogs}
+          templateCategory={templateCategory}
+          setTemplateCategory={setTemplateCategory}
+          templatesByCategory={templatesByCategory}
+          selectedTemplateId={selectedTemplateId}
+          setSelectedTemplateId={setSelectedTemplateId}
+          selectedTemplate={selectedTemplate}
+          templateDraft={templateDraft}
+          setTemplateDraft={setTemplateDraft}
+          templateJsonDraft={templateJsonDraft}
+          setTemplateJsonDraft={setTemplateJsonDraft}
+          templateJsonErrors={templateJsonErrors}
+          templateSaveMessage={templateSaveMessage}
+          savingTemplate={savingTemplate}
+          isCreatingTemplate={isCreatingTemplate}
+          handleCreateTemplate={handleCreateTemplate}
+          handleDuplicateTemplate={handleDuplicateTemplate}
+          handleDeleteTemplate={handleDeleteTemplate}
+          handleCancelTemplateDraft={handleCancelTemplateDraft}
+          handleSaveTemplate={handleSaveTemplate}
+          updateTemplateRequest={updateTemplateRequest}
+          updateTemplateResponse={updateTemplateResponse}
+          updateTemplateStreaming={updateTemplateStreaming}
+          paramCatalogList={paramCatalogList}
+          templateUsageSets={templateUsageSets}
+          templateSecrets={templateSecrets}
+          secretDraft={secretDraft}
+          setSecretDraft={setSecretDraft}
+          savingSecret={savingSecret}
+          secretMessage={secretMessage}
+          handleSaveSecret={handleSaveSecret}
+          handleDeleteSecret={handleDeleteSecret}
+          templateParamOptions={templateParamOptions}
+          templateParamInput={templateParamInput}
+          setTemplateParamInput={setTemplateParamInput}
+          savingParamOptions={savingParamOptions}
+          handleAddParamOption={handleAddParamOption}
+          handleSaveParamOptions={handleSaveParamOptions}
+          templateBindings={templateBindings}
+          setTemplateBindings={setTemplateBindings}
+          llmTemplates={llmTemplates}
+          asrTemplates={asrTemplates}
+          embeddingTemplates={embeddingTemplates}
+          savingBindings={savingBindings}
+          handleSaveBindings={handleSaveBindings}
+          apiForm={apiForm}
+          handleApiFieldChange={handleApiFieldChange}
+          llmParamsMessage={llmParamsMessage}
+          savingLlmParams={savingLlmParams}
+          handleSaveLlmParams={handleSaveLlmParams}
+          asrParamsMessage={asrParamsMessage}
+          savingAsrParams={savingAsrParams}
+          handleSaveAsrParams={handleSaveAsrParams}
+          customPrompt={customPrompt}
+          setCustomPrompt={setCustomPrompt}
+          demoPrompt={demoPrompt}
+          setDemoPrompt={setDemoPrompt}
+          answerMode={answerMode}
+          setAnswerMode={setAnswerMode}
+          perQuestionSystemPrompts={perQuestionSystemPrompts}
+          setPerQuestionSystemPrompts={setPerQuestionSystemPrompts}
+          perQuestionDemoPrompts={perQuestionDemoPrompts}
+          setPerQuestionDemoPrompts={setPerQuestionDemoPrompts}
+          promptSaveMessage={promptSaveMessage}
+          promptSaveScope={promptSaveScope}
+          handleSavePrompts={handleSavePrompts}
+          nativeInputs={nativeInputs}
+          selectedInput={selectedInput}
+          setSelectedInput={setSelectedInput}
+          handleRefreshInputs={handleRefreshInputs}
+          retrievalForm={retrievalForm}
+          handleRetrievalFieldChange={handleRetrievalFieldChange}
+          handleRetrievalVectorChange={handleRetrievalVectorChange}
+          savingRetrieval={savingRetrieval}
+          retrievalSaveMessage={retrievalSaveMessage}
+          handleSaveRetrievalSettings={handleSaveRetrievalSettings}
+          clearingEmbeddingCache={clearingEmbeddingCache}
+          embeddingCacheMessage={embeddingCacheMessage}
+          handleClearEmbeddingCache={handleClearEmbeddingCache}
+          clearingCorpusCache={clearingCorpusCache}
+          corpusCacheMessage={corpusCacheMessage}
+          handleClearCorpusCache={handleClearCorpusCache}
+          showEmbeddingWarmup={showEmbeddingWarmup}
+          embeddingWarmup={embeddingWarmup}
+          retrievalCacheInfo={retrievalCacheInfo}
+          corpusCachePath={corpusCachePath}
+          embeddingCachePath={embeddingCachePath}
+          corpusCacheMb={corpusCacheMb}
+          queryCacheSize={queryCacheSize}
+          maxConcurrency={maxConcurrency}
+          topicTitleMode={topicTitleMode}
+          setTopicTitleMode={setTopicTitleMode}
+          topicTitleLen={topicTitleLen}
+          setTopicTitleLen={setTopicTitleLen}
+          savingTopicSettings={savingTopicSettings}
+          handleSaveTopicSettings={handleSaveTopicSettings}
+          topicSaveMessage={topicSaveMessage}
+          retrievalDirs={retrievalDirs}
+          handleSelectWorkspaceDir={handleSelectWorkspaceDir}
+        />
       )}
 
     </div>
