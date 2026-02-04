@@ -33,7 +33,15 @@ function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
       "webSearch",
       "reusePrefix",
     ],
-    asr: ["audioFile", "asr.lang", "asr.dev_pid"],
+    asr: [
+      "audioFile",
+      "audio.format",
+      "audio.sampleRate",
+      "audio.channel",
+      "audio.byteLength",
+      "asr.lang",
+      "asr.dev_pid",
+    ],
     embedding: ["embeddingInput", "model"],
     token: [],
   };
