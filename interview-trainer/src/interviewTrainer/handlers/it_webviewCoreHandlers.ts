@@ -41,7 +41,7 @@ export function it_registerCoreHandlers(host: ItWebviewHandlersHost): void {
   host.webviewProtocol.on("it/openSettings", async () => {
     it_ensureConfigFiles(host.context);
     const configDir = host.context.globalStorageUri.fsPath;
-    const target = path.join(configDir, "interview_trainer", "api_config.yaml");
+    const target = path.join(configDir, "interview_trainer", "templates.yaml");
     await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
   });
   host.webviewProtocol.on("it/openMicSettings", async () => {

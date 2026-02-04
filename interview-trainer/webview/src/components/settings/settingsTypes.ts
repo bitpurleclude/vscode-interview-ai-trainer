@@ -28,27 +28,6 @@ export type TemplateUsageSets = {
   empty: Set<string>;
 };
 
-export type ApiForm = {
-  llm: {
-    model: string;
-    reasoningEffort: string;
-    webSearch: boolean;
-    stream: boolean;
-    timeoutSec: number;
-    maxRetries: number;
-    antiRepeat: boolean;
-    reusePrefix: boolean;
-  };
-  asr: {
-    language: string;
-    devPid: number;
-    maxChunkSec: number;
-    maxConcurrency: number;
-    timeoutSec: number;
-    maxRetries: number;
-  };
-};
-
 export type RetrievalForm = {
   mode: string;
   topK: number;
@@ -151,18 +130,6 @@ export type SettingsBindingProps = {
   embeddingTemplates: ItApiTemplate[];
   savingBindings: boolean;
   handleSaveBindings: () => void;
-  apiForm: ApiForm;
-  handleApiFieldChange: (
-    section: "llm" | "asr",
-    field: string,
-    value: string | number | boolean,
-  ) => void;
-  llmParamsMessage: string | null;
-  savingLlmParams: boolean;
-  handleSaveLlmParams: () => void;
-  asrParamsMessage: string | null;
-  savingAsrParams: boolean;
-  handleSaveAsrParams: () => void;
 };
 
 export type SettingsPromptProps = {

@@ -979,6 +979,9 @@
   color: var(--vscode-descriptionForeground);
 }
 
+.it-settings__hint--error {
+  color: var(--vscode-errorForeground);
+}
 .it-label {
   display: inline-flex;
   align-items: center;
@@ -1338,9 +1341,27 @@
 .it-template__test {
   margin-top: 10px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
+}
+
+.it-template__test-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.it-template__test-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.it-template__test-actions {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 8px;
 }
 
 .it-template__cards {

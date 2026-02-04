@@ -67,26 +67,6 @@ const InterviewTrainer: React.FC = () => {
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
   const [showNoteUsage, setShowNoteUsage] = useState(false);
   const [showNoteSuggestions, setShowNoteSuggestions] = useState(false);
-  const [apiForm, setApiForm] = useState({
-    llm: {
-      model: "",
-      reasoningEffort: "",
-      webSearch: false,
-      stream: true,
-      timeoutSec: 60,
-      maxRetries: 1,
-      antiRepeat: false,
-      reusePrefix: false,
-    },
-    asr: {
-      language: "zh",
-      devPid: 1537,
-      maxChunkSec: 50,
-      maxConcurrency: 1,
-      timeoutSec: 120,
-      maxRetries: 1,
-    },
-  });
   const [retrievalForm, setRetrievalForm] = useState({
     mode: "vector",
     topK: 5,
@@ -128,7 +108,6 @@ const InterviewTrainer: React.FC = () => {
     setTemplateBindings,
     setTemplateParamOptions,
     setTemplateSecrets,
-    setApiForm,
     setRetrievalForm,
   });
 
@@ -304,13 +283,6 @@ const InterviewTrainer: React.FC = () => {
     handleSetActiveEnvironment,
     handleCreateEnvironment,
     handleDeleteEnvironment,
-    handleApiFieldChange,
-    handleSaveLlmParams,
-    handleSaveAsrParams,
-    savingLlmParams,
-    savingAsrParams,
-    llmParamsMessage,
-    asrParamsMessage,
     handleSavePrompts,
     promptSaveMessage,
     promptSaveScope,
@@ -323,8 +295,6 @@ const InterviewTrainer: React.FC = () => {
   } = useEnvironmentSettings({
     config,
     setConfig,
-    apiForm,
-    setApiForm,
     streamingSettings,
     setStreamingSettings,
     customPrompt,
@@ -472,14 +442,6 @@ const InterviewTrainer: React.FC = () => {
     embeddingTemplates,
     savingBindings,
     handleSaveBindings,
-    apiForm,
-    handleApiFieldChange,
-    llmParamsMessage,
-    savingLlmParams,
-    handleSaveLlmParams,
-    asrParamsMessage,
-    savingAsrParams,
-    handleSaveAsrParams,
     customPrompt,
     setCustomPrompt,
     demoPrompt,

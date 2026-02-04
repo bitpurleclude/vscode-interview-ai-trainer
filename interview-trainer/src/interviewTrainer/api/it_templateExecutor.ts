@@ -36,6 +36,17 @@ export type ItTemplateExecutionResult = {
   headers?: Record<string, string>;
 };
 
+export type ItTemplateRenderResult = {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  query: Record<string, unknown>;
+  body: unknown;
+  stream: boolean;
+  timeoutSec?: number;
+  missing: string[];
+};
+
 type ItTemplateRenderContext = {
   variables: Record<string, unknown>;
   missing: Set<string>;
@@ -126,6 +137,22 @@ async function it_injectTemplateSecrets(
   }
   if (secretNames.length) {
     variables.secrets = secrets;
+  }
+}
+
+function it_maskTemplateSecrets(variables: Record<string, unknown>): void {
+  if (variables.apiKey !== undefined) {
+    variables.apiKey = "***";
+  }
+  if (variables.secretKey !== undefined) {
+    variables.secretKey = "***";
+  }
+  if (it_isPlainObject(variables.secrets)) {
+    const masked: Record<string, unknown> = { ...(variables.secrets as Record<string, unknown>) };
+    Object.keys(masked).forEach((key) => {
+      masked[key] = "***";
+    });
+    variables.secrets = masked;
   }
 }
 
@@ -499,6 +526,68 @@ async function it_consumeTemplateSse(
     });
     stream.on("error", (err) => reject(err));
   });
+}
+
+export async function it_renderTemplateRequest(options: {
+  runtime: ItTemplateRuntime;
+  variables?: Record<string, unknown>;
+  stream?: boolean;
+  timeoutSec?: number;
+  maskSecrets?: boolean;
+}): Promise<ItTemplateRenderResult> {
+  const { runtime } = options;
+  const variables = { ...(options.variables || {}) };
+  await it_injectTemplateSecrets(runtime, variables);
+  if (options.maskSecrets) {
+    it_maskTemplateSecrets(variables);
+  }
+  const ctx: ItTemplateRenderContext = {
+    variables,
+    missing: new Set<string>(),
+  };
+  const request = runtime.template.request || { method: "POST", url: "" };
+  const streamEnabled =
+    typeof options.stream === "boolean"
+      ? options.stream
+      : typeof request.stream === "boolean"
+        ? request.stream
+        : false;
+  if (variables.stream === undefined) {
+    variables.stream = streamEnabled;
+  }
+  if (variables.timeoutSec === undefined && request.timeoutSec !== undefined) {
+    variables.timeoutSec = request.timeoutSec;
+  }
+  const renderedUrl = await it_renderTemplateValue(request.url, ctx);
+  const renderedHeaders = await it_renderTemplateValue(request.headers || {}, ctx);
+  const renderedQuery = await it_renderTemplateValue(request.query || {}, ctx);
+  const renderedBody = await it_renderTemplateValue(request.body, ctx);
+
+  const query = it_isPlainObject(renderedQuery) ? renderedQuery : {};
+  const url = it_appendQuery(String(renderedUrl || ""), query);
+  const headers: Record<string, string> = {};
+  if (it_isPlainObject(renderedHeaders)) {
+    Object.entries(renderedHeaders).forEach(([key, value]) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      headers[key] = it_formatTemplateValue(value);
+    });
+  }
+  const timeoutSec = Number(
+    options.timeoutSec ?? request.timeoutSec ?? variables.timeoutSec ?? 0,
+  );
+
+  return {
+    method: String(request.method || "POST").toUpperCase(),
+    url,
+    headers,
+    query,
+    body: renderedBody,
+    stream: streamEnabled,
+    timeoutSec: Number.isFinite(timeoutSec) && timeoutSec > 0 ? timeoutSec : undefined,
+    missing: Array.from(ctx.missing),
+  };
 }
 
 export async function it_executeTemplate(

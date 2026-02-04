@@ -1,13 +1,11 @@
 ﻿import { useCallback, useState } from "react";
 import { request } from "../messenger";
 import type { ItConfigSnapshot } from "../types";
-import type { ApiForm, StreamingSettings } from "../components/settings/settingsTypes";
+import type { StreamingSettings } from "../components/settings/settingsTypes";
 
 type UseEnvironmentSettingsOptions = {
   config: ItConfigSnapshot | null;
   setConfig: React.Dispatch<React.SetStateAction<ItConfigSnapshot | null>>;
-  apiForm: ApiForm;
-  setApiForm: React.Dispatch<React.SetStateAction<ApiForm>>;
   streamingSettings: StreamingSettings;
   setStreamingSettings: React.Dispatch<React.SetStateAction<StreamingSettings>>;
   customPrompt: string;
@@ -22,8 +20,6 @@ type UseEnvironmentSettingsOptions = {
 export function useEnvironmentSettings({
   config,
   setConfig,
-  apiForm,
-  setApiForm,
   streamingSettings,
   setStreamingSettings,
   customPrompt,
@@ -37,10 +33,6 @@ export function useEnvironmentSettings({
   const [envDraftName, setEnvDraftName] = useState("");
   const [envMessage, setEnvMessage] = useState<string | null>(null);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
-  const [savingLlmParams, setSavingLlmParams] = useState(false);
-  const [savingAsrParams, setSavingAsrParams] = useState(false);
-  const [llmParamsMessage, setLlmParamsMessage] = useState<string | null>(null);
-  const [asrParamsMessage, setAsrParamsMessage] = useState<string | null>(null);
   const [promptSaveMessage, setPromptSaveMessage] = useState<string | null>(null);
   const [promptSaveScope, setPromptSaveScope] = useState<
     "evaluation" | "demo" | "per-question" | null
@@ -129,86 +121,6 @@ export function useEnvironmentSettings({
     [setConfig],
   );
 
-  const handleApiFieldChange = useCallback(
-    (scope: "llm" | "asr", key: string, value: string | number | boolean) => {
-      setLlmParamsMessage(null);
-      setAsrParamsMessage(null);
-      setApiForm((prev) => ({
-        ...prev,
-        [scope]: {
-          ...prev[scope],
-          [key]: value,
-        },
-      }));
-    },
-    [setApiForm],
-  );
-
-  const handleSaveLlmParams = useCallback(async () => {
-    setSavingLlmParams(true);
-    setLlmParamsMessage(null);
-    try {
-      const reasoningEffort = String(apiForm.llm.reasoningEffort || "").trim();
-      const resp = await request("it/updateApiSettings", {
-        environment: config?.activeEnvironment,
-        llm: {
-          model: apiForm.llm.model,
-          reasoningEffort: reasoningEffort || undefined,
-          timeoutSec: Number(apiForm.llm.timeoutSec),
-          maxRetries: Number(apiForm.llm.maxRetries),
-          antiRepeat: Boolean(apiForm.llm.antiRepeat),
-          webSearch: Boolean(apiForm.llm.webSearch),
-          reusePrefix: Boolean(apiForm.llm.reusePrefix),
-          stream: Boolean(apiForm.llm.stream),
-        },
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setLlmParamsMessage("LLM 参数已保存。");
-      } else {
-        setLlmParamsMessage("LLM 参数保存失败，请重试。");
-      }
-    } catch (err) {
-      setLlmParamsMessage(
-        `LLM 参数保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingLlmParams(false);
-  }, [apiForm.llm, config?.activeEnvironment, setConfig]);
-
-  const handleSaveAsrParams = useCallback(async () => {
-    setSavingAsrParams(true);
-    setAsrParamsMessage(null);
-    try {
-      const resp = await request("it/updateApiSettings", {
-        environment: config?.activeEnvironment,
-        asr: {
-          language: apiForm.asr.language,
-          devPid: Number(apiForm.asr.devPid),
-          maxChunkSec: Number(apiForm.asr.maxChunkSec),
-          maxConcurrency: Number(apiForm.asr.maxConcurrency),
-          timeoutSec: Number(apiForm.asr.timeoutSec),
-          maxRetries: Number(apiForm.asr.maxRetries),
-        },
-      });
-      if (resp?.status === "success") {
-        if (resp.content) {
-          setConfig(resp.content);
-        }
-        setAsrParamsMessage("ASR 参数已保存。");
-      } else {
-        setAsrParamsMessage("ASR 参数保存失败，请重试。");
-      }
-    } catch (err) {
-      setAsrParamsMessage(
-        `ASR 参数保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    setSavingAsrParams(false);
-  }, [apiForm.asr, config?.activeEnvironment, setConfig]);
-
   const handleSavePrompts = useCallback(
     async (scope: "evaluation" | "demo" | "per-question") => {
       setPromptSaveMessage(null);
@@ -296,13 +208,6 @@ export function useEnvironmentSettings({
     handleSetActiveEnvironment,
     handleCreateEnvironment,
     handleDeleteEnvironment,
-    handleApiFieldChange,
-    handleSaveLlmParams,
-    handleSaveAsrParams,
-    savingLlmParams,
-    savingAsrParams,
-    llmParamsMessage,
-    asrParamsMessage,
     handleSavePrompts,
     promptSaveMessage,
     promptSaveScope,

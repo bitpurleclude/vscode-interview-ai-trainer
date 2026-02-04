@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { SettingsBindingProps, SettingsCommonTemplateProps } from "./settingsTypes";
 import type { ItTemplateCategory } from "../../types";
 import { InfoTip } from "../common/InfoTip";
+import { on, request } from "../../messenger";
 
 const TEMPLATE_CATEGORY_TABS: Array<{
   key: ItTemplateCategory;
@@ -71,15 +72,160 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     handleAddParamOption,
     handleSaveParamOptions,
   } = props;
-  const boundIds = new Set(
-    [
-      templateBindings.llm?.questionParse,
-      templateBindings.llm?.segment,
-      templateBindings.llm?.evaluation,
-      templateBindings.asr?.transcription,
-      templateBindings.embedding?.retrieval,
-    ].filter(Boolean) as string[],
+  const [testInput, setTestInput] = useState("ping");
+  const [testVarsDraft, setTestVarsDraft] = useState("{}");
+  const [testVarsError, setTestVarsError] = useState<string | null>(null);
+  const [testRequestPreview, setTestRequestPreview] = useState<any | null>(null);
+  const [testResponsePreview, setTestResponsePreview] = useState<any | null>(null);
+  const [testStreamOutput, setTestStreamOutput] = useState<string>("");
+  const [testMissingVars, setTestMissingVars] = useState<string[]>([]);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [testRunning, setTestRunning] = useState(false);
+  const [testRunId, setTestRunId] = useState<string>("");
+
+  const selectedTemplateName = selectedTemplate?.name || selectedTemplate?.id || "";
+  const canTest = Boolean(selectedTemplateId);
+  const boundIds = useMemo(
+    () =>
+      new Set(
+        [
+          templateBindings.llm?.questionParse,
+          templateBindings.llm?.segment,
+          templateBindings.llm?.evaluation,
+          templateBindings.asr?.transcription,
+          templateBindings.embedding?.retrieval,
+        ].filter(Boolean) as string[],
+      ),
+    [templateBindings],
   );
+  const requestPreviewText = useMemo(() => {
+    if (!testRequestPreview) return "";
+    try {
+      return JSON.stringify(testRequestPreview, null, 2);
+    } catch {
+      return String(testRequestPreview);
+    }
+  }, [testRequestPreview]);
+  const responsePreviewText = useMemo(() => {
+    if (!testResponsePreview) return "";
+    try {
+      return JSON.stringify(testResponsePreview, null, 2);
+    } catch {
+      return String(testResponsePreview);
+    }
+  }, [testResponsePreview]);
+
+  useEffect(() => {
+    const dispose = on("it/templateTestDelta", (data) => {
+      if (!data || data.runId !== testRunId) {
+        return;
+      }
+      if (typeof data.full === "string") {
+        setTestStreamOutput(data.full);
+      } else if (typeof data.delta === "string") {
+        setTestStreamOutput((prev) => `${prev}${data.delta}`);
+      }
+    });
+    return () => {
+      dispose();
+    };
+  }, [testRunId]);
+
+  useEffect(() => {
+    setTestRequestPreview(null);
+    setTestResponsePreview(null);
+    setTestStreamOutput("");
+    setTestMissingVars([]);
+    setTestMessage(null);
+    setTestVarsError(null);
+    setTestRunId("");
+  }, [selectedTemplateId, templateCategory]);
+
+  const parseTestVars = () => {
+    const raw = testVarsDraft.trim();
+    if (!raw) {
+      setTestVarsError(null);
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      setTestVarsError(null);
+      return parsed;
+    } catch (err) {
+      setTestVarsError(
+        `变量 JSON 解析失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  };
+
+  const handleDryRun = async () => {
+    if (!selectedTemplateId) {
+      return;
+    }
+    const vars = parseTestVars();
+    if (vars === null) {
+      return;
+    }
+    setTestRunning(true);
+    setTestMessage(null);
+    setTestResponsePreview(null);
+    setTestStreamOutput("");
+    setTestMissingVars([]);
+    try {
+      const resp = await request("it/testTemplateDryRun", {
+        templateId: selectedTemplateId,
+        inputText: testInput,
+        variables: vars,
+      });
+      if (resp?.status === "success") {
+        setTestRequestPreview(resp.content?.request ?? resp.content ?? null);
+        setTestMissingVars(resp.content?.missing ?? []);
+        if (resp.content?.missing?.length) {
+          setTestMessage(`缺失变量：${resp.content.missing.join(", ")}`);
+        }
+      } else {
+        setTestMessage(resp?.error || "Dry-run 失败，请检查模板或变量。");
+      }
+    } catch (err) {
+      setTestMessage(err instanceof Error ? err.message : String(err));
+    }
+    setTestRunning(false);
+  };
+
+  const handleLiveTest = async () => {
+    if (!selectedTemplateId) {
+      return;
+    }
+    const vars = parseTestVars();
+    if (vars === null) {
+      return;
+    }
+    const runId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    setTestRunId(runId);
+    setTestRunning(true);
+    setTestMessage(null);
+    setTestResponsePreview(null);
+    setTestStreamOutput("");
+    setTestMissingVars([]);
+    try {
+      const resp = await request("it/testTemplateLive", {
+        templateId: selectedTemplateId,
+        inputText: testInput,
+        variables: vars,
+        runId,
+      });
+      if (resp?.status === "success") {
+        const content = resp.content ?? null;
+        setTestResponsePreview(content?.result ?? content);
+      } else {
+        setTestMessage(resp?.error || "Live 测试失败，请检查模板或网络。");
+      }
+    } catch (err) {
+      setTestMessage(err instanceof Error ? err.message : String(err));
+    }
+    setTestRunning(false);
+  };
 
   return (
     <div className="it-settings__section it-settings__section--full">
@@ -686,13 +832,84 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
         </div>
       </div>
       <div className="it-template__test">
-        <button className="it-button it-button--secondary it-button--compact" disabled>
-          Dry-run
-        </button>
-        <button className="it-button it-button--secondary it-button--compact" disabled>
-          Live
-        </button>
-        <span className="it-settings__hint">模板测试接口待接入后启用。</span>
+        <div className="it-template__test-header">
+          <div className="it-settings__title">模板测试</div>
+          <div className="it-settings__desc">
+            Dry-run 仅渲染请求（不发送）；Live 会真实调用并显示响应。
+          </div>
+        </div>
+        <div className="it-template__test-grid">
+          <div className="it-template__json-block">
+            <div className="it-settings__title it-label">
+              测试输入
+              <InfoTip text="默认作为 input / messages / embeddingInput 使用，可在变量 JSON 中覆盖。" />
+            </div>
+            <textarea
+              className="it-textarea it-template__textarea"
+              value={testInput}
+              onChange={(event) => setTestInput(event.target.value)}
+            />
+          </div>
+          <div className="it-template__json-block">
+            <div className="it-settings__title it-label">
+              变量 (JSON)
+              <InfoTip text={'可选，传入模板变量；例如 { "model": "gpt-4" }。'} />
+            </div>
+            <textarea
+              className="it-textarea it-template__textarea"
+              value={testVarsDraft}
+              onChange={(event) => setTestVarsDraft(event.target.value)}
+            />
+            {testVarsError && (
+              <div className="it-settings__hint it-settings__hint--error">
+                {testVarsError}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="it-template__test-actions">
+          <button
+            className="it-button it-button--secondary it-button--compact"
+            disabled={uiLocked || !canTest || testRunning}
+            onClick={handleDryRun}
+          >
+            Dry-run
+          </button>
+          <button
+            className="it-button it-button--secondary it-button--compact"
+            disabled={uiLocked || !canTest || testRunning}
+            onClick={handleLiveTest}
+          >
+            Live
+          </button>
+          {selectedTemplateName && (
+            <span className="it-settings__hint">当前模板：{selectedTemplateName}</span>
+          )}
+        </div>
+        {testMessage && <div className="it-settings__hint">{testMessage}</div>}
+        {testMissingVars.length > 0 && (
+          <div className="it-settings__hint it-settings__hint--error">
+            缺失变量：{testMissingVars.join(", ")}
+          </div>
+        )}
+        {requestPreviewText && (
+          <div>
+            <div className="it-settings__title">请求预览</div>
+            <pre className="it-settings__raw">{requestPreviewText}</pre>
+          </div>
+        )}
+        {testStreamOutput && (
+          <div>
+            <div className="it-settings__title">实时输出</div>
+            <pre className="it-settings__raw">{testStreamOutput}</pre>
+          </div>
+        )}
+        {responsePreviewText && (
+          <div>
+            <div className="it-settings__title">响应预览</div>
+            <pre className="it-settings__raw">{responsePreviewText}</pre>
+          </div>
+        )}
       </div>
     </div>
   );

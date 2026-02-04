@@ -11,6 +11,11 @@ import { it_callVolcAsr } from "../api/it_volc_asr";
 import { it_callEmbedding } from "../api/it_embedding";
 import { it_pcm16ToWavBuffer } from "../utils/it_wav";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import {
+  it_executeTemplate,
+  it_renderTemplateRequest,
+  it_resolveTemplateById,
+} from "../api/it_templateExecutor";
 
 function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
   const masked: Record<string, string> = { ...headers };
@@ -26,6 +31,28 @@ function it_maskHeaders(headers: Record<string, string>): Record<string, string>
     }
   });
   return masked;
+}
+
+function it_isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function it_buildTemplateTestVariables(payload: any): Record<string, unknown> {
+  const inputText = String(payload?.inputText || "");
+  const base: Record<string, unknown> = {};
+  if (inputText) {
+    base.input = inputText;
+    base.embeddingInput = inputText;
+    base.messages = [{ role: "user", content: inputText }];
+  }
+  if (typeof payload?.stream === "boolean") {
+    base.stream = payload.stream;
+  }
+  const extra = it_isPlainObject(payload?.variables) ? payload.variables : {};
+  return {
+    ...base,
+    ...extra,
+  };
 }
 
 function it_emitLlmTestRequest(
@@ -295,5 +322,77 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
       host.logEmbeddingTestFailure(error);
       throw error;
     }
+  });
+
+  host.webviewProtocol.on("it/testTemplateDryRun", async (msg) => {
+    const payload = msg.data || {};
+    const templateId = String(payload.templateId || "").trim();
+    if (!templateId) {
+      throw new Error("缺少模板 ID");
+    }
+    host.configBundle = host.configService.loadBundle();
+    const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    const environment =
+      payload.environment ||
+      host.configBundle.api?.active?.environment ||
+      "prod";
+    const template = it_resolveTemplateById(templatesConfig, environment, templateId);
+    if (!template) {
+      throw new Error("模板不存在或未加载");
+    }
+    const runtime = { template, environment, context: host.context };
+    const variables = it_buildTemplateTestVariables(payload);
+    const requestPreview = await it_renderTemplateRequest({
+      runtime,
+      variables,
+      maskSecrets: true,
+    });
+    return {
+      request: {
+        ...requestPreview,
+        headers: it_maskHeaders(requestPreview.headers),
+      },
+      missing: requestPreview.missing,
+    };
+  });
+
+  host.webviewProtocol.on("it/testTemplateLive", async (msg) => {
+    const payload = msg.data || {};
+    const templateId = String(payload.templateId || "").trim();
+    if (!templateId) {
+      throw new Error("缺少模板 ID");
+    }
+    host.configBundle = host.configService.loadBundle();
+    const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
+    const environment =
+      payload.environment ||
+      host.configBundle.api?.active?.environment ||
+      "prod";
+    const template = it_resolveTemplateById(templatesConfig, environment, templateId);
+    if (!template) {
+      throw new Error("模板不存在或未加载");
+    }
+    const runtime = { template, environment, context: host.context };
+    const variables = it_buildTemplateTestVariables(payload);
+    const preview = await it_renderTemplateRequest({ runtime, variables });
+    if (preview.missing.length) {
+      throw new Error(`模板变量缺失: ${preview.missing.join(", ")}`);
+    }
+    const runId = String(payload.runId || "");
+    const result = await it_executeTemplate({
+      runtime,
+      variables,
+      onDelta: (delta, full) => {
+        host.webviewProtocol.send("it/templateTestDelta", {
+          runId,
+          delta,
+          full,
+        });
+      },
+    });
+    return {
+      runId,
+      result,
+    };
   });
 }

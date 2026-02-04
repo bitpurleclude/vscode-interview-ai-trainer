@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { on, request } from "../messenger";
 import type { ItConfigSnapshot, ItState, ItTemplateBindings } from "../types";
-import type {
-  ApiForm,
-  RetrievalForm,
-  StreamingSettings,
-} from "../components/settings/settingsTypes";
+import type { RetrievalForm, StreamingSettings } from "../components/settings/settingsTypes";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "../constants/prompts";
 
 type UseConfigSyncOptions = {
@@ -21,7 +17,6 @@ type UseConfigSyncOptions = {
   setTemplateBindings: React.Dispatch<React.SetStateAction<ItTemplateBindings>>;
   setTemplateParamOptions: React.Dispatch<React.SetStateAction<string[]>>;
   setTemplateSecrets: React.Dispatch<React.SetStateAction<string[]>>;
-  setApiForm: React.Dispatch<React.SetStateAction<ApiForm>>;
   setRetrievalForm: React.Dispatch<React.SetStateAction<RetrievalForm>>;
 };
 
@@ -38,42 +33,11 @@ export function useConfigSync({
   setTemplateBindings,
   setTemplateParamOptions,
   setTemplateSecrets,
-  setApiForm,
   setRetrievalForm,
 }: UseConfigSyncOptions) {
   const [config, setConfig] = useState<ItConfigSnapshot | null>(null);
   const [nativeInputs, setNativeInputs] = useState<string[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>("");
-
-  const applyProfileToForm = useCallback(
-    (cfg: ItConfigSnapshot | null) => {
-      if (!cfg) return;
-      setApiForm((prev) => ({
-        ...prev,
-        llm: {
-          ...prev.llm,
-          model: cfg.llm?.model || "",
-          reasoningEffort: cfg.llm?.reasoningEffort || "",
-          webSearch: Boolean(cfg.llm?.webSearch ?? false),
-          stream: Boolean(cfg.llm?.stream ?? true),
-          timeoutSec: Number(cfg.llm?.timeoutSec ?? 60),
-          maxRetries: Number(cfg.llm?.maxRetries ?? 1),
-          antiRepeat: Boolean(cfg.llm?.antiRepeat ?? false),
-          reusePrefix: Boolean(cfg.llm?.reusePrefix ?? false),
-        },
-        asr: {
-          ...prev.asr,
-          language: cfg.asr?.language || "zh",
-          devPid: Number(cfg.asr?.devPid ?? 1537),
-          maxChunkSec: Number(cfg.asr?.maxChunkSec ?? 50),
-          maxConcurrency: Number(cfg.asr?.maxConcurrency ?? 1),
-          timeoutSec: Number(cfg.asr?.timeoutSec ?? 120),
-          maxRetries: Number(cfg.asr?.maxRetries ?? 1),
-        },
-      }));
-    },
-    [setApiForm],
-  );
 
   const applyRetrievalToForm = useCallback(
     (cfg: ItConfigSnapshot | null) => {
@@ -109,7 +73,6 @@ export function useConfigSync({
     request("it/getConfig", undefined).then((resp) => {
       if (resp?.status === "success" && resp.content) {
         setConfig(resp.content);
-        applyProfileToForm(resp.content);
         applyRetrievalToForm(resp.content);
         setCustomPrompt(
           resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
@@ -242,7 +205,6 @@ export function useConfigSync({
       }
     });
   }, [
-    applyProfileToForm,
     applyRetrievalToForm,
     setCustomPrompt,
     setDemoPrompt,
@@ -253,7 +215,6 @@ export function useConfigSync({
 
   useEffect(() => {
     if (!config) return;
-    applyProfileToForm(config);
     applyRetrievalToForm(config);
     if (config.prompts) {
       setCustomPrompt(config.prompts.evaluationPrompt ?? STRICT_SYSTEM_PROMPT);
@@ -288,7 +249,6 @@ export function useConfigSync({
     }
   }, [
     config,
-    applyProfileToForm,
     applyRetrievalToForm,
     setCustomPrompt,
     setDemoPrompt,
@@ -336,14 +296,13 @@ export function useConfigSync({
     const resp = await request("it/getConfig", undefined);
     if (resp?.status === "success" && resp.content) {
       setConfig(resp.content);
-      applyProfileToForm(resp.content);
       applyRetrievalToForm(resp.content);
       setCustomPrompt(
         resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
       );
       setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
     }
-  }, [applyProfileToForm, applyRetrievalToForm, setCustomPrompt, setDemoPrompt]);
+  }, [applyRetrievalToForm, setCustomPrompt, setDemoPrompt]);
 
   return {
     config,
@@ -352,7 +311,6 @@ export function useConfigSync({
     selectedInput,
     setSelectedInput,
     handleRefreshInputs,
-    applyProfileToForm,
     applyRetrievalToForm,
     reloadConfig,
   };

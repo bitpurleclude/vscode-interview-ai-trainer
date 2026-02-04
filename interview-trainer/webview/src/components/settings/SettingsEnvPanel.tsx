@@ -43,7 +43,7 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
             className="it-button it-button--secondary it-button--compact"
             onClick={handleOpenSettings}
           >
-            查看配置
+            查看模板配置
           </button>
         </div>
       </div>
