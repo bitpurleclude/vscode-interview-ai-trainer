@@ -9,6 +9,7 @@
 - `src/interviewTrainer/application/services/*`：日志/进度/Token/配置快照/题目解析/评价服务
 - `src/interviewTrainer/domain/analyze/flow.ts`：分析编排器
 - `src/interviewTrainer/domain/analyze/flow_*`：题目解析/转写声学/分段/检索阶段拆分
+- `src/interviewTrainer/domain/analyze/questions*.ts`：分段/对齐/答题拆分逻辑拆分
 - `src/interviewTrainer/domain/analyze/*`：分析子流程（ASR、分段、评价、结果）
 - `src/interviewTrainer/domain/notes/*`：检索与排序
 - `src/interviewTrainer/infra/clients/*`：LLM/ASR/Embedding 客户端
