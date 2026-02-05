@@ -89,17 +89,44 @@ export function useDerivedViews({
     );
   }, [itState]);
 
+  const fallbackQuestions = useMemo(() => {
+    const raw = questionText.trim();
+    if (!raw) {
+      return [];
+    }
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const numbered: string[] = [];
+    lines.forEach((line) => {
+      const match = line.match(/^\d+[\.\、\)\s]+/);
+      if (!match) {
+        return;
+      }
+      const trimmed = line.slice(match[0].length).trim();
+      if (trimmed) {
+        numbered.push(trimmed);
+      }
+    });
+    if (numbered.length) {
+      return numbered;
+    }
+    return [raw];
+  }, [questionText]);
+
   const evaluationStreamQuestions = useMemo(() => {
     const list =
       (analysisResult?.questionList && analysisResult.questionList.length
         ? analysisResult.questionList
-        : parsedQuestionList) || [];
+        : parsedQuestionList.length
+          ? parsedQuestionList
+          : fallbackQuestions) || [];
     if (list.length) {
       return list.slice(0, 3);
     }
-    const fallback = questionText.trim();
-    return fallback ? [fallback] : [];
-  }, [analysisResult, parsedQuestionList, questionText]);
+    return [];
+  }, [analysisResult, parsedQuestionList, fallbackQuestions]);
 
   const retrievalDirs = useMemo(() => {
     if (!config) {

@@ -1468,6 +1468,7 @@
     overflow-x: auto;
     scrollbar-gutter: stable;
     padding-bottom: 4px;
+    width: max-content;
   }
   .it-footer {
     grid-template-columns: 1fr;

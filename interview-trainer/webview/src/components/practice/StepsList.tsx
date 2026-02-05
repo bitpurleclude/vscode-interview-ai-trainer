@@ -87,8 +87,8 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
         const showEvaluationStreams =
           isEvaluationStep &&
           streamingEnabled &&
-          hasEvaluationOutput &&
-          evaluationIndices.length > 0;
+          evaluationIndices.length > 0 &&
+          (hasEvaluationOutput || step.status === "running");
         return (
           <div key={step.id} className={`it-step it-step--${step.status}${isEvaluationStep ? " it-step--evaluation" : ""}`}>
             <div className="it-step__content">
@@ -102,7 +102,7 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
             {showEvaluationStreams && (
               <div className="it-step__evaluation-streams">
                 <div className="it-step__evaluation-title">
-                  闈㈣瘯璇勪环瀹炴椂杈撳嚭锛堜粎淇濈暀鏈€鏂?{previewChars} 瀛楋級
+                  面试评价实时输出（仅保留最新{previewChars}字）
                 </div>
                 <div className="it-evaluation__stream-grid" style={evaluationGridStyle}>
                   {evaluationIndices.map((idx) => {
@@ -131,7 +131,7 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
             {showStream && (
               <StreamCard
                 variant="step"
-                title="瀹炴椂杈撳嚭"
+                title="实时输出"
                 text={stream?.text}
                 collapsed={stream?.collapsed}
                 showToggle
@@ -145,6 +145,8 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
     </div>
   );
 };
+
+
 
 
 
