@@ -65,12 +65,14 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
   const hasEvaluationOutput = Object.values(evaluationStreams).some(
     (stream) => Boolean(stream?.text),
   );
-  const evaluationIndices = evaluationStreamQuestions.length
-    ? evaluationStreamQuestions.map((_item, idx) => idx)
-    : Object.keys(evaluationStreams)
-        .map((key) => Number(key))
-        .filter((key) => Number.isFinite(key))
-        .sort((a, b) => a - b);
+  const evaluationIndices = (() => {
+    const fromQuestions = evaluationStreamQuestions.map((_item, idx) => idx);
+    const fromStreams = Object.keys(evaluationStreams)
+      .map((key) => Number(key))
+      .filter((key) => Number.isFinite(key) && key >= 0);
+    const merged = Array.from(new Set([...fromQuestions, ...fromStreams]));
+    return merged.sort((a, b) => a - b);
+  })();
   const evaluationGridStyle =
     evaluationIndices.length > 0
       ? {
