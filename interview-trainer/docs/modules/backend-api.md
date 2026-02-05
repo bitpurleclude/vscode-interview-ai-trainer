@@ -6,6 +6,7 @@
 ## 目录与关键文件
 - `src/interviewTrainer/infra/api/it_apiConfig.ts`：配置结构与默认值、用户目录定位
 - `src/interviewTrainer/infra/api/it_configService.ts`：配置加载/合并/保存（含模板配置）
+- `src/interviewTrainer/infra/api/it_configServiceHelpers.ts`：模板迁移/LLM 模式/模板构建辅助
 - `src/interviewTrainer/infra/api/it_templateExecutor.ts`：模板渲染、请求执行、模板变量解析
 - `src/interviewTrainer/infra/api/it_templateVars.ts`：模板变量解析、密钥注入、渲染工具
 - `src/interviewTrainer/infra/api/it_templatePath.ts`：JSONPath-like 读取
