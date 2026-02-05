@@ -26,7 +26,7 @@
 - [x] 拆分 `domain/analyze/flow.ts`
 
 ### P2（中优先级拆分）
-- [ ] 拆分 `infra/api/it_templateExecutor.ts`
+- [x] 拆分 `infra/api/it_templateExecutor.ts`
 - [ ] 拆分 `infra/api/it_configService.ts`
 - [ ] 拆分 `webview/src/InterviewTrainer.tsx`
 - [ ] 拆分 `domain/analyze/questions.ts`

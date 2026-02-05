@@ -7,6 +7,10 @@
 - `src/interviewTrainer/infra/api/it_apiConfig.ts`：配置结构与默认值、用户目录定位
 - `src/interviewTrainer/infra/api/it_configService.ts`：配置加载/合并/保存（含模板配置）
 - `src/interviewTrainer/infra/api/it_templateExecutor.ts`：模板渲染、请求执行、模板变量解析
+- `src/interviewTrainer/infra/api/it_templateVars.ts`：模板变量解析、密钥注入、渲染工具
+- `src/interviewTrainer/infra/api/it_templatePath.ts`：JSONPath-like 读取
+- `src/interviewTrainer/infra/api/it_templateHttp.ts`：模板请求拼接、响应解析、SSE 解析
+- `src/interviewTrainer/infra/api/it_templateLlm.ts`：LLM messages 转 responses 输入结构
 - `src/interviewTrainer/infra/api/it_requestBuilder.ts`：将模板与变量转为请求体
 - `src/interviewTrainer/infra/api/it_llm.ts` / `it_embedding.ts`：通用 LLM/Embedding 调用入口
 - `src/interviewTrainer/infra/api/it_baidu.ts` / `it_qianfan.ts` / `it_volc_asr.ts`：厂商适配
