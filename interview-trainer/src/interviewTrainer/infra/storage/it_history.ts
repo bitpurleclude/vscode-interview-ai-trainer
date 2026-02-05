@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { ItHistoryItem } from "../../protocol/interviewTrainer";
+import { ItHistoryItem } from "../../../protocol/interviewTrainer";
 import { it_makeSlug } from "../utils/it_text";
 import { ItSessionsConfig } from "./it_sessions";
 

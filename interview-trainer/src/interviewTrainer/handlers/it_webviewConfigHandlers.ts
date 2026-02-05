@@ -1,6 +1,6 @@
 import path from "path";
 import * as vscode from "vscode";
-import { it_getUserProviderDir } from "../api/it_apiConfig";
+import { it_getUserProviderDir } from "../infra/api/it_apiConfig";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerConfigHandlers(host: ItWebviewHandlersHost): void {

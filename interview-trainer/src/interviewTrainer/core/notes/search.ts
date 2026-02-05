@@ -1,4 +1,4 @@
-﻿import { it_hashText } from "../../utils/it_text";
+﻿import { it_hashText } from "../../infra/utils/it_text";
 import type {
   ItCorpusItem,
   ItNoteHit,

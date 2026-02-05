@@ -1,4 +1,4 @@
-import { ItAcousticMetrics, ItAudioSegment } from "../../protocol/interviewTrainer";
+import { ItAcousticMetrics, ItAudioSegment } from "../../../protocol/interviewTrainer";
 import { it_formatSeconds } from "./it_text";
 
 const EPS = 1e-12;

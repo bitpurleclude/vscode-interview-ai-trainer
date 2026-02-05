@@ -1,21 +1,21 @@
-import { it_callLlmChat } from "../api/it_llm";
-import type { ItLlmConfig, ItLlmMessage } from "../api/it_llmTypes";
+import { it_callLlmChat } from "../infra/api/it_llm";
+import type { ItLlmConfig, ItLlmMessage } from "../infra/api/it_llmTypes";
 import {
   it_buildDoubaoChatRequest,
   it_buildDoubaoResponsesRequest,
   it_buildOpenAiChatRequest,
   it_buildOpenAiResponsesRequest,
-} from "../api/it_requestBuilder";
-import { it_callBaiduAsr } from "../api/it_baidu";
-import { it_callVolcAsr } from "../api/it_volc_asr";
-import { it_callEmbedding } from "../api/it_embedding";
-import { it_pcm16ToWavBuffer } from "../utils/it_wav";
+} from "../infra/api/it_requestBuilder";
+import { it_callBaiduAsr } from "../infra/api/it_baidu";
+import { it_callVolcAsr } from "../infra/api/it_volc_asr";
+import { it_callEmbedding } from "../infra/api/it_embedding";
+import { it_pcm16ToWavBuffer } from "../infra/utils/it_wav";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 import {
   it_executeTemplate,
   it_renderTemplateRequest,
   it_resolveTemplateById,
-} from "../api/it_templateExecutor";
+} from "../infra/api/it_templateExecutor";
 import { it_extractTokenInfo } from "../core/it_tokens";
 import type { ItApiTemplate } from "../../protocol/interviewTrainer";
 import {

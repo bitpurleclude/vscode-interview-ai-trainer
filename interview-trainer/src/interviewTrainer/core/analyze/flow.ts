@@ -11,12 +11,12 @@ import {
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
 
-import { ItApiConfig, ItTemplatesConfig } from "../../api/it_apiConfig";
-import { ItLlmConfig } from "../../api/it_llmTypes";
+import { ItApiConfig, ItTemplatesConfig } from "../../infra/api/it_apiConfig";
+import { ItLlmConfig } from "../../infra/api/it_llmTypes";
 import {
   it_resolveBindingTemplate,
   ItTemplateRuntime,
-} from "../../api/it_templateExecutor";
+} from "../../infra/api/it_templateExecutor";
 import { it_evaluateAnswer } from "../it_evaluation";
 import {
   ItCorpusItem,
@@ -28,16 +28,16 @@ import {
   it_nextAttemptIndexAsync,
   it_reportPathForTopicAsync,
   it_resolveTopicDirAsync,
-} from "../../storage/it_sessions";
+} from "../../infra/storage/it_sessions";
 import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
-} from "../../storage/it_questionCache";
+} from "../../infra/storage/it_questionCache";
 import {
   it_summarizeAudioMetrics,
   it_buildDetailedTranscript,
-} from "../../utils/it_audio";
-import { it_hashText } from "../../utils/it_text";
+} from "../../infra/utils/it_audio";
+import { it_hashText } from "../../infra/utils/it_text";
 import { it_parseQuestions } from "../it_questionParser";
 import { it_storeRecordingAsync } from "./audio";
 import { it_transcribeAudio } from "./asr";

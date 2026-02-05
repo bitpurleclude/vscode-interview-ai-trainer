@@ -1,5 +1,5 @@
-import type { ItLlmConfig, ItLlmMessage } from "../../api/it_llmTypes";
-import { it_callLlmChat, it_callLlmChatStreaming } from "../../api/it_llm";
+import type { ItLlmConfig, ItLlmMessage } from "../../infra/api/it_llmTypes";
+import { it_callLlmChat, it_callLlmChatStreaming } from "../../infra/api/it_llm";
 
 export async function it_requestLlmChat(
   cfg: ItLlmConfig,

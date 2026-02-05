@@ -5,7 +5,7 @@ import type {
   ItTemplateCategory,
   ItTemplateResponse,
   ItTemplateStreaming,
-} from "../../protocol/interviewTrainer";
+} from "../../../protocol/interviewTrainer";
 import type { ItTemplatesConfig } from "./it_apiConfig";
 import type { ItLlmMessage } from "./it_llmTypes";
 

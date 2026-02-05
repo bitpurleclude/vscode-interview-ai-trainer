@@ -16,7 +16,7 @@ import type {
   ItTemplateRequest,
   ItTemplateResponse,
   ItTemplateStreaming,
-} from "../../protocol/interviewTrainer";
+} from "../../../protocol/interviewTrainer";
 
 type ItResolvedApiMode = {
   apiMode?: "chat" | "responses";

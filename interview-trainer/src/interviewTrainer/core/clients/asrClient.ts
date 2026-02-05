@@ -1,5 +1,5 @@
-import type { ItTemplateRuntime } from "../../api/it_templateExecutor";
-import { it_executeTemplate } from "../../api/it_templateExecutor";
+import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
+import { it_executeTemplate } from "../../infra/api/it_templateExecutor";
 
 export async function it_requestAsrTemplate(
   runtime: ItTemplateRuntime,

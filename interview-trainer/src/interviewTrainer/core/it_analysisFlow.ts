@@ -3,8 +3,8 @@ import { it_runAnalysis } from "./it_analyze";
 
 export type ItAnalysisHost = {
   context: import("vscode").ExtensionContext;
-  configService: import("../api/it_configService").ItConfigService;
-  configBundle: import("../api/it_apiConfig").ItConfigBundle;
+  configService: import("../infra/api/it_configService").ItConfigService;
+  configBundle: import("../infra/api/it_apiConfig").ItConfigBundle;
   state: import("../../protocol/interviewTrainer").ItState;
   analysisAbort: { aborted: boolean } | null;
   embeddingWarmupAbort: { aborted: boolean } | null;
@@ -33,7 +33,7 @@ export type ItAnalysisHost = {
   }) => void;
   logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
   requireWorkspaceRoot: () => string;
-  resolveApiConfigWithProviders: (apiConfig: import("../api/it_apiConfig").ItApiConfig) => import("../api/it_apiConfig").ItApiConfig;
+  resolveApiConfigWithProviders: (apiConfig: import("../infra/api/it_apiConfig").ItApiConfig) => import("../infra/api/it_apiConfig").ItApiConfig;
   scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
 };
 

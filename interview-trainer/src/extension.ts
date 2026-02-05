@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 
 import { InterviewTrainerExtension } from "./interviewTrainer/InterviewTrainerExtension";
 import { InterviewTrainerWebviewViewProvider } from "./webview/InterviewTrainerWebviewViewProvider";
-import { it_ensureConfigFiles, it_getUserConfigDir } from "./interviewTrainer/api/it_apiConfig";
+import { it_ensureConfigFiles, it_getUserConfigDir } from "./interviewTrainer/infra/api/it_apiConfig";
 
 export function activate(context: vscode.ExtensionContext) {
   const viewProvider = new InterviewTrainerWebviewViewProvider(context);

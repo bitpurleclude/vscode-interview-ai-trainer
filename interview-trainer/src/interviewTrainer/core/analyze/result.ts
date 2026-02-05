@@ -6,15 +6,15 @@ import type {
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
 import { it_requestLlmChat } from "../clients/llmClient";
-import type { ItLlmConfig } from "../../api/it_llmTypes";
+import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
 import {
   it_appendAttemptDataAsync,
   it_buildQuestionFingerprint,
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
-} from "../../storage/it_sessions";
+} from "../../infra/storage/it_sessions";
 import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../it_report";
-import { it_hashText, it_normalizeText } from "../../utils/it_text";
+import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
 import { it_extractJson } from "./shared";
 
 export function it_sanitizeTopicTitle(raw: string, maxLen: number): string {

@@ -3,8 +3,8 @@ import * as vscode from "vscode";
 import {
   ItApiConfig,
   ItConfigBundle,
-} from "../api/it_apiConfig";
-import { ItConfigService } from "../api/it_configService";
+} from "../infra/api/it_apiConfig";
+import { ItConfigService } from "../infra/api/it_configService";
 import {
   ItApiTemplate,
   ItConfigSnapshot,
@@ -13,7 +13,7 @@ import {
   ItTokenStoreSnapshot,
   ItTemplatesSnapshot,
 } from "../../protocol/interviewTrainer";
-import { it_hashText } from "../utils/it_text";
+import { it_hashText } from "../infra/utils/it_text";
 
 const IT_TEMPLATE_VAR_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 

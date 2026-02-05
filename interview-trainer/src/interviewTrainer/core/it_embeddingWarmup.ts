@@ -1,14 +1,14 @@
 import path from "path";
-import { it_resolveBindingTemplate } from "../api/it_templateExecutor";
+import { it_resolveBindingTemplate } from "../infra/api/it_templateExecutor";
 import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "./it_notes";
-import { it_hashText } from "../utils/it_text";
+import { it_hashText } from "../infra/utils/it_text";
 import { it_normalizeWorkspaceKey } from "./it_configSnapshot";
 
 export type ItEmbeddingWarmupHost = {
   context: import("vscode").ExtensionContext;
   state: import("../../protocol/interviewTrainer").ItState;
-  configBundle: import("../api/it_apiConfig").ItConfigBundle;
-  configService: import("../api/it_configService").ItConfigService;
+  configBundle: import("../infra/api/it_apiConfig").ItConfigBundle;
+  configService: import("../infra/api/it_configService").ItConfigService;
   embeddingWarmupTimer: ReturnType<typeof setTimeout> | null;
   embeddingWarmupAbort: { aborted: boolean } | null;
   embeddingWarmupRunning: boolean;

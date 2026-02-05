@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { ItAnalyzeRequest } from "../../../protocol/interviewTrainer";
-import { it_decodePcm16 } from "../../utils/it_audio";
-import { it_pcm16ToWavBuffer } from "../../utils/it_wav";
+import { it_decodePcm16 } from "../../infra/utils/it_audio";
+import { it_pcm16ToWavBuffer } from "../../infra/utils/it_wav";
 
 export async function it_storeRecordingAsync(
   topicDir: string,

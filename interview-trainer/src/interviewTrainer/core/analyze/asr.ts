@@ -3,7 +3,7 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
-import type { ItTemplateRuntime } from "../../api/it_templateExecutor";
+import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
 import { it_requestAsrTemplate } from "../clients/asrClient";
 import { it_createTraceLogger } from "../logging/it_traceLogger";
 import { it_splitPcmBase64 } from "./audio";

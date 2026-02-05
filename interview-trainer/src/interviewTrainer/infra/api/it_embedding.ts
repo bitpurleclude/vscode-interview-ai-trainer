@@ -1,6 +1,6 @@
 import axios from "axios";
 import type * as vscode from "vscode";
-import type { ItApiTemplate } from "../../protocol/interviewTrainer";
+import type { ItApiTemplate } from "../../../protocol/interviewTrainer";
 import { it_executeTemplate } from "./it_templateExecutor";
 
 export type ItEmbeddingProvider = "baidu_qianfan" | "volc_doubao" | "openai_compatible" | string;

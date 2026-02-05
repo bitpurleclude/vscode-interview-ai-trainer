@@ -1,6 +1,6 @@
 import { it_requestLlmChatStreaming } from "./clients/llmClient";
 import { it_createTraceLogger } from "./logging/it_traceLogger";
-import { ItLlmConfig } from "../api/it_llmTypes";
+import { ItLlmConfig } from "../infra/api/it_llmTypes";
 
 export interface ItParsedQuestions {
   material: string;

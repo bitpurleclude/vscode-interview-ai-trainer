@@ -1,6 +1,6 @@
 ﻿import fs from "fs";
 import path from "path";
-import { it_hashText } from "../../utils/it_text";
+import { it_hashText } from "../../infra/utils/it_text";
 import type { ItCorpusItem } from "./types";
 
 const IT_MAX_CHUNK_LEN = 1200;

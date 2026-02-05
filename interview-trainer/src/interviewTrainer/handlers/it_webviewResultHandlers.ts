@@ -7,8 +7,8 @@ import {
   it_nextAttemptIndexAsync,
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
-} from "../storage/it_sessions";
-import { it_hashText, it_normalizeText } from "../utils/it_text";
+} from "../infra/storage/it_sessions";
+import { it_hashText, it_normalizeText } from "../infra/utils/it_text";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {

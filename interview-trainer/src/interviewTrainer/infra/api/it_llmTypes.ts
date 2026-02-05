@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import type { ItApiTemplate } from "../../protocol/interviewTrainer";
+import type { ItApiTemplate } from "../../../protocol/interviewTrainer";
 import { ItQianfanConfig, ItQianfanMessage } from "./it_qianfan";
 
 export type ItLlmProvider = "baidu_qianfan" | "volc_doubao" | "openai_compatible" | string;
