@@ -35,7 +35,7 @@
 
 ### P3（低优先级优化）
 - [x] 拆分 `interface/handlers/it_webviewTestHandlers.ts`
-- [ ] 拆分 `domain/notes/cache.ts`
+- [x] 拆分 `domain/notes/cache.ts`
 - [ ] 拆分 `infra/api/it_llm.ts`
 - [ ] 拆分 `application/services/it_evaluation.ts`
 - [ ] 拆分 `infra/storage/it_report.ts`

@@ -1,0 +1,3 @@
+export const IT_CORPUS_CACHE_VERSION = 1;
+export const IT_EMBEDDING_CACHE_VERSION = 1;
+export const IT_DEFAULT_BATCH_SIZE = 16;
