@@ -50,15 +50,15 @@
 - [ ] 盘点 Domain 中的 I/O/Infra 依赖清单并逐项迁移。
 
 #### P4-1 notes 模块合规
-- [ ] 将 `domain/notes/cache_*`、`domain/notes/indexer*` 中的 fs/embedding 访问迁到 `infra/notes/*` 或 `infra/storage/*`。
-- [ ] 保留 `domain/notes/ranking.ts`、`domain/notes/utils.ts` 中的纯算法部分；如仍含 fs/path，拆出到 infra。
-- [ ] 调整 `domain/notes/search.ts`：把 embedding/缓存访问上移（Application/Infra），Domain 仅保留纯排序/打分。
+- [x] 将 `domain/notes/cache_*`、`domain/notes/indexer*` 中的 fs/embedding 访问迁到 `infra/notes/*` 或 `infra/storage/*`。
+- [x] 保留 `domain/notes/ranking.ts`、`domain/notes/utils.ts` 中的纯算法部分；如仍含 fs/path，拆出到 infra。
+- [x] 调整 `domain/notes/search.ts`：把 embedding/缓存访问上移（Application/Infra），Domain 仅保留纯排序/打分。
 
 #### P4-2 analyze 模块合规
-- [ ] 将 `domain/analyze/flow*.ts` 的流程编排上移到 `application/useCases` 或 `application/flows/*`。
-- [ ] 将 `domain/analyze/audio.ts` 的 I/O 与音频处理下移到 `infra/recording` 或 `infra/utils`。
-- [ ] 将 `domain/analyze/questionsLlm.ts` 的 LLM 请求上移到 `application/services`。
-- [ ] 移除 `domain/analyze/flow_types.ts` 中的 `vscode` 依赖，改为 Application 层定义接口传入。
+- [x] 将 `domain/analyze/flow*.ts` 的流程编排上移到 `application/useCases` 或 `application/flows/*`。
+- [x] 将 `domain/analyze/audio.ts` 的 I/O 与音频处理下移到 `infra/recording` 或 `infra/utils`。
+- [x] 将 `domain/analyze/questionsLlm.ts` 的 LLM 请求上移到 `application/services`。
+- [x] 移除 `domain/analyze/flow_types.ts` 中的 `vscode` 依赖，改为 Application 层定义接口传入。
 
 #### P4-3 evaluation 模块合规
 - [ ] 将 `domain/evaluation/prompt.ts` 中的 LLM 调用迁至 `application/services`（仅保留纯 prompt 拼装/解析在 Domain）。

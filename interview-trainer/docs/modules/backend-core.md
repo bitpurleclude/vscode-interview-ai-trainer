@@ -9,6 +9,7 @@
 - `src/interviewTrainer/application/useCases/it_analysisFlow.ts`：分析入口，维护状态与进度。
 - `src/interviewTrainer/application/useCases/it_embeddingWarmup.ts`：Embedding 预热。
 - `src/interviewTrainer/application/services/*`：日志、进度、Token、配置快照、题目解析、评价服务。
+- `src/interviewTrainer/application/flows/analyze/*`：分析流程编排与阶段实现。
 - `src/interviewTrainer/domain/analyze/*`：分析子流程（ASR、分段、检索、评价、结果）。
 - `src/interviewTrainer/domain/notes/*`：检索算法（分词/评分/相似度/排序），无 I/O。
 - `src/interviewTrainer/infra/notes/*`：语料扫描、缓存、向量检索与 Warmup。
@@ -19,7 +20,7 @@
 
 ## 主要流程
 1) `it_analysisFlow.ts` 接收 `it/analyzeAudio` → 初始化状态。
-2) `domain/analyze/flow.ts` 组织 ASR → 分段 → 检索 → 评价。
+2) `application/flows/analyze/flow.ts` 组织 ASR → 分段 → 检索 → 评价。
 3) `application/services/it_logging.ts` 推送实时输出到 Webview。
 4) 结果由 `infra/storage/*` 写入 session。
 

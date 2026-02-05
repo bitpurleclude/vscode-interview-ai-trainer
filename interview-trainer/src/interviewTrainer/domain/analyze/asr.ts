@@ -6,7 +6,7 @@ import type {
 import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
 import { it_requestAsrTemplate } from "../../infra/clients/asrClient";
 import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
-import { it_splitPcmBase64 } from "./audio";
+import { it_splitPcmBase64 } from "../../infra/recording/it_recordingStore";
 
 function it_isBaiduContentTooLong(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);

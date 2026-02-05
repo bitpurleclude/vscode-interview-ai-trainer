@@ -4,10 +4,13 @@ import type {
   ItAnalyzeRequest,
   ItStepStatus,
   ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
-import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
-import { it_summarizeAudioMetrics, it_buildDetailedTranscript } from "../../infra/utils/it_audio";
-import { it_transcribeAudio } from "./asr";
+} from "../../../../protocol/interviewTrainer";
+import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
+import {
+  it_summarizeAudioMetrics,
+  it_buildDetailedTranscript,
+} from "../../../infra/utils/it_audio";
+import { it_transcribeAudio } from "../../../domain/analyze/asr";
 import type { ItAnalyzeDeps } from "./flow_types";
 
 type AudioStageInput = {

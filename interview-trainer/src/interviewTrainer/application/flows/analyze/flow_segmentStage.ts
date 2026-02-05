@@ -3,14 +3,11 @@ import type {
   ItQuestionTiming,
   ItStepStatus,
   ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
-import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
+} from "../../../../protocol/interviewTrainer";
+import type { ItLlmConfig } from "../../../infra/api/it_llmTypes";
 import type { ItAnalyzeDeps } from "./flow_types";
-import {
-  it_alignAnswerToSegments,
-  it_assignSegmentsWithLlm,
-  it_splitAnswersWithLlm,
-} from "./questions";
+import { it_assignSegmentsWithLlm, it_splitAnswersWithLlm } from "../../services/it_questionsLlm";
+import { it_alignAnswerToSegments } from "../../../domain/analyze/questionsSegments";
 
 type SegmentStageInput = {
   deps: ItAnalyzeDeps;

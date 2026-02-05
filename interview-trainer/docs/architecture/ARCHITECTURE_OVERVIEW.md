@@ -30,7 +30,7 @@
 - `webview/src/hooks/useAnalysisFlow.ts` → `request("it/analyzeAudio")`
 - `src/interviewTrainer/interface/handlers/it_webviewResultHandlers.ts`
 - `src/interviewTrainer/application/useCases/it_analysisFlow.ts` → `it_runAnalysis`
-- `src/interviewTrainer/domain/analyze/flow.ts`
+- `src/interviewTrainer/application/flows/analyze/flow.ts`
   - ASR：`domain/analyze/asr.ts` → `infra/clients/asrClient.ts`
   - 多题分段：`domain/analyze/questions.ts`
   - 笔记检索：`infra/notes/*` → `infra/clients/embeddingClient.ts`（算法在 `domain/notes/*`）

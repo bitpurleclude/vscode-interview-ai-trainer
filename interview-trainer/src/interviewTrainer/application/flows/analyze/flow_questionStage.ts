@@ -1,14 +1,14 @@
 import type {
   ItStepStatus,
   ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
-import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
-import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
-import { it_parseQuestions } from "../../application/services/it_questionParser";
+} from "../../../../protocol/interviewTrainer";
+import type { ItLlmConfig } from "../../../infra/api/it_llmTypes";
+import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
+import { it_parseQuestions } from "../../services/it_questionParser";
 import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
-} from "../../infra/storage/it_questionCache";
+} from "../../../infra/storage/it_questionCache";
 import type { ItAnalyzeDeps, ItQuestionState } from "./flow_types";
 
 type QuestionParseStageInput = {

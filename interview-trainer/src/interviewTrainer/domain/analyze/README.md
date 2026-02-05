@@ -1,6 +1,7 @@
 # domain/analyze
 
-分析流程的核心逻辑。
+分析领域的算法与数据整理：
+- 题目分段/对齐算法
+- 分段结果整理与合并
 
-包含题目解析、多题分段、评价等领域算法与流程片段。
-不直接处理 API 与存储。
+流程编排已迁移至 `application/flows/analyze/*`，I/O 与外部调用在 Application/Infra 层处理。

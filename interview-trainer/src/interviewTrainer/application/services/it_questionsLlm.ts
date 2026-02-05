@@ -3,7 +3,7 @@ import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
 import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
 import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
 import { it_formatSeconds, it_normalizeText } from "../../infra/utils/it_text";
-import { it_extractJson } from "./shared";
+import { it_extractJson } from "../../domain/analyze/shared";
 
 export async function it_assignSegmentsWithLlm(
   llmConfig: ItLlmConfig,

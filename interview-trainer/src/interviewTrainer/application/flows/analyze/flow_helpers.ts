@@ -1,6 +1,6 @@
 import path from "path";
-import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
-import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
+import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
+import type { ItLlmConfig } from "../../../infra/api/it_llmTypes";
 import type { ItAnalyzeDeps } from "./flow_types";
 
 export function it_splitFallbackQuestions(text: string): string[] {
@@ -53,7 +53,7 @@ export function it_buildTemplateRuntime(
   return {
     template,
     environment: env,
-    context: deps.context,
+    context: deps.context as ItTemplateRuntime["context"],
   };
 }
 

@@ -9,7 +9,7 @@
 - `src/interviewTrainer/infra/utils/it_text.ts`：文本清洗与哈希。
 
 ## 关键调用链
-- `domain/analyze/flow.ts` → `it_audio.ts`
+- `application/flows/analyze/flow.ts` → `it_audio.ts`
 - `infra/notes/*` → `it_text.ts`
 
 ## 注意事项

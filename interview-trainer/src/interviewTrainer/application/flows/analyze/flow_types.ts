@@ -1,4 +1,3 @@
-import type * as vscode from "vscode";
 import type {
   ItAcousticMetrics,
   ItEvaluation,
@@ -6,11 +5,15 @@ import type {
   ItQuestionTiming,
   ItStepStatus,
   ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
-import type { ItApiConfig, ItTemplatesConfig } from "../../infra/api/it_apiConfig";
+} from "../../../../protocol/interviewTrainer";
+import type { ItApiConfig, ItTemplatesConfig } from "../../../infra/api/it_apiConfig";
+
+export type ItAnalyzeContext = {
+  globalStorageUri?: { fsPath: string };
+};
 
 export interface ItAnalyzeDeps {
-  context: vscode.ExtensionContext;
+  context: ItAnalyzeContext;
   apiConfig: ItApiConfig;
   templatesConfig: ItTemplatesConfig;
   skillConfig: Record<string, any>;

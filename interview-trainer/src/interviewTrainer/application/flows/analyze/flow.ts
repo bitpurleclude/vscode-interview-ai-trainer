@@ -6,15 +6,23 @@ import {
   ItQuestionTiming,
   ItStepStatus,
   ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
-import { it_evaluateAnswer } from "../../application/services/it_evaluation";
-import { it_resolveBindingTemplate } from "../../infra/api/it_templateExecutor";
-import { it_nextAttemptIndexAsync, it_reportPathForTopicAsync, it_resolveTopicDirAsync } from "../../infra/storage/it_sessions";
-import type { ItCorpusItem } from "../notes";
-import { it_buildCorpusAsync } from "../../infra/notes";
-import { it_storeRecordingAsync } from "./audio";
-import { it_buildAcousticForTiming, it_mergeEvaluations } from "./evaluation";
-import { it_deriveTopicTitle, it_generateTopicTitleWithLlm, it_persistAnalysis } from "./result";
+} from "../../../../protocol/interviewTrainer";
+import { it_evaluateAnswer } from "../../services/it_evaluation";
+import { it_resolveBindingTemplate } from "../../../infra/api/it_templateExecutor";
+import {
+  it_nextAttemptIndexAsync,
+  it_reportPathForTopicAsync,
+  it_resolveTopicDirAsync,
+} from "../../../infra/storage/it_sessions";
+import type { ItCorpusItem } from "../../../domain/notes";
+import { it_buildCorpusAsync } from "../../../infra/notes";
+import { it_storeRecordingAsync } from "../../../infra/recording/it_recordingStore";
+import { it_buildAcousticForTiming, it_mergeEvaluations } from "../../../domain/analyze/evaluation";
+import {
+  it_deriveTopicTitle,
+  it_generateTopicTitleWithLlm,
+  it_persistAnalysis,
+} from "../../../domain/analyze/result";
 import { it_buildTemplateLlmConfig, it_buildTemplateRuntime, it_splitFallbackQuestions } from "./flow_helpers";
 import { it_runAudioStage } from "./flow_audioStage";
 import { it_prepareQuestionParseStage } from "./flow_questionStage";
