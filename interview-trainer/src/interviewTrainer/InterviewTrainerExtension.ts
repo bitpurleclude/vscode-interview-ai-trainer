@@ -25,7 +25,7 @@ import {
   it_isIdleForWarmup,
   it_runEmbeddingWarmup,
   it_scheduleEmbeddingWarmup,
-} from "./core/it_embeddingWarmup";
+} from "./application/useCases/it_embeddingWarmup";
 import { ItTokenService } from "./core/it_tokens";
 import {
   it_emitEvaluationStreamUpdate,
@@ -375,4 +375,3 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     this.outputChannel.dispose();
   }
 }
-
