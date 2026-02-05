@@ -4,7 +4,12 @@
 - 负责分析结果、历史记录、题目解析缓存与 session 路径管理。
 
 ## 目录与关键文件
-- `src/interviewTrainer/infra/storage/it_sessions.ts`：会话目录、报告路径、命名规则。
+- `src/interviewTrainer/infra/storage/it_sessions.ts`：Session 入口（Barrel）。
+- `src/interviewTrainer/infra/storage/it_sessionsTypes.ts`：Session 配置与元信息类型。
+- `src/interviewTrainer/infra/storage/it_sessionsFs.ts`：目录/JSON 读写工具。
+- `src/interviewTrainer/infra/storage/it_sessionsMatch.ts`：题目匹配与相似度判断。
+- `src/interviewTrainer/infra/storage/it_sessionsTopic.ts`：Topic 目录与 meta 读写。
+- `src/interviewTrainer/infra/storage/it_sessionsAttempts.ts`：尝试记录、报告路径、音频归档。
 - `src/interviewTrainer/infra/storage/it_history.ts`：历史记录存取。
 - `src/interviewTrainer/infra/storage/it_questionCache.ts`：题目解析缓存。
 - `src/interviewTrainer/infra/storage/it_report.ts`：报告写入与引用笔记更新入口（Barrel）。

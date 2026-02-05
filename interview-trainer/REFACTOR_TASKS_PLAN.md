@@ -39,5 +39,5 @@
 - [x] 拆分 `infra/api/it_llm.ts`
 - [x] 拆分 `application/services/it_evaluation.ts`
 - [x] 拆分 `infra/storage/it_report.ts`
-- [ ] 拆分 `infra/storage/it_sessions.ts`
+- [x] 拆分 `infra/storage/it_sessions.ts`
 - [ ] 评估是否拆分 `src/protocol/interviewTrainer.ts`（需同步 `webview/src/types.ts`）
