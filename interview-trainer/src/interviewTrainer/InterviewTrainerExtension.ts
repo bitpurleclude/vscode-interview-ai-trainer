@@ -49,7 +49,7 @@ import {
   it_startNativeRecording,
   it_stopNativeRecording,
 } from "./infra/recording/it_recording";
-import { it_registerHandlers } from "./handlers/it_webviewHandlers";
+import { it_registerHandlers } from "./interface/handlers/it_webviewHandlers";
 
 export class InterviewTrainerExtension implements vscode.Disposable {
   public state: ItState = { ...IT_STATUS_INIT };

@@ -1,14 +1,14 @@
 import * as vscode from "vscode";
-import type { ItAnalyzeResponse } from "../../protocol/interviewTrainer";
-import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../infra/storage/it_report";
+import type { ItAnalyzeResponse } from "../../../protocol/interviewTrainer";
+import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../../infra/storage/it_report";
 import {
   it_appendAttemptDataAsync,
   it_buildQuestionFingerprint,
   it_nextAttemptIndexAsync,
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
-} from "../infra/storage/it_sessions";
-import { it_hashText, it_normalizeText } from "../infra/utils/it_text";
+} from "../../infra/storage/it_sessions";
+import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {

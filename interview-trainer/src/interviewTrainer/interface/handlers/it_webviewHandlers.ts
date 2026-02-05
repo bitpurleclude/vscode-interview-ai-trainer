@@ -5,12 +5,12 @@ import {
   ItConfigSnapshot,
   ItEmbeddingWarmupState,
   ItState,
-} from "../../protocol/interviewTrainer";
-import { ItApiConfig, ItConfigBundle } from "../infra/api/it_apiConfig";
-import { ItConfigService } from "../infra/api/it_configService";
-import { ItLlmConfig } from "../infra/api/it_llmTypes";
-import { WebviewProtocol } from "../../webview/WebviewProtocol";
-import { ItTokenService } from "../application/services/it_tokens";
+} from "../../../protocol/interviewTrainer";
+import { ItApiConfig, ItConfigBundle } from "../../infra/api/it_apiConfig";
+import { ItConfigService } from "../../infra/api/it_configService";
+import { ItLlmConfig } from "../../infra/api/it_llmTypes";
+import { WebviewProtocol } from "../../../webview/WebviewProtocol";
+import { ItTokenService } from "../../application/services/it_tokens";
 import { it_registerConfigHandlers } from "./it_webviewConfigHandlers";
 import { it_registerCoreHandlers } from "./it_webviewCoreHandlers";
 import { it_registerQuestionHandlers } from "./it_webviewQuestionHandlers";

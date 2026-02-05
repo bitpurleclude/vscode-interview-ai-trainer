@@ -2,15 +2,15 @@ import type {
   ItAcousticMetrics,
   ItNoteHit,
   ItRevisedAnswer,
-} from "../../protocol/interviewTrainer";
-import type { ItLlmConfig } from "../infra/api/it_llmTypes";
-import { it_resolveBindingTemplate, ItTemplateRuntime } from "../infra/api/it_templateExecutor";
-import { it_evaluateAnswer } from "../application/services/it_evaluation";
-import { it_parseQuestions } from "../application/services/it_questionParser";
+} from "../../../protocol/interviewTrainer";
+import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
+import { it_resolveBindingTemplate, ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
+import { it_evaluateAnswer } from "../../application/services/it_evaluation";
+import { it_parseQuestions } from "../../application/services/it_questionParser";
 import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
-} from "../infra/storage/it_questionCache";
+} from "../../infra/storage/it_questionCache";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {

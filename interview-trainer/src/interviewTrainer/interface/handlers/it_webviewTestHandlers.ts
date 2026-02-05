@@ -1,30 +1,30 @@
-import { it_callLlmChat } from "../infra/api/it_llm";
-import type { ItLlmConfig, ItLlmMessage } from "../infra/api/it_llmTypes";
+import { it_callLlmChat } from "../../infra/api/it_llm";
+import type { ItLlmConfig, ItLlmMessage } from "../../infra/api/it_llmTypes";
 import {
   it_buildDoubaoChatRequest,
   it_buildDoubaoResponsesRequest,
   it_buildOpenAiChatRequest,
   it_buildOpenAiResponsesRequest,
-} from "../infra/api/it_requestBuilder";
-import { it_callBaiduAsr } from "../infra/api/it_baidu";
-import { it_callVolcAsr } from "../infra/api/it_volc_asr";
-import { it_callEmbedding } from "../infra/api/it_embedding";
-import { it_pcm16ToWavBuffer } from "../infra/utils/it_wav";
+} from "../../infra/api/it_requestBuilder";
+import { it_callBaiduAsr } from "../../infra/api/it_baidu";
+import { it_callVolcAsr } from "../../infra/api/it_volc_asr";
+import { it_callEmbedding } from "../../infra/api/it_embedding";
+import { it_pcm16ToWavBuffer } from "../../infra/utils/it_wav";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 import {
   it_executeTemplate,
   it_renderTemplateRequest,
   it_resolveTemplateById,
-} from "../infra/api/it_templateExecutor";
-import { it_extractTokenInfo } from "../application/services/it_tokens";
-import type { ItApiTemplate } from "../../protocol/interviewTrainer";
+} from "../../infra/api/it_templateExecutor";
+import { it_extractTokenInfo } from "../../application/services/it_tokens";
+import type { ItApiTemplate } from "../../../protocol/interviewTrainer";
 import {
   IT_SAMPLE_AUDIO_BASE64,
   IT_SAMPLE_AUDIO_BYTE_LENGTH,
   IT_SAMPLE_AUDIO_CHANNEL,
   IT_SAMPLE_AUDIO_FORMAT,
   IT_SAMPLE_AUDIO_SAMPLE_RATE,
-} from "../constants/it_sampleAudio";
+} from "../../constants/it_sampleAudio";
 
 function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
   const masked: Record<string, string> = { ...headers };
