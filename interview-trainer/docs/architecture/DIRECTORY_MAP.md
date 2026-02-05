@@ -24,3 +24,7 @@ interview-trainer/
 
 ## 排除目录
 - `node_modules/`、`build/`、`out/`、`media/` 为产物或依赖，不写工程文档。
+
+## 依赖方向
+- `interface`/`application` 可依赖 `domain`/`infra`。
+- `domain` 只保留纯业务逻辑与算法，不依赖 `infra`/`vscode`/`fs` 等 I/O。

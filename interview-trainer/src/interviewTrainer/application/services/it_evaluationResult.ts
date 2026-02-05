@@ -1,10 +1,10 @@
 import type { ItEvaluation, ItNoteHit } from "../../../protocol/interviewTrainer";
-import type { ItEvaluationConfig } from "../../domain/evaluation/types";
+import type { ItEvaluationConfig } from "./it_evaluationTypes";
 import {
   it_canUseLlm,
   it_generateOutlines,
   it_generateRevisedByOutline,
-} from "../../domain/evaluation/prompt";
+} from "./it_evaluationLlm";
 import {
   it_extractScoreData,
   it_computeOverallScore,

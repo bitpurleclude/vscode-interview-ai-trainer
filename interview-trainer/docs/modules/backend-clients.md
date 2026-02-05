@@ -9,7 +9,7 @@
 - `src/interviewTrainer/infra/clients/embeddingClient.ts`：Embedding 请求。
 
 ## 关键调用链
-- `domain/analyze/evaluation.ts` → `llmClient.ts`
+- `application/services/it_evaluation.ts` / `application/services/it_evaluationLlm.ts` → `llmClient.ts`
 - `domain/analyze/asr.ts` → `asrClient.ts`
 - `infra/notes/*` → `embeddingClient.ts`
 

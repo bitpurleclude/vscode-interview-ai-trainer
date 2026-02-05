@@ -28,7 +28,7 @@
 - 分析入口：`interface/handlers/it_webviewResultHandlers.ts` → `application/useCases/it_analysisFlow.ts`
 - ASR：`domain/analyze/asr.ts` → `infra/clients/asrClient.ts`
 - 检索：`infra/notes/*` → `infra/clients/embeddingClient.ts`（算法在 `domain/notes/*`）
-- 评价：`domain/analyze/evaluation.ts` → `infra/clients/llmClient.ts`
+- 评价：`application/services/it_evaluation.ts` / `application/services/it_evaluationLlm.ts` → `infra/clients/llmClient.ts`
 - 写入：`domain/analyze/result.ts` → `infra/storage/*`
 
 ## 配置与环境

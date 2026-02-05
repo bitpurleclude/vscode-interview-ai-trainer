@@ -5,8 +5,9 @@ import {
 } from "../../../protocol/interviewTrainer";
 import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
 import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
-import type { ItEvaluationConfig } from "../../domain/evaluation/types";
-import { it_canUseLlm, it_splitTranscriptByQuestions } from "../../domain/evaluation/prompt";
+import type { ItEvaluationConfig } from "./it_evaluationTypes";
+import { it_canUseLlm } from "./it_evaluationLlm";
+import { it_splitTranscriptByQuestions } from "../../domain/evaluation/prompt";
 import { it_extractJsonPayload, it_pickRevisedAnswers } from "../../domain/evaluation/parser";
 import { it_normalizeDimensions } from "../../domain/evaluation/scoring";
 import { it_buildUnavailableEvaluation } from "./it_evaluationFallback";
@@ -18,7 +19,7 @@ import {
 } from "./it_evaluationPrompt";
 import { it_buildEvaluationFromParsed } from "./it_evaluationResult";
 
-export type { ItEvaluationConfig } from "../../domain/evaluation/types";
+export type { ItEvaluationConfig } from "./it_evaluationTypes";
 
 export async function it_evaluateAnswer(
   question: string,

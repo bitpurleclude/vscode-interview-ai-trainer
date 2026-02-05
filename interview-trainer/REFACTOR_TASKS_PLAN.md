@@ -61,10 +61,10 @@
 - [x] 移除 `domain/analyze/flow_types.ts` 中的 `vscode` 依赖，改为 Application 层定义接口传入。
 
 #### P4-3 evaluation 模块合规
-- [ ] 将 `domain/evaluation/prompt.ts` 中的 LLM 调用迁至 `application/services`（仅保留纯 prompt 拼装/解析在 Domain）。
-- [ ] 保留 `domain/evaluation/parser.ts`、`domain/evaluation/scoring.ts` 作为纯算法模块。
+- [x] 将 `domain/evaluation/prompt.ts` 中的 LLM 调用迁至 `application/services`（仅保留纯 prompt 拼装/解析在 Domain）。
+- [x] 保留 `domain/evaluation/parser.ts`、`domain/evaluation/scoring.ts` 作为纯算法模块。
 
 #### P4-4 文档与校验
-- [ ] 更新 `docs/architecture/*` 与 `docs/modules/*` 对应模块说明。
-- [ ] 补充目录图与依赖方向说明（标注 Domain 不含 I/O）。
-- [ ] 构建验证：`npm run build`。
+- [x] 更新 `docs/architecture/*` 与 `docs/modules/*` 对应模块说明。
+- [x] 补充目录图与依赖方向说明（标注 Domain 不含 I/O）。
+- [x] 构建验证：`npm run build`。
