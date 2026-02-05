@@ -17,7 +17,7 @@ import {
   it_resolveBindingTemplate,
   ItTemplateRuntime,
 } from "../../infra/api/it_templateExecutor";
-import { it_evaluateAnswer } from "../../core/it_evaluation";
+import { it_evaluateAnswer } from "../../application/services/it_evaluation";
 import {
   ItCorpusItem,
   it_buildCorpusAsync,
@@ -38,7 +38,7 @@ import {
   it_buildDetailedTranscript,
 } from "../../infra/utils/it_audio";
 import { it_hashText } from "../../infra/utils/it_text";
-import { it_parseQuestions } from "../../core/it_questionParser";
+import { it_parseQuestions } from "../../application/services/it_questionParser";
 import { it_storeRecordingAsync } from "./audio";
 import { it_transcribeAudio } from "./asr";
 import {

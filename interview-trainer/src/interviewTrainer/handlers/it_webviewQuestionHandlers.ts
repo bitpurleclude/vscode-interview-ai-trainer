@@ -5,8 +5,8 @@ import type {
 } from "../../protocol/interviewTrainer";
 import type { ItLlmConfig } from "../infra/api/it_llmTypes";
 import { it_resolveBindingTemplate, ItTemplateRuntime } from "../infra/api/it_templateExecutor";
-import { it_evaluateAnswer } from "../core/it_evaluation";
-import { it_parseQuestions } from "../core/it_questionParser";
+import { it_evaluateAnswer } from "../application/services/it_evaluation";
+import { it_parseQuestions } from "../application/services/it_questionParser";
 import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
