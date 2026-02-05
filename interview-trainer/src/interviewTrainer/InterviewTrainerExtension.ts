@@ -14,7 +14,7 @@ import { ItApiConfig, ItConfigBundle } from "./infra/api/it_apiConfig";
 import { ItConfigService } from "./infra/api/it_configService";
 import { ItLlmConfig } from "./infra/api/it_llmTypes";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
-import { it_handleAnalyze } from "./core/it_analysisFlow";
+import { it_handleAnalyze } from "./application/useCases/it_analysisFlow";
 import {
   it_buildConfigSnapshot,
   it_normalizeWorkspaceKey,
