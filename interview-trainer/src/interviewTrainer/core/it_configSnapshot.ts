@@ -41,7 +41,7 @@ function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
       "asr.lang",
       "asr.dev_pid",
     ],
-    embedding: ["embeddingInput", "model"],
+    embedding: ["embeddingInput", "embeddingInputs", "model"],
     token: [],
   };
 }

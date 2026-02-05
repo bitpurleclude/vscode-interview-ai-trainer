@@ -221,6 +221,10 @@ export async function it_callEmbedding(
   }
   if (cfg.template && cfg.templateContext && cfg.templateEnv) {
     const embeddingInput = inputs.length === 1 ? inputs[0] : inputs;
+    const embeddingInputs = inputs.map((text) => ({
+      type: "text",
+      text,
+    }));
     const result = await it_executeTemplate({
       runtime: {
         template: cfg.template,
@@ -229,6 +233,7 @@ export async function it_callEmbedding(
       },
       variables: {
         embeddingInput,
+        embeddingInputs,
         model: cfg.model,
         ...(cfg.templateVars || {}),
       },

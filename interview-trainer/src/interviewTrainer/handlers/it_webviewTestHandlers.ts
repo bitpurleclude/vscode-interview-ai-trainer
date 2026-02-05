@@ -87,6 +87,8 @@ function it_buildTemplateTestDefaults(
     defaults.stream = snapshot.llm?.stream;
   } else if (template.category === "embedding") {
     defaults.model = snapshot.retrieval?.vector?.model;
+    defaults.embeddingInput = "embedding test";
+    defaults.embeddingInputs = [{ type: "text", text: "embedding test" }];
   } else if (template.category === "asr") {
     defaults.audioFile = IT_SAMPLE_AUDIO_BASE64;
     defaults.audio = {
@@ -112,6 +114,7 @@ function it_buildTemplateTestVariables(
   if (inputText) {
     base.input = inputText;
     base.embeddingInput = inputText;
+    base.embeddingInputs = [{ type: "text", text: inputText }];
     base.instructions = DEFAULT_TEST_INSTRUCTIONS;
     base.messages = [
       { role: "system", content: DEFAULT_TEST_INSTRUCTIONS },
@@ -122,9 +125,23 @@ function it_buildTemplateTestVariables(
     base.stream = payload.stream;
   }
   const extra = it_isPlainObject(payload?.variables) ? payload.variables : {};
-  return {
-    ...it_mergeDeep(it_mergeDeep(base, defaults), extra),
-  };
+  const merged = it_mergeDeep(it_mergeDeep(base, defaults), extra);
+  if (inputText) {
+    merged.embeddingInput = inputText;
+    merged.embeddingInputs = [{ type: "text", text: inputText }];
+  }
+  if (merged.embeddingInputs === undefined && merged.embeddingInput !== undefined) {
+    const rawInput = merged.embeddingInput as unknown;
+    if (Array.isArray(rawInput)) {
+      merged.embeddingInputs = rawInput.map((text) => ({
+        type: "text",
+        text: String(text),
+      }));
+    } else {
+      merged.embeddingInputs = [{ type: "text", text: String(rawInput) }];
+    }
+  }
+  return { ...merged };
 }
 
 function it_emitLlmTestRequest(
