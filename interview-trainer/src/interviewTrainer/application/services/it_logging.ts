@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { ItConfigSnapshot, ItWorkflowStep } from "../../protocol/interviewTrainer";
-import { WebviewProtocol } from "../../webview/WebviewProtocol";
+import { ItConfigSnapshot, ItWorkflowStep } from "../../../protocol/interviewTrainer";
+import { WebviewProtocol } from "../../../webview/WebviewProtocol";
 
 export type ItLogHost = {
   outputChannel: vscode.OutputChannel;

@@ -4,7 +4,7 @@ import {
   ItStepState,
   ItStepStatus,
   ItWorkflowStep,
-} from "../../protocol/interviewTrainer";
+} from "../../../protocol/interviewTrainer";
 
 export const IT_STATUS_INIT: ItState = {
   statusMessage: "等待开始面试训练",

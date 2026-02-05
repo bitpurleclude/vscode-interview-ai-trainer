@@ -33,14 +33,14 @@ import {
   it_logCorpusTrace,
   it_logEmbeddingTestFailure,
   it_logLlmTestFailure,
-} from "./core/it_logging";
+} from "./application/services/it_logging";
 import {
   IT_STATUS_INIT,
   it_buildRunSteps,
   it_computeOverallProgress,
   it_updateEmbeddingWarmupState,
   it_updateProgress,
-} from "./core/it_progress";
+} from "./application/services/it_progress";
 import {
   it_detectDefaultInput,
   it_findFfmpeg,
