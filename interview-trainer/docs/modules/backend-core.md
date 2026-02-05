@@ -9,6 +9,10 @@
 - `src/interviewTrainer/application/useCases/it_analysisFlow.ts`：分析入口，维护状态与进度。
 - `src/interviewTrainer/application/useCases/it_embeddingWarmup.ts`：Embedding 预热。
 - `src/interviewTrainer/application/services/*`：日志、进度、Token、配置快照、题目解析、评价服务。
+- `src/interviewTrainer/application/services/it_evaluation.ts`：评价入口编排。
+- `src/interviewTrainer/application/services/it_evaluationFallback.ts`：不可用评价的兜底构建。
+- `src/interviewTrainer/application/services/it_evaluationPrompt.ts`：评价提示词构建。
+- `src/interviewTrainer/application/services/it_evaluationResult.ts`：评价结果解析与重建。
 - `src/interviewTrainer/domain/analyze/flow.ts`：分析编排器。
 - `src/interviewTrainer/domain/analyze/flow_*`：题目解析/转写声学/分段/检索阶段拆分。
 - `src/interviewTrainer/domain/analyze/questions*.ts`：分段对齐/答题拆分逻辑拆分。

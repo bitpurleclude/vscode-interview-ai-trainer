@@ -37,7 +37,7 @@
 - [x] 拆分 `interface/handlers/it_webviewTestHandlers.ts`
 - [x] 拆分 `domain/notes/cache.ts`
 - [x] 拆分 `infra/api/it_llm.ts`
-- [ ] 拆分 `application/services/it_evaluation.ts`
+- [x] 拆分 `application/services/it_evaluation.ts`
 - [ ] 拆分 `infra/storage/it_report.ts`
 - [ ] 拆分 `infra/storage/it_sessions.ts`
 - [ ] 评估是否拆分 `src/protocol/interviewTrainer.ts`（需同步 `webview/src/types.ts`）
