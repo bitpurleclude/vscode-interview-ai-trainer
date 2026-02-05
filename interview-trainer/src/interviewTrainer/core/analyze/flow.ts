@@ -56,6 +56,40 @@ import {
   it_persistAnalysis,
 } from "./result";
 
+function it_splitFallbackQuestions(text: string): string[] {
+  const raw = text.trim();
+  if (!raw) {
+    return [];
+  }
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const numbered: string[] = [];
+  for (const line of lines) {
+    const match = line.match(/^\d+[\.\、\)\s]+/);
+    if (!match) {
+      continue;
+    }
+    const trimmed = line.slice(match[0].length).trim();
+    if (trimmed) {
+      numbered.push(trimmed);
+    }
+  }
+  if (numbered.length > 1) {
+    return numbered;
+  }
+  const joined = lines.join(" ");
+  const parts = joined
+    .split(/[?？]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length > 1) {
+    return parts.map((part) => `${part}？`);
+  }
+  return [];
+}
+
 function it_normalizeWorkspaceKey(root: string): string {
   const resolved = path.resolve(String(root || ""));
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
@@ -438,6 +472,18 @@ export async function it_runAnalysis(
   if (parsePromise) {
     await parsePromise;
     ensureNotAborted();
+  }
+  if (questionList.length <= 1) {
+    const fallbackQuestions = it_splitFallbackQuestions(questionText);
+    if (fallbackQuestions.length > 1) {
+      questionList = fallbackQuestions;
+      reportProgress(
+        "question",
+        100,
+        `题目解析 100% · 本地补全 · ${questionList.length}题`,
+        "success",
+      );
+    }
   }
 
   const segmentLlmConfig = segmentRuntime

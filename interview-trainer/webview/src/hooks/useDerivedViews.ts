@@ -112,6 +112,14 @@ export function useDerivedViews({
     if (numbered.length) {
       return numbered;
     }
+    const joined = lines.join(" ");
+    const parts = joined
+      .split(/[?？]/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length > 1) {
+      return parts.map((part) => `${part}？`);
+    }
     return [raw];
   }, [questionText]);
 
