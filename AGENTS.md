@@ -32,6 +32,9 @@
 - VSIX 打包产物位于 `interview-trainer/build/`。
 - 插件依赖内置 ffmpeg（`ffmpeg-static`），打包时必须包含 `node_modules/ffmpeg-static`，否则录音/转写/音频处理无法正常运行。
 
+## 文档同步要求
+- 代码新增/删除/修改后，必须同步更新对应文档（`docs/` 与相关 README）。
+
 ## 日志开关与打印规则
 
 - 日志默认关闭，仅在设置页点击“开启日志输出”后开始打印。
