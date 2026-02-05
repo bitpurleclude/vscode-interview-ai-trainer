@@ -44,3 +44,42 @@
 
 - 查询向量：用于检索的 query 文本（题干/答案/转写片段）经过 embedding 得到的向量，用来与语料向量做相似度计算。
 - 语料缓存命中不等于向量缓存命中：语料缓存保存的是文本切片与元信息；向量缓存保存的是这些切片的 embedding。语料缓存命中时，如果向量缓存缺失或模型/参数变化，仍会触发向量补算并产生 API 流量。
+
+---
+
+## 架构速览（给 AI/新同学）
+
+### 后端主链路（音频 → 结果）
+- `src/extension.ts`：扩展入口，注册 Webview 与命令
+- `src/interviewTrainer/InterviewTrainerExtension.ts`：扩展主控制器（配置/状态/日志/录音/分析）
+- `src/interviewTrainer/handlers/it_webviewCoreHandlers.ts` → `core/it_analysisFlow.ts` → `core/analyze/flow.ts`：分析主流程
+- 关键子流程：
+  - ASR：`core/analyze/asr.ts` → `core/clients/asrClient.ts`
+  - 多题分段：`core/analyze/questions.ts`
+  - 检索：`core/notes/*` → `core/clients/embeddingClient.ts`
+  - 评价：`core/it_evaluation.ts` → `core/clients/llmClient.ts`
+  - 结果写入：`core/analyze/result.ts` → `storage/*`
+
+### 前端主链路（UI → 消息 → 后端）
+- `webview/src/messenger.ts`：request/response 通道
+- `src/webview/WebviewProtocol.ts`：后端消息桥
+- `webview/src/InterviewTrainer.tsx`：页面主容器
+- `webview/src/hooks/useAnalysisFlow.ts`：分析请求/取消/保存
+- 实时输出：`core/it_logging.ts` → `it/evaluationStreamUpdate` → `webview/src/hooks/useStreaming.ts` → `StepsList/StreamCard`
+
+### 模板/配置体系
+- 默认配置：`config/*.yaml`
+- 模板执行：`src/interviewTrainer/api/it_templateExecutor.ts`
+- 配置快照：`src/interviewTrainer/core/it_configSnapshot.ts`
+- 设置页：`webview/src/components/settings/*`
+
+## 架构/模块文档索引
+- 总览：`interview-trainer/docs/architecture/ARCHITECTURE_OVERVIEW.md`
+- 目录图：`interview-trainer/docs/architecture/DIRECTORY_MAP.md`
+- 模块文档：`interview-trainer/docs/modules/*`
+
+## 常见注意事项（AI 维护）
+- 改动步骤顺序需同步前端 `webview/src/constants/defaultState.ts` 与后端 `core/it_progress.ts`
+- 实时输出列数依赖 `it/evaluationStreamUpdate` 的索引；UI 会按“题目列表 + 已到达 stream”合并
+- 模板变量与“可引用变量”必须对齐，否则 dryrun 与 live 行为不一致
+- Release 流程：**先 beta → 用户测试 → 正式版**（不要跳过）
