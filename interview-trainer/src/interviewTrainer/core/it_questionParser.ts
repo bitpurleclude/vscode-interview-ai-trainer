@@ -1,4 +1,5 @@
 import { it_requestLlmChatStreaming } from "./clients/llmClient";
+import { it_createTraceLogger } from "./logging/it_traceLogger";
 import { ItLlmConfig } from "../api/it_llmTypes";
 
 export interface ItParsedQuestions {
@@ -84,9 +85,14 @@ export async function it_parseQuestions(
   text: string,
   llmConfig?: ItLlmConfig | null,
   onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<ItParsedQuestions> {
   const fallback = it_parseQuestionsHeuristic(text);
+  const trace = it_createTraceLogger(onTrace);
   if (!llmConfig || !text.trim()) {
+    if (onTrace && !llmConfig && text.trim()) {
+      onTrace("???? LLM ???", {});
+    }
     return {
       ...fallback,
       error: llmConfig ? undefined : "LLM not configured",
@@ -145,6 +151,10 @@ export async function it_parseQuestions(
   let parseError: string | undefined;
   let responseText: string | undefined;
   try {
+    await trace.logLlmTemplateRequest("????", parseConfig, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], parseConfig.stream);
     onStream?.({ text: "", reset: true });
     const content = await it_requestLlmChatStreaming(
       parseConfig,
@@ -159,6 +169,7 @@ export async function it_parseQuestions(
     );
     onStream?.({ text: content, done: true });
     responseText = content;
+    trace.logLlmTemplateResponse("????", parseConfig, content);
     const parsed = it_extractJson(content);
     if (parsed && Array.isArray(parsed.questions)) {
       const questions = parsed.questions
@@ -179,6 +190,7 @@ export async function it_parseQuestions(
       }
     }
   } catch (err) {
+    trace.logLlmTemplateError("????", parseConfig, err);
     if (err instanceof Error) {
       parseError = err.message;
     } else {

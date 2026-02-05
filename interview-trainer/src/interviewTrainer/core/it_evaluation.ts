@@ -4,13 +4,13 @@
   ItNoteHit,
 } from "../../protocol/interviewTrainer";
 import { it_requestLlmChatStreaming } from "./clients/llmClient";
+import { it_createTraceLogger } from "./logging/it_traceLogger";
 import type { ItEvaluationConfig } from "./evaluation/types";
 import {
   it_buildSummary,
   it_canUseLlm,
   it_generateOutlines,
   it_generateRevisedByOutline,
-  it_maskLlmConfig,
   it_splitTranscriptByQuestions,
 } from "./evaluation/prompt";
 import {
@@ -77,6 +77,7 @@ export async function it_evaluateAnswer(
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
   onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<ItEvaluation> {
+  const trace = it_createTraceLogger(onTrace);
   const lowSpeech =
     (acoustic.speechDurationSec ?? 0) < 2 || transcript.trim().length < 10;
   const dimensions = it_normalizeDimensions(config.dimensions);
@@ -192,8 +193,7 @@ export async function it_evaluateAnswer(
       .filter(Boolean)
       .join("\n\n");
     finalPromptText = `System:\n${systemPrompt}\n\nUser:\n${attemptPrompt}`;
-    try {
-      const callConfig = {
+    const callConfig = {
         provider: config.provider,
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
@@ -221,14 +221,12 @@ export async function it_evaluateAnswer(
         templateVars: config.templateVars,
         templateMaxRetries: config.templateMaxRetries,
       };
+    try {
       onStream?.({ text: "", reset: true });
-      onTrace?.("面试评价 LLM 请求（评审）", {
-        config: it_maskLlmConfig(callConfig),
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: attemptPrompt },
-        ],
-      });
+      await trace.logLlmTemplateRequest("面试评价（评审）", callConfig, [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: attemptPrompt },
+      ], callConfig.stream);
       content = await it_requestLlmChatStreaming(
         callConfig,
         [
@@ -241,10 +239,10 @@ export async function it_evaluateAnswer(
         },
       );
       onStream?.({ text: content, done: true });
-      onTrace?.("面试评价 LLM 返回（评审）", { text: content });
+      trace.logLlmTemplateResponse("面试评价（评审）", callConfig, content);
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
-      onTrace?.("面试评价 LLM 失败（评审）", { error: lastError });
+      trace.logLlmTemplateError("面试评价（评审）", callConfig, err);
       continue;
     }
     parsed = it_extractJsonPayload(content);

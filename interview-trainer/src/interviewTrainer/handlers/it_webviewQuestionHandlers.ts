@@ -77,23 +77,7 @@ export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
       throw new Error("LLM 模板未绑定：请在设置中绑定题目解析模板。");
     }
     const llmConfig = buildTemplateLlmConfig(parseRuntime);
-    const parsed = await it_parseQuestions(text, llmConfig);
-    if (parsed.debug?.request) {
-      host.logCorpusTrace("题目解析 LLM 请求", parsed.debug.request);
-    } else if (parsed.error === "LLM not configured") {
-      host.logCorpusTrace("题目解析 LLM 未配置", {});
-    }
-    if (parsed.debug?.response) {
-      host.logCorpusTrace("题目解析 LLM 返回", parsed.debug.response);
-    }
-    if (parsed.error && parsed.error !== "LLM not configured") {
-      host.logCorpusTrace("题目解析 LLM 失败", { error: parsed.error });
-    }
-    if (parsed.source === "llm" && !parsed.questions.length && parsed.raw) {
-      host.logCorpusTrace("题目解析 LLM 返回不完整", {
-        raw: String(parsed.raw).slice(0, 500),
-      });
-    }
+    const parsed = await it_parseQuestions(text, llmConfig, undefined, host.logCorpusTrace);
     if (cacheRoot && (parsed.material || parsed.questions.length)) {
       await it_writeQuestionParseCache(cacheRoot, text, {
         material: parsed.material || "",

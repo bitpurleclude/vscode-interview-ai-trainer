@@ -5,6 +5,7 @@ import type {
 } from "../../../protocol/interviewTrainer";
 import type { ItTemplateRuntime } from "../../api/it_templateExecutor";
 import { it_requestAsrTemplate } from "../clients/asrClient";
+import { it_createTraceLogger } from "../logging/it_traceLogger";
 import { it_splitPcmBase64 } from "./audio";
 
 function it_isBaiduContentTooLong(error: unknown): boolean {
@@ -110,7 +111,9 @@ export async function it_transcribeAudio(
     message?: string,
     status?: ItStepStatus,
   ) => void,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<string> {
+  const trace = it_createTraceLogger(onTrace);
   const asrProvider = asrCfg.provider || "baidu_vop";
   const asrLabel = asrProvider === "mock" ? "模拟" : "API";
   reportProgress("asr", 0, `语音转写 0% · ${asrLabel}`, "running");
@@ -142,72 +145,93 @@ export async function it_transcribeAudio(
     durationSec: request.audio.durationSec,
     url: audioUrl || undefined,
   };
+  const asrVarsBase = {
+    audioFile: request.audio.base64,
+    audio: audioMeta,
+    asr: {
+      lang: language,
+      dev_pid: devPid,
+      language,
+      devPid,
+    },
+  };
 
   let transcript = "";
   if (audioUrl) {
     reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    transcript = await it_requestAsrTemplate(
+    await trace.logTemplateRequest(
+      "语音转写",
       templateRuntime,
-      {
-        audioFile: request.audio.base64,
-        audioUrl,
-        audio: audioMeta,
-        asr: {
-          lang: language,
-          dev_pid: devPid,
-          language,
-          devPid,
+      { ...asrVarsBase, audioUrl },
+      { stream: false, timeoutSec },
+    );
+    try {
+      transcript = await it_requestAsrTemplate(
+        templateRuntime,
+        { ...asrVarsBase, audioUrl },
+        {
+          maxRetries,
+          timeoutSec,
         },
-      },
-      {
-        maxRetries,
-        timeoutSec,
-      },
-    );
+      );
+    } catch (err) {
+      trace.logTemplateError("语音转写", templateRuntime, err);
+      throw err;
+    }
   } else if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
-    transcript = await it_transcribePcmWithChunks(
-      templateRuntime,
-      {
-        devPid,
-        language,
-        timeoutSec,
-        maxRetries,
-      },
-      request.audio.base64,
-      request.audio.sampleRate,
-      maxChunkSec,
-      maxConcurrency,
-      (done, total) => {
-        const percent = total ? Math.round((done / total) * 100) : 0;
-        reportProgress(
-          "asr",
-          percent,
-          `语音转写 ${percent}% · ${asrLabel}`,
-          "running",
-        );
-      },
-    );
+    await trace.logTemplateRequest("语音转写", templateRuntime, asrVarsBase, {
+      stream: false,
+      timeoutSec,
+    });
+    try {
+      transcript = await it_transcribePcmWithChunks(
+        templateRuntime,
+        {
+          devPid,
+          language,
+          timeoutSec,
+          maxRetries,
+        },
+        request.audio.base64,
+        request.audio.sampleRate,
+        maxChunkSec,
+        maxConcurrency,
+        (done, total) => {
+          const percent = total ? Math.round((done / total) * 100) : 0;
+          reportProgress(
+            "asr",
+            percent,
+            `语音转写 ${percent}% · ${asrLabel}`,
+            "running",
+          );
+        },
+      );
+    } catch (err) {
+      trace.logTemplateError("语音转写", templateRuntime, err);
+      throw err;
+    }
   } else {
     reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    transcript = await it_requestAsrTemplate(
-      templateRuntime,
-      {
-        audioFile: request.audio.base64,
-        audio: audioMeta,
-        asr: {
-          lang: language,
-          dev_pid: devPid,
-          language,
-          devPid,
+    await trace.logTemplateRequest("语音转写", templateRuntime, asrVarsBase, {
+      stream: false,
+      timeoutSec,
+    });
+    try {
+      transcript = await it_requestAsrTemplate(
+        templateRuntime,
+        asrVarsBase,
+        {
+          maxRetries,
+          timeoutSec,
         },
-      },
-      {
-        maxRetries,
-        timeoutSec,
-      },
-    );
+      );
+    } catch (err) {
+      trace.logTemplateError("语音转写", templateRuntime, err);
+      throw err;
+    }
   }
 
+  trace.logTemplateResponse("语音转写", templateRuntime, { text: transcript });
   reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
   return transcript;
 }

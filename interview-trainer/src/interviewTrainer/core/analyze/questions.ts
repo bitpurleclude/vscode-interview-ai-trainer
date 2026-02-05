@@ -1,8 +1,9 @@
-import type {
+﻿import type {
   ItAudioSegment,
   ItQuestionTiming,
 } from "../../../protocol/interviewTrainer";
 import { it_requestLlmChatStreaming } from "../clients/llmClient";
+import { it_createTraceLogger } from "../logging/it_traceLogger";
 import type { ItLlmConfig } from "../../api/it_llmTypes";
 import { it_formatSeconds, it_normalizeText } from "../../utils/it_text";
 import { it_extractJson } from "./shared";
@@ -160,21 +161,6 @@ export function it_buildQuestionTimings(
   });
 }
 
-function it_maskLlmConfig(config: ItLlmConfig): Record<string, unknown> {
-  const { templateContext, template, ...rest } = config;
-  return {
-    ...rest,
-    apiKey: config.apiKey ? "***" : "",
-    template: template
-      ? {
-          id: template.id,
-          name: template.name,
-          category: template.category,
-        }
-      : undefined,
-  };
-}
-
 export async function it_assignSegmentsWithLlm(
   llmConfig: ItLlmConfig,
   questions: string[],
@@ -188,6 +174,7 @@ export async function it_assignSegmentsWithLlm(
     }
   | null
 > {
+  const trace = it_createTraceLogger(onTrace);
   if (!questions.length || !segments.length) {
     return null;
   }
@@ -219,13 +206,10 @@ export async function it_assignSegmentsWithLlm(
 
   try {
     onStream?.({ text: "", reset: true });
-    onTrace?.("多题分段 LLM 请求（远程对齐）", {
-      config: it_maskLlmConfig(llmConfig),
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    });
+    await trace.logLlmTemplateRequest("多题分段（远程对齐）", llmConfig, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], llmConfig.stream);
     const content = await it_requestLlmChatStreaming(
       llmConfig,
       [
@@ -238,7 +222,7 @@ export async function it_assignSegmentsWithLlm(
       },
     );
     onStream?.({ text: content, done: true });
-    onTrace?.("多题分段 LLM 返回（远程对齐）", { text: content });
+    trace.logLlmTemplateResponse("多题分段（远程对齐）", llmConfig, content);
     const parsed = it_extractJson(content);
     const assignments = Array.isArray(parsed?.assignments)
       ? parsed.assignments
@@ -289,9 +273,7 @@ export async function it_assignSegmentsWithLlm(
     }
     return answeredCount ? { timings, answers } : null;
   } catch (error) {
-    onTrace?.("多题分段 LLM 失败（远程对齐）", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    trace.logLlmTemplateError("多题分段（远程对齐）", llmConfig, error);
     return null;
   }
 }
@@ -303,6 +285,7 @@ export async function it_splitAnswersWithLlm(
   onTrace?: (message: string, detail?: Record<string, unknown>) => void,
   onStream?: (update: { text: string; done?: boolean; reset?: boolean }) => void,
 ): Promise<Array<{ question: string; answer: string }> | null> {
+  const trace = it_createTraceLogger(onTrace);
   if (!questions.length || !transcript.trim()) {
     return null;
   }
@@ -325,13 +308,10 @@ export async function it_splitAnswersWithLlm(
 
   try {
     onStream?.({ text: "", reset: true });
-    onTrace?.("多题分段 LLM 请求（逐题拆分）", {
-      config: it_maskLlmConfig(llmConfig),
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    });
+    await trace.logLlmTemplateRequest("多题分段（逐题拆分）", llmConfig, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], llmConfig.stream);
     const content = await it_requestLlmChatStreaming(
       llmConfig,
       [
@@ -344,7 +324,7 @@ export async function it_splitAnswersWithLlm(
       },
     );
     onStream?.({ text: content, done: true });
-    onTrace?.("多题分段 LLM 返回（逐题拆分）", { text: content });
+    trace.logLlmTemplateResponse("多题分段（逐题拆分）", llmConfig, content);
     const parsed = it_extractJson(content);
     const answers = Array.isArray(parsed?.answers) ? parsed.answers : [];
     if (!answers.length) {
@@ -406,9 +386,7 @@ export async function it_splitAnswersWithLlm(
     });
     return answeredCount ? result : null;
   } catch (error) {
-    onTrace?.("多题分段 LLM 失败（逐题拆分）", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    trace.logLlmTemplateError("多题分段（逐题拆分）", llmConfig, error);
     return null;
   }
 }

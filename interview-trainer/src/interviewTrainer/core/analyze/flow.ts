@@ -275,31 +275,10 @@ export async function it_runAnalysis(
           deps.onStream
             ? (update) => deps.onStream?.({ step: "question", ...update })
             : undefined,
+          deps.onCorpusTrace,
         );
         const elapsed = ((Date.now() - parseStart) / 1000).toFixed(1);
         const sourceLabel = parsed.source === "llm" ? "API" : "本地";
-        if (deps.onCorpusTrace) {
-          if (parsed.debug?.request) {
-            deps.onCorpusTrace("题目解析 LLM 请求", parsed.debug.request);
-          } else if (parsed.error === "LLM not configured") {
-            deps.onCorpusTrace("题目解析 LLM 未配置", {});
-          }
-          if (parsed.debug?.response) {
-            deps.onCorpusTrace("题目解析 LLM 返回", parsed.debug.response);
-          }
-          if (parsed.error && parsed.error !== "LLM not configured") {
-            deps.onCorpusTrace("题目解析 LLM 失败", { error: parsed.error });
-          }
-          if (
-            parsed.source === "llm" &&
-            (!parsed.questions.length || !parsed.material) &&
-            parsed.raw
-          ) {
-            deps.onCorpusTrace("题目解析 LLM 返回不完整", {
-              raw: String(parsed.raw).slice(0, 500),
-            });
-          }
-        }
         if (parsed.material) {
           questionText = parsed.material;
         }
@@ -410,6 +389,7 @@ export async function it_runAnalysis(
     asrCfg,
     asrRuntime,
     reportProgress,
+    deps.onCorpusTrace,
   );
   ensureNotAborted();
   deps.onPartial?.({ transcript });
