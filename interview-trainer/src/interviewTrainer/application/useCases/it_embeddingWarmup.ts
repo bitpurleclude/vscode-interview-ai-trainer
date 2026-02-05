@@ -2,7 +2,7 @@ import path from "path";
 import { it_resolveBindingTemplate } from "../../infra/api/it_templateExecutor";
 import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "../../core/it_notes";
 import { it_hashText } from "../../infra/utils/it_text";
-import { it_normalizeWorkspaceKey } from "../../core/it_configSnapshot";
+import { it_normalizeWorkspaceKey } from "../services/it_configSnapshot";
 
 export type ItEmbeddingWarmupHost = {
   context: import("vscode").ExtensionContext;

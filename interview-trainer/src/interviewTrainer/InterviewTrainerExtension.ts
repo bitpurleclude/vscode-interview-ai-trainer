@@ -20,7 +20,7 @@ import {
   it_normalizeWorkspaceKey,
   it_refreshConfigSnapshot,
   it_updateCorpusWatchers,
-} from "./core/it_configSnapshot";
+} from "./application/services/it_configSnapshot";
 import {
   it_isIdleForWarmup,
   it_runEmbeddingWarmup,
