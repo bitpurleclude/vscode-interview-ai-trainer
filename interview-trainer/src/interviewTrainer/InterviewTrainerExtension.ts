@@ -208,10 +208,6 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       useResponses,
       apiMode,
       responsesPath: llm.responses_path ?? llm.responsesPath ?? "",
-      toolsPreset: llm.tools_preset ?? llm.toolsPreset ?? "",
-      webSearch: Boolean(
-        llm.web_search ?? llm.webSearch ?? (isDoubao ? true : false),
-      ),
       reasoningEffort:
         llm.reasoning_effort ?? llm.reasoningEffort ?? (isDoubao ? "medium" : undefined),
       maxOutputTokens: Number(llm.max_output_tokens ?? llm.maxOutputTokens ?? 800),

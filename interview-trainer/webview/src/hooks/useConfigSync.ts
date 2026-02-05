@@ -117,8 +117,6 @@ export function useConfigSync({
             useResponses: false,
             apiMode: "chat",
             responsesPath: "/v1/responses",
-            toolsPreset: "",
-            webSearch: false,
             reasoningEffort: "medium",
             maxOutputTokens: 800,
             reusePrefix: false,
@@ -138,7 +136,6 @@ export function useConfigSync({
                 "topP",
                 "reasoningEffort",
                 "maxOutputTokens",
-                "webSearch",
                 "reusePrefix",
               ],
               asr: [

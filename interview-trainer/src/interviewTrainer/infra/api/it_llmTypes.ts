@@ -11,12 +11,7 @@ export interface ItLlmConfig extends ItQianfanConfig {
   useResponses?: boolean;
   apiMode?: "chat" | "responses";
   responsesPath?: string;
-  toolsPreset?: string;
-  tools?: any[];
-  include?: string[];
-  store?: boolean;
   promptCacheKey?: string;
-  webSearch?: boolean;
   reasoningEffort?: ItLlmReasoningEffort;
   maxOutputTokens?: number;
   reusePrefix?: boolean;

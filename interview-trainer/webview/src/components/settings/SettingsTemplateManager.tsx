@@ -15,7 +15,6 @@ const TEMPLATE_CATEGORY_TABS: Array<{
   { key: "token", label: "Token", enabled: true },
   { key: "tts", label: "TTS", enabled: false },
   { key: "vision", label: "Vision", enabled: false },
-  { key: "tools", label: "Tools", enabled: false },
 ];
 
 const TEMPLATE_METHODS = ["POST", "GET", "PUT", "PATCH", "DELETE"];

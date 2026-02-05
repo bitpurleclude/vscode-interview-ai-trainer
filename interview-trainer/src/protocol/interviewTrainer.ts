@@ -20,8 +20,7 @@ export type ItTemplateCategory =
   | "embedding"
   | "token"
   | "tts"
-  | "vision"
-  | "tools";
+  | "vision";
 
 export type ItTemplateResponseMode = "json" | "sse" | "ndjson" | "websocket" | "binary";
 
@@ -313,8 +312,6 @@ export interface ItConfigSnapshot {
     useResponses?: boolean;
     apiMode?: string;
     responsesPath?: string;
-    toolsPreset?: string;
-    webSearch?: boolean;
     reasoningEffort?: string;
     maxOutputTokens?: number;
     reusePrefix?: boolean;

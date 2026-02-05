@@ -94,12 +94,8 @@ function it_buildTemplateVariables(
     topP: cfg.topP,
     reasoningEffort: cfg.reasoningEffort,
     maxOutputTokens: cfg.maxOutputTokens,
-    webSearch: cfg.webSearch,
     reusePrefix: cfg.reusePrefix,
     stream: streamEnabled,
-    tools: cfg.tools,
-    include: cfg.include,
-    store: cfg.store,
     promptCacheKey: cfg.promptCacheKey,
     ...(cfg.templateVars || {}),
   };

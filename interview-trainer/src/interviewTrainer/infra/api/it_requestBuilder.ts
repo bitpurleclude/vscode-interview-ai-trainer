@@ -1,6 +1,4 @@
 import { ItLlmConfig, ItLlmMessage, ItLlmReasoningEffort } from "./it_llmTypes";
-import { it_resolveToolsPreset } from "./it_toolsPresets";
-
 export interface ItLlmRequestSpec {
   url: string;
   headers: Record<string, string>;
@@ -11,7 +9,6 @@ export interface ItLlmRequestOptions {
   previousResponseId?: string;
   reasoningEffort?: ItLlmReasoningEffort;
   maxOutputTokens?: number;
-  webSearch?: boolean;
 }
 
 function it_buildHeaders(cfg: ItLlmConfig): Record<string, string> {
@@ -139,21 +136,6 @@ function it_buildOpenAiResponsesPayload(
   if (options?.previousResponseId) {
     payload.previous_response_id = options.previousResponseId;
   }
-  const presetTools = cfg.tools && cfg.tools.length ? cfg.tools : it_resolveToolsPreset(cfg.toolsPreset);
-  const webSearch = options?.webSearch ?? cfg.webSearch;
-  if (presetTools && presetTools.length) {
-    payload.tools = presetTools;
-    payload.tool_choice = "auto";
-    payload.parallel_tool_calls = true;
-    payload.include = cfg.include && cfg.include.length ? cfg.include : ["reasoning.encrypted_content"];
-    if (typeof cfg.store === "boolean") {
-      payload.store = cfg.store;
-    } else {
-      payload.store = false;
-    }
-  } else if (webSearch) {
-    payload.tools = [{ type: "web_search" }];
-  }
   if (cfg.promptCacheKey) {
     payload.prompt_cache_key = cfg.promptCacheKey;
   }
@@ -182,10 +164,6 @@ function it_buildDoubaoResponsesPayload(
   }
   if (options?.previousResponseId) {
     payload.previous_response_id = options.previousResponseId;
-  }
-  const webSearch = options?.webSearch ?? cfg.webSearch;
-  if (webSearch) {
-    payload.tools = [{ type: "web_search" }];
   }
   return payload;
 }

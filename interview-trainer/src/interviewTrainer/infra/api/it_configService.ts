@@ -280,19 +280,6 @@ export class ItConfigService {
         baseLlm.responses_path ??
         baseLlm.responsesPath ??
         "",
-      tools_preset:
-        incoming.toolsPreset ??
-        incoming.tools_preset ??
-        baseLlm.tools_preset ??
-        baseLlm.toolsPreset ??
-        "",
-      web_search: Boolean(
-        incoming.webSearch ??
-          incoming.web_search ??
-          baseLlm.web_search ??
-          baseLlm.webSearch ??
-          false,
-      ),
       reasoning_effort:
         incoming.reasoningEffort ??
         incoming.reasoning_effort ??

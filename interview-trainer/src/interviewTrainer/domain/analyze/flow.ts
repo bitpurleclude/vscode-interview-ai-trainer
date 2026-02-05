@@ -171,8 +171,6 @@ function it_buildTemplateLlmConfig(
     useResponses: false,
     apiMode: "chat",
     responsesPath: "",
-    toolsPreset: "",
-    webSearch: false,
     reasoningEffort: undefined,
     maxOutputTokens: 0,
     reusePrefix: false,
@@ -951,8 +949,6 @@ export async function it_runAnalysis(
       evaluationLlmConfig.apiMode ??
       ((evaluationLlmConfig.useResponses ?? false) ? "responses" : "chat"),
     responsesPath: evaluationLlmConfig.responsesPath ?? "",
-    toolsPreset: evaluationLlmConfig.toolsPreset ?? "",
-    webSearch: Boolean(evaluationLlmConfig.webSearch ?? false),
     reasoningEffort: evaluationLlmConfig.reasoningEffort ?? undefined,
     maxOutputTokens: 0,
     reusePrefix: Boolean(evaluationLlmConfig.reusePrefix ?? false),

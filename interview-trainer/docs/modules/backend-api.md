@@ -11,7 +11,6 @@
 - `src/interviewTrainer/infra/api/it_llm.ts` / `it_embedding.ts`：通用 LLM/Embedding 调用入口
 - `src/interviewTrainer/infra/api/it_baidu.ts` / `it_qianfan.ts` / `it_volc_asr.ts`：厂商适配
 - `src/interviewTrainer/infra/api/it_llmTypes.ts`：LLM 配置类型
-- `src/interviewTrainer/infra/api/it_toolsPresets.ts` + `toolsPresets/presets/*`：工具预设
 
 ## 主要流程
 1) `ItConfigService` 读取 `config/*.yaml` + 用户配置，合并为 `ItConfigBundle`

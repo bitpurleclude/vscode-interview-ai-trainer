@@ -29,7 +29,6 @@ function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
       "topP",
       "reasoningEffort",
       "maxOutputTokens",
-      "webSearch",
       "reusePrefix",
     ],
     asr: [
@@ -264,10 +263,6 @@ export function it_buildConfigSnapshot(
       ),
       apiMode: llmConfig.api_mode ?? llmConfig.apiMode,
       responsesPath: llmConfig.responses_path ?? llmConfig.responsesPath ?? "",
-      toolsPreset: llmConfig.tools_preset ?? llmConfig.toolsPreset ?? "",
-      webSearch: Boolean(
-        llmConfig.web_search ?? llmConfig.webSearch ?? (isDoubao ? true : false),
-      ),
       reasoningEffort:
         llmConfig.reasoning_effort ??
         llmConfig.reasoningEffort ??

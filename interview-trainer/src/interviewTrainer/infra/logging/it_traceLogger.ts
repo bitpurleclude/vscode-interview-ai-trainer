@@ -117,7 +117,6 @@ function it_buildLlmVariables(
     topP: cfg.topP,
     reasoningEffort: cfg.reasoningEffort,
     maxOutputTokens: cfg.maxOutputTokens,
-    webSearch: cfg.webSearch,
     reusePrefix: cfg.reusePrefix,
     stream: streamEnabled,
     ...(cfg.templateVars || {}),

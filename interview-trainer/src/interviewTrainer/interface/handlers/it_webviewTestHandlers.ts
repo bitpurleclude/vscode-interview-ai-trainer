@@ -82,7 +82,6 @@ function it_buildTemplateTestDefaults(
     defaults.topP = snapshot.llm?.topP;
     defaults.reasoningEffort = snapshot.llm?.reasoningEffort;
     defaults.maxOutputTokens = snapshot.llm?.maxOutputTokens;
-    defaults.webSearch = snapshot.llm?.webSearch;
     defaults.reusePrefix = snapshot.llm?.reusePrefix;
     defaults.stream = snapshot.llm?.stream;
   } else if (template.category === "embedding") {
@@ -185,12 +184,7 @@ export function it_registerTestHandlers(host: ItWebviewHandlersHost): void {
       useResponses: Boolean(llmForm.useResponses ?? false),
       apiMode: llmForm.apiMode,
       responsesPath: llmForm.responsesPath,
-      toolsPreset: llmForm.toolsPreset,
-      tools: llmForm.tools,
-      include: llmForm.include,
-      store: typeof llmForm.store === "boolean" ? llmForm.store : undefined,
       promptCacheKey: llmForm.promptCacheKey,
-      webSearch: Boolean(llmForm.webSearch ?? false),
       reasoningEffort: llmForm.reasoningEffort,
       maxOutputTokens: Number(llmForm.maxOutputTokens ?? 0),
       reusePrefix: Boolean(llmForm.reusePrefix ?? false),
