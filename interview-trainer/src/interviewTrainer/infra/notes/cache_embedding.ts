@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { it_requestEmbeddings } from "../../infra/clients/embeddingClient";
-import { it_hashText } from "../../infra/utils/it_text";
-import type { ItCorpusItem, ItVectorSearchConfig } from "./types";
+import { it_requestEmbeddings } from "../clients/embeddingClient";
+import { it_hashText } from "../utils/it_text";
+import type { ItCorpusItem } from "../../domain/notes/types";
+import type { ItVectorSearchConfig } from "./types";
 import { it_getItemKey, it_normalizeEmbeddingBaseUrl } from "./utils";
 import { IT_DEFAULT_BATCH_SIZE, IT_EMBEDDING_CACHE_VERSION } from "./cache_constants";
 

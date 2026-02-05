@@ -1,5 +1,5 @@
+import type { ItCorpusItem } from "../../domain/notes/types";
 import type {
-  ItCorpusItem,
   ItEmbeddingWarmupOptions,
   ItEmbeddingWarmupResult,
   ItVectorSearchConfig,

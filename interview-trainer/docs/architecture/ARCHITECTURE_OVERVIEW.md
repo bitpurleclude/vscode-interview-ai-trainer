@@ -33,7 +33,7 @@
 - `src/interviewTrainer/domain/analyze/flow.ts`
   - ASR：`domain/analyze/asr.ts` → `infra/clients/asrClient.ts`
   - 多题分段：`domain/analyze/questions.ts`
-  - 笔记检索：`domain/notes/*` → `infra/clients/embeddingClient.ts`
+  - 笔记检索：`infra/notes/*` → `infra/clients/embeddingClient.ts`（算法在 `domain/notes/*`）
   - 面试评价：`domain/analyze/evaluation.ts` → `infra/clients/llmClient.ts`
   - 结果汇总与写入：`domain/analyze/result.ts` → `infra/storage/*`
 
@@ -47,6 +47,6 @@
 - 模板绑定：`it_templateExecutor.ts` + `it_configSnapshot.ts` 负责解析模板与环境
 
 ## 5. 约束与注意事项
-- Release 前需保证文本文件 UTF-8、VSIX 打包产物包含 `node_modules/ffmpeg-static`
-- 实时输出依赖 Webview 协议消息，不应绕过 `WebviewProtocol`
-- 模板请求需通过统一模板执行器/构建器避免参数遗漏
+- Release 前需保证文本文件 UTF-8，VSIX 打包产物包含 `node_modules/ffmpeg-static`。
+- 实时输出依赖 Webview 协议消息，不应绕过 `WebviewProtocol`。
+- 模板请求需通过统一模板执行器/构建器，避免参数遗漏。

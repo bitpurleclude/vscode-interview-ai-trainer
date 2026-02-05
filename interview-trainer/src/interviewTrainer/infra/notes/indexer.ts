@@ -15,8 +15,9 @@ import {
 import { it_applyDirtyFilesToCorpus } from "./indexer_dirty";
 import { it_collectCorpusAsync, it_getDirMtime, it_getDirMtimeAsync } from "./indexer_fs";
 import { it_isSameDirMtimes } from "./indexer_utils";
-import { it_normalizePath, it_readText, it_splitText } from "./utils";
-import type { ItCorpusItem } from "./types";
+import { it_splitText } from "../../domain/notes/utils";
+import type { ItCorpusItem } from "../../domain/notes/types";
+import { it_normalizePath, it_readText } from "./utils";
 
 export function it_buildCorpus(inputs: Record<string, string>): ItCorpusItem[] {
   const entries = Object.entries(inputs).sort((a, b) => a[0].localeCompare(b[0]));

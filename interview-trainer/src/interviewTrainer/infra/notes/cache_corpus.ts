@@ -1,6 +1,6 @@
 import path from "path";
-import { it_hashText } from "../../infra/utils/it_text";
-import type { ItCorpusItem } from "./types";
+import { it_hashText } from "../utils/it_text";
+import type { ItCorpusItem } from "../../domain/notes/types";
 import { IT_CORPUS_CACHE_VERSION } from "./cache_constants";
 
 let cachedCorpus:

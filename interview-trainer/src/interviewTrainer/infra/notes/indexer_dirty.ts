@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { it_isWithinRoot, it_normalizePath, it_readTextAsync, it_splitText } from "./utils";
-import type { ItCorpusItem } from "./types";
+import { it_splitText } from "../../domain/notes/utils";
+import type { ItCorpusItem } from "../../domain/notes/types";
+import { it_isWithinRoot, it_normalizePath, it_readTextAsync } from "./utils";
 import { IT_ALLOWED_EXTS, IT_MAX_CHUNK_LEN, IT_MAX_FILE_SIZE } from "./indexer_constants";
 
 export async function it_applyDirtyFilesToCorpus(

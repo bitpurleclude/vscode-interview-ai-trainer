@@ -1,45 +1,5 @@
-import fs from "fs";
-import path from "path";
-import { it_hashText } from "../../infra/utils/it_text";
-import type { ItCorpusItem } from "./types";
-
 const IT_MAX_CHUNK_LEN = 1200;
 const IT_SNIPPET_MAX_LEN = IT_MAX_CHUNK_LEN;
-
-export function it_readText(filePath: string): string {
-  try {
-    return fs.readFileSync(filePath, "utf-8");
-  } catch {
-    return "";
-  }
-}
-
-export async function it_readTextAsync(filePath: string): Promise<string> {
-  try {
-    return await fs.promises.readFile(filePath, "utf-8");
-  } catch {
-    return "";
-  }
-}
-
-export function it_normalizePath(filePath: string): string {
-  const resolved = path.resolve(String(filePath || ""));
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
-export function it_isWithinRoot(filePath: string, root: string): boolean {
-  if (!root) {
-    return false;
-  }
-  if (filePath === root) {
-    return true;
-  }
-  const rel = path.relative(root, filePath);
-  if (!rel) {
-    return true;
-  }
-  return !rel.startsWith("..") && !path.isAbsolute(rel);
-}
 
 function it_splitByParagraphs(text: string, maxLen: number): string[] {
   const parts = text
@@ -150,15 +110,6 @@ export function it_scoreTokens(queryTokens: string[], textTokens: string[]): num
     }
   }
   return hits / Math.max(1, queryTokens.length);
-}
-
-export function it_normalizeEmbeddingBaseUrl(url: string): string {
-  return String(url || "").trim().replace(/\/+$/, "");
-}
-
-export function it_getItemKey(item: ItCorpusItem): string {
-  const normalizedSource = it_normalizePath(item.source || "");
-  return `${normalizedSource}|${it_hashText(item.text)}`;
 }
 
 export function it_cosineSimilarity(a: number[], b: number[]): number {

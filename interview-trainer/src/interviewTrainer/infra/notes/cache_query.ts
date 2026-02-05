@@ -1,5 +1,6 @@
-import { it_hashText } from "../../infra/utils/it_text";
-import type { ItNoteHit, ItRetrievalOptions } from "./types";
+import { it_hashText } from "../utils/it_text";
+import type { ItNoteHit } from "../../domain/notes/types";
+import type { ItRetrievalOptions } from "./types";
 import { it_buildEmbeddingCacheKey } from "./cache_embedding";
 
 const cachedQueries: Map<string, ItNoteHit[]> = new Map();

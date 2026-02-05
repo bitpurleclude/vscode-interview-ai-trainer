@@ -1,17 +1,16 @@
-import { it_hashText } from "../../infra/utils/it_text";
+import { it_hashText } from "../utils/it_text";
 import type {
   ItCorpusItem,
   ItNoteHit,
-  ItRetrievalMetrics,
-  ItRetrievalOptions,
-} from "./types";
+} from "../../domain/notes/types";
+import type { ItRetrievalMetrics, ItRetrievalOptions } from "./types";
 import {
   it_buildSnippet,
   it_cosineSimilarity,
-  it_getItemKey,
   it_scoreTokens,
   it_tokenize,
-} from "./utils";
+} from "../../domain/notes/utils";
+import { it_getItemKey } from "./utils";
 import {
   it_buildEmbeddingCacheKey,
   it_embedTexts,
@@ -25,7 +24,7 @@ import {
   it_setCachedQuery,
   it_setCachedQueryEmbedding,
 } from "./cache";
-import { it_mergeQueryHits } from "./ranking";
+import { it_mergeQueryHits } from "../../domain/notes/ranking";
 
 const IT_DEFAULT_QUERY_MAX_CHARS = 1500;
 const IT_DEFAULT_QUERY_CACHE_SIZE = 200;

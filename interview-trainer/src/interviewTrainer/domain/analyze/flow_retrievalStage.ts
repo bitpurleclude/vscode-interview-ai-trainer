@@ -9,11 +9,8 @@ import type {
 } from "../../../protocol/interviewTrainer";
 import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
 import { it_hashText } from "../../infra/utils/it_text";
-import {
-  ItCorpusItem,
-  it_createRetrievalMetrics,
-  it_retrieveNotesMulti,
-} from "../notes";
+import type { ItCorpusItem } from "../notes";
+import { it_createRetrievalMetrics, it_retrieveNotesMulti } from "../../infra/notes";
 import { it_buildRetrievalQueries, it_mergeNoteHitsAll } from "./result";
 import { it_collectAnswersFromSegments } from "./questions";
 import { it_normalizeWorkspaceKey } from "./flow_helpers";

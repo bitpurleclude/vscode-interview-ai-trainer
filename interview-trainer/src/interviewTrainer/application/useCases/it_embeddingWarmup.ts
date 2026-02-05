@@ -1,6 +1,6 @@
 import path from "path";
 import { it_resolveBindingTemplate } from "../../infra/api/it_templateExecutor";
-import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "../../domain/notes";
+import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "../../infra/notes";
 import { it_hashText } from "../../infra/utils/it_text";
 import { it_normalizeWorkspaceKey } from "../services/it_configSnapshot";
 
