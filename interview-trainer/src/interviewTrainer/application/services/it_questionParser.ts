@@ -1,5 +1,5 @@
-import { it_requestLlmChatStreaming } from "../../core/clients/llmClient";
-import { it_createTraceLogger } from "../../core/logging/it_traceLogger";
+import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
+import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
 import { ItLlmConfig } from "../../infra/api/it_llmTypes";
 
 export interface ItParsedQuestions {

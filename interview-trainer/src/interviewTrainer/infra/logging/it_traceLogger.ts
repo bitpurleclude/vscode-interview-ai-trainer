@@ -1,9 +1,9 @@
 import type { ItApiTemplate } from "../../../protocol/interviewTrainer";
-import type { ItLlmConfig, ItLlmMessage } from "../../infra/api/it_llmTypes";
+import type { ItLlmConfig, ItLlmMessage } from "../api/it_llmTypes";
 import {
   it_renderTemplateRequest,
   type ItTemplateRuntime,
-} from "../../infra/api/it_templateExecutor";
+} from "../api/it_templateExecutor";
 
 export type ItTraceSink = (message: string, detail?: Record<string, unknown>) => void;
 

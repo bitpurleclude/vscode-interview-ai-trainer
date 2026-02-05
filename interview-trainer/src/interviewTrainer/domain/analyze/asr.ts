@@ -4,8 +4,8 @@ import type {
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
 import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
-import { it_requestAsrTemplate } from "../../core/clients/asrClient";
-import { it_createTraceLogger } from "../../core/logging/it_traceLogger";
+import { it_requestAsrTemplate } from "../../infra/clients/asrClient";
+import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
 import { it_splitPcmBase64 } from "./audio";
 
 function it_isBaiduContentTooLong(error: unknown): boolean {

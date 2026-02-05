@@ -5,7 +5,7 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
-import { it_requestLlmChat } from "../../core/clients/llmClient";
+import { it_requestLlmChat } from "../../infra/clients/llmClient";
 import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
 import {
   it_appendAttemptDataAsync,

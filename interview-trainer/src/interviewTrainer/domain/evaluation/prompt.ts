@@ -1,5 +1,5 @@
 import { ItAcousticMetrics, ItNoteHit } from "../../../protocol/interviewTrainer";
-import { it_requestLlmChatStreaming } from "../clients/llmClient";
+import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
 import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
 import type { ItEvaluationConfig } from "./types";
 import {

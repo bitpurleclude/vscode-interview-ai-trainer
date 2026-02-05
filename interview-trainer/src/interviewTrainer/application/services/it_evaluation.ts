@@ -3,16 +3,16 @@
   ItEvaluation,
   ItNoteHit,
 } from "../../../protocol/interviewTrainer";
-import { it_requestLlmChatStreaming } from "../../core/clients/llmClient";
-import { it_createTraceLogger } from "../../core/logging/it_traceLogger";
-import type { ItEvaluationConfig } from "../../core/evaluation/types";
+import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
+import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
+import type { ItEvaluationConfig } from "../../domain/evaluation/types";
 import {
   it_buildSummary,
   it_canUseLlm,
   it_generateOutlines,
   it_generateRevisedByOutline,
   it_splitTranscriptByQuestions,
-} from "../../core/evaluation/prompt";
+} from "../../domain/evaluation/prompt";
 import {
   it_extractJsonPayload,
   it_isOutlineKeywordLike,
@@ -20,14 +20,14 @@ import {
   it_pickRevisedAnswers,
   it_toOutlineArray,
   it_toStringArray,
-} from "../../core/evaluation/parser";
+} from "../../domain/evaluation/parser";
 import {
   it_computeOverallScore,
   it_extractScoreData,
   it_normalizeDimensions,
-} from "../../core/evaluation/scoring";
+} from "../../domain/evaluation/scoring";
 
-export type { ItEvaluationConfig } from "../../core/evaluation/types";
+export type { ItEvaluationConfig } from "../../domain/evaluation/types";
 
 function it_buildUnavailableEvaluation(params: {
   question: string;

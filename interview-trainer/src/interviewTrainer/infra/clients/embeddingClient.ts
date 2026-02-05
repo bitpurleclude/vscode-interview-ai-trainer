@@ -1,4 +1,4 @@
-import { it_callEmbedding } from "../../infra/api/it_embedding";
+import { it_callEmbedding } from "../api/it_embedding";
 import type { ItVectorSearchConfig } from "../../domain/notes/types";
 
 export async function it_requestEmbeddings(
