@@ -5,6 +5,7 @@
 
 ## 目录与关键文件
 - `webview/src/components/practice/PracticeFlow.tsx`：练习页主布局
+- `webview/src/components/practice/PracticeContent.tsx`：练习页组合区（流程+结果）
 - `webview/src/components/practice/StepsList.tsx`：状态区与实时输出
 - `webview/src/components/practice/ResultsPanel.tsx`：转写/声学/评价/历史结果面板
 - `webview/src/components/settings/SettingsTemplateManager.tsx`：模板配置主容器

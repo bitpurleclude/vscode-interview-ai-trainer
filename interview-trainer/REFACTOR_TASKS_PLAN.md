@@ -28,7 +28,7 @@
 ### P2（中优先级拆分）
 - [x] 拆分 `infra/api/it_templateExecutor.ts`
 - [x] 拆分 `infra/api/it_configService.ts`
-- [ ] 拆分 `webview/src/InterviewTrainer.tsx`
+- [x] 拆分 `webview/src/InterviewTrainer.tsx`
 - [ ] 拆分 `domain/analyze/questions.ts`
 - [ ] 拆分 `interface/handlers/it_webviewConfigHandlers.ts`
 - [ ] 拆分 `domain/notes/indexer.ts`

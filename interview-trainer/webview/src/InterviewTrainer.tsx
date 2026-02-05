@@ -7,8 +7,7 @@ import { SettingsPage } from "./components/settings/SettingsPage";
 import type { SettingsPageProps } from "./components/settings/SettingsPage";
 import { InterviewHeader } from "./components/practice/InterviewHeader";
 import { InterviewStatus } from "./components/practice/InterviewStatus";
-import { PracticeFlow } from "./components/practice/PracticeFlow";
-import { ResultsPanel } from "./components/practice/ResultsPanel";
+import { PracticeContent } from "./components/practice/PracticeContent";
 import { formatSeconds } from "./utils/format";
 import { buildOutlineTree, renderOutlineTree, renderParagraphs } from "./utils/outline";
 import { useStreaming } from "./hooks/useStreaming";
@@ -388,6 +387,67 @@ const InterviewTrainer: React.FC = () => {
     };
   }, [handleLoadHistory]);
 
+  const practiceProps = {
+    steps: itState.steps,
+    stepStreams,
+    evaluationStreams,
+    evaluationStreamQuestions,
+    streamingEnabled: streamingSettings.enabled,
+    previewChars: streamPreviewChars,
+    onToggleStepStream: handleToggleStepStream,
+    onToggleEvaluationStream: handleToggleEvaluationStream,
+    overallProgress: itState.overallProgress,
+    audioPayload,
+    thinkingVisible,
+    questionText,
+    questionList,
+    questionError,
+    questionParsing,
+    questionParsed,
+    hasQuestion: inputHasQuestion,
+    onQuestionTextChange: handleQuestionTextChange,
+    onQuestionListChange: handleQuestionListChange,
+    onParseQuestions: handleParseQuestions,
+    uiLocked,
+    notesPreview,
+    showNoteHits,
+    onToggleNoteHits: handleToggleNoteHits,
+    retrievalEnabled: config?.retrievalEnabled !== false,
+  };
+
+  const resultsProps = {
+    activeTab,
+    onSetActiveTab: setActiveTab,
+    hasAnyResult,
+    hasTranscriptContent,
+    transcriptPreview,
+    detailedTranscriptPreview,
+    acousticPreview,
+    questionText,
+    parsedQuestionList: inputQuestionList,
+    questionTimingsPreview,
+    questionTimingNotePreview,
+    evaluationPreview,
+    uiLocked,
+    isProcessing,
+    regeneratingIndex,
+    onRegenerateDemoAnswer: handleRegenerateDemoAnswer,
+    showDemoPrompt,
+    onToggleDemoPrompt: handleToggleDemoPrompt,
+    showRawOutput,
+    onToggleRawOutput: handleToggleRawOutput,
+    showNoteUsage,
+    onToggleNoteUsage: handleToggleNoteUsage,
+    showNoteSuggestions,
+    onToggleNoteSuggestions: handleToggleNoteSuggestions,
+    historyItems,
+    onOpenReport: handleOpenReport,
+    formatSeconds,
+    renderParagraphs,
+    buildOutlineTree,
+    renderOutlineTree,
+  };
+
   const settingsProps: SettingsPageProps = {
     uiLocked,
     config,
@@ -542,67 +602,7 @@ const InterviewTrainer: React.FC = () => {
       />
 
       {activePage === "practice" && (
-        <>
-          <PracticeFlow
-            steps={itState.steps}
-            stepStreams={stepStreams}
-            evaluationStreams={evaluationStreams}
-            evaluationStreamQuestions={evaluationStreamQuestions}
-            streamingEnabled={streamingSettings.enabled}
-            previewChars={streamPreviewChars}
-            onToggleStepStream={handleToggleStepStream}
-            onToggleEvaluationStream={handleToggleEvaluationStream}
-            overallProgress={itState.overallProgress}
-            audioPayload={audioPayload}
-            thinkingVisible={thinkingVisible}
-            questionText={questionText}
-            questionList={questionList}
-            questionError={questionError}
-            questionParsing={questionParsing}
-            questionParsed={questionParsed}
-            hasQuestion={inputHasQuestion}
-            onQuestionTextChange={handleQuestionTextChange}
-            onQuestionListChange={handleQuestionListChange}
-            onParseQuestions={handleParseQuestions}
-            uiLocked={uiLocked}
-            notesPreview={notesPreview}
-            showNoteHits={showNoteHits}
-            onToggleNoteHits={handleToggleNoteHits}
-            retrievalEnabled={config?.retrievalEnabled !== false}
-          />
-          <ResultsPanel
-            activeTab={activeTab}
-            onSetActiveTab={setActiveTab}
-            hasAnyResult={hasAnyResult}
-            hasTranscriptContent={hasTranscriptContent}
-            transcriptPreview={transcriptPreview}
-            detailedTranscriptPreview={detailedTranscriptPreview}
-            acousticPreview={acousticPreview}
-            questionText={questionText}
-            parsedQuestionList={inputQuestionList}
-            questionTimingsPreview={questionTimingsPreview}
-            questionTimingNotePreview={questionTimingNotePreview}
-            evaluationPreview={evaluationPreview}
-            uiLocked={uiLocked}
-            isProcessing={isProcessing}
-            regeneratingIndex={regeneratingIndex}
-            onRegenerateDemoAnswer={handleRegenerateDemoAnswer}
-            showDemoPrompt={showDemoPrompt}
-            onToggleDemoPrompt={handleToggleDemoPrompt}
-            showRawOutput={showRawOutput}
-            onToggleRawOutput={handleToggleRawOutput}
-            showNoteUsage={showNoteUsage}
-            onToggleNoteUsage={handleToggleNoteUsage}
-            showNoteSuggestions={showNoteSuggestions}
-            onToggleNoteSuggestions={handleToggleNoteSuggestions}
-            historyItems={historyItems}
-            onOpenReport={handleOpenReport}
-            formatSeconds={formatSeconds}
-            renderParagraphs={renderParagraphs}
-            buildOutlineTree={buildOutlineTree}
-            renderOutlineTree={renderOutlineTree}
-          />
-        </>
+        <PracticeContent practiceProps={practiceProps} resultsProps={resultsProps} />
       )}
 
       {activePage === "settings" && <SettingsPage {...settingsProps} />}
