@@ -2,8 +2,8 @@
   ItAudioSegment,
   ItQuestionTiming,
 } from "../../../protocol/interviewTrainer";
-import { it_requestLlmChatStreaming } from "../clients/llmClient";
-import { it_createTraceLogger } from "../logging/it_traceLogger";
+import { it_requestLlmChatStreaming } from "../../core/clients/llmClient";
+import { it_createTraceLogger } from "../../core/logging/it_traceLogger";
 import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
 import { it_formatSeconds, it_normalizeText } from "../../infra/utils/it_text";
 import { it_extractJson } from "./shared";

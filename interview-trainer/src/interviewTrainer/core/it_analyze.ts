@@ -1,1 +1,1 @@
-export { it_runAnalysis } from "./analyze/flow";
+export { it_runAnalysis } from "../domain/analyze/flow";

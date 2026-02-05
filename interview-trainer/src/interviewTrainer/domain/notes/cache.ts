@@ -1,6 +1,6 @@
 ﻿import fs from "fs";
 import path from "path";
-import { it_requestEmbeddings } from "../clients/embeddingClient";
+import { it_requestEmbeddings } from "../../core/clients/embeddingClient";
 import { it_hashText } from "../../infra/utils/it_text";
 import type {
   ItCorpusItem,

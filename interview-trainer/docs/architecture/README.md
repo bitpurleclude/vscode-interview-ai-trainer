@@ -1,4 +1,4 @@
-# 架构说明（Architecture）
+﻿# 架构说明（Architecture）
 
 本目录用于记录架构原则、分层边界与迁移进度。
 
@@ -19,8 +19,8 @@
 | --- | --- | --- |
 | Phase 0 | 结构铺设与约束文档 | 完成 |
 | Phase 1 | 协议与类型统一 | 完成 |
-| Phase 2 | Infra 抽离 | 进行中 |
-| Phase 3 | Domain 归位 | 未开始 |
+| Phase 2 | Infra 抽离 | 完成 |
+| Phase 3 | Domain 归位 | 进行中 |
 | Phase 4 | Application 编排 | 未开始 |
 | Phase 5 | Interface 重新接线 | 未开始 |
 | Phase 6 | Webview 整理 | 未开始 |
