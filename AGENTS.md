@@ -68,6 +68,19 @@
 - `webview/src/hooks/useAnalysisFlow.ts`：分析请求/取消/保存
 - 实时输出：`core/it_logging.ts` → `it/evaluationStreamUpdate` → `webview/src/hooks/useStreaming.ts` → `StepsList/StreamCard`
 
+## 分层架构约束（重构中）
+
+- 目标分层：Interface / Application / Domain / Infra / Protocol
+- 依赖方向：Interface → Application → (Domain, Infra)
+- Domain 禁止依赖 Infra；Infra 禁止反向调用 Interface
+- 目录占位已建立（Phase 0）：
+  - `interview-trainer/src/interviewTrainer/interface/`
+  - `interview-trainer/src/interviewTrainer/application/`
+  - `interview-trainer/src/interviewTrainer/domain/`
+  - `interview-trainer/src/interviewTrainer/infra/`
+  - `interview-trainer/src/interviewTrainer/protocol/`（占位，主协议仍在 `src/protocol/`）
+- 架构与迁移状态：`interview-trainer/docs/architecture/README.md`
+
 ### 模板/配置体系
 - 默认配置：`config/*.yaml`
 - 模板执行：`src/interviewTrainer/api/it_templateExecutor.ts`
