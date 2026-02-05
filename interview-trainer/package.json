@@ -1,135 +1,135 @@
-{
-  "name": "interview-trainer",
-  "displayName": "面试训练助手",
-  "description": "结构化面试训练插件，支持录音/导入音频、自动转写、笔记检索与评审",
-  "version": "0.1.4-beta.22",
-  "publisher": "interview-trainer",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/bitpurleclude/vscode-interview-ai-trainer.git"
-  },
-  "engines": {
-    "vscode": "^1.80.0"
-  },
-  "categories": [
-    "Education",
-    "AI"
-  ],
-  "activationEvents": [
-    "onView:itInterviewTrainer.mainView",
-    "onCommand:itInterviewTrainer.open",
-    "onCommand:itInterviewTrainer.runSpecify"
-  ],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "itInterviewTrainer.open",
-        "category": "Interview Trainer",
-        "title": "打开面试训练助手"
-      },
-      {
-        "command": "itInterviewTrainer.analyzeAudioFile",
-        "category": "Interview Trainer",
-        "title": "分析音频文件"
-      },
-      {
-        "command": "itInterviewTrainer.openSettings",
-        "category": "Interview Trainer",
-        "title": "打开面试训练设置"
-      },
-      {
-        "command": "itInterviewTrainer.openHistory",
-        "category": "Interview Trainer",
-        "title": "查看历史记录"
-      },
-      {
-        "command": "itInterviewTrainer.runSpecify",
-        "category": "Interview Trainer",
-        "title": "运行 Specify"
-      }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "itInterviewTrainer",
-          "title": "面试训练助手",
-          "icon": "assets/sidebar-icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "itInterviewTrainer": [
-        {
-          "type": "webview",
-          "id": "itInterviewTrainer.mainView",
-          "name": "面试训练助手",
-          "icon": "assets/sidebar-icon.svg",
-          "visibility": "visible"
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "itInterviewTrainer.openSettings",
-          "group": "navigation@1",
-          "when": "view == itInterviewTrainer.mainView"
-        },
-        {
-          "command": "itInterviewTrainer.openHistory",
-          "group": "navigation@2",
-          "when": "view == itInterviewTrainer.mainView"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "itInterviewTrainer.open"
-        },
-        {
-          "command": "itInterviewTrainer.analyzeAudioFile"
-        },
-        {
-          "command": "itInterviewTrainer.openSettings"
-        },
-        {
-          "command": "itInterviewTrainer.openHistory"
-        },
-        {
-          "command": "itInterviewTrainer.runSpecify"
-        }
-      ],
-      "explorer/context": [
-        {
-          "command": "itInterviewTrainer.analyzeAudioFile",
-          "group": "navigation@1"
-        }
-      ]
-    }
-  },
-  "scripts": {
-    "build:webview": "node scripts/build-webview.js",
-    "build:extension": "tsc -p tsconfig.json --noEmit && node scripts/build-extension.js",
-    "build": "npm run build:webview && npm run build:extension",
-    "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.30",
-    "@types/react": "^18.2.79",
-    "@types/react-dom": "^18.2.25",
-    "@types/uuid": "^10.0.0",
-    "@types/vscode": "^1.80.0",
-    "@vscode/vsce": "^2.22.0",
-    "esbuild": "^0.21.5",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "typescript": "^5.6.3"
-  },
-  "dependencies": {
-    "axios": "^1.13.1",
-    "ffmpeg-static": "^5.3.0",
-    "uuid": "^9.0.1",
-    "yaml": "^2.4.5"
-  }
+﻿{
+    "name":  "interview-trainer",
+    "displayName":  "闈㈣瘯璁粌鍔╂墜",
+    "description":  "缁撴瀯鍖栭潰璇曡缁冩彃浠讹紝鏀寔褰曢煶/瀵煎叆闊抽銆佽嚜鍔ㄨ浆鍐欍€佺瑪璁版绱笌璇勫",
+    "version":  "0.1.4-beta.23",
+    "publisher":  "interview-trainer",
+    "license":  "MIT",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "https://github.com/bitpurleclude/vscode-interview-ai-trainer.git"
+                   },
+    "engines":  {
+                    "vscode":  "^1.80.0"
+                },
+    "categories":  [
+                       "Education",
+                       "AI"
+                   ],
+    "activationEvents":  [
+                             "onView:itInterviewTrainer.mainView",
+                             "onCommand:itInterviewTrainer.open",
+                             "onCommand:itInterviewTrainer.runSpecify"
+                         ],
+    "main":  "./out/extension.js",
+    "contributes":  {
+                        "commands":  [
+                                         {
+                                             "command":  "itInterviewTrainer.open",
+                                             "category":  "Interview Trainer",
+                                             "title":  "鎵撳紑闈㈣瘯璁粌鍔╂墜"
+                                         },
+                                         {
+                                             "command":  "itInterviewTrainer.analyzeAudioFile",
+                                             "category":  "Interview Trainer",
+                                             "title":  "鍒嗘瀽闊抽鏂囦欢"
+                                         },
+                                         {
+                                             "command":  "itInterviewTrainer.openSettings",
+                                             "category":  "Interview Trainer",
+                                             "title":  "鎵撳紑闈㈣瘯璁粌璁剧疆"
+                                         },
+                                         {
+                                             "command":  "itInterviewTrainer.openHistory",
+                                             "category":  "Interview Trainer",
+                                             "title":  "鏌ョ湅鍘嗗彶璁板綍"
+                                         },
+                                         {
+                                             "command":  "itInterviewTrainer.runSpecify",
+                                             "category":  "Interview Trainer",
+                                             "title":  "杩愯 Specify"
+                                         }
+                                     ],
+                        "viewsContainers":  {
+                                                "activitybar":  [
+                                                                    {
+                                                                        "id":  "itInterviewTrainer",
+                                                                        "title":  "闈㈣瘯璁粌鍔╂墜",
+                                                                        "icon":  "assets/sidebar-icon.svg"
+                                                                    }
+                                                                ]
+                                            },
+                        "views":  {
+                                      "itInterviewTrainer":  [
+                                                                 {
+                                                                     "type":  "webview",
+                                                                     "id":  "itInterviewTrainer.mainView",
+                                                                     "name":  "闈㈣瘯璁粌鍔╂墜",
+                                                                     "icon":  "assets/sidebar-icon.svg",
+                                                                     "visibility":  "visible"
+                                                                 }
+                                                             ]
+                                  },
+                        "menus":  {
+                                      "view/title":  [
+                                                         {
+                                                             "command":  "itInterviewTrainer.openSettings",
+                                                             "group":  "navigation@1",
+                                                             "when":  "view == itInterviewTrainer.mainView"
+                                                         },
+                                                         {
+                                                             "command":  "itInterviewTrainer.openHistory",
+                                                             "group":  "navigation@2",
+                                                             "when":  "view == itInterviewTrainer.mainView"
+                                                         }
+                                                     ],
+                                      "commandPalette":  [
+                                                             {
+                                                                 "command":  "itInterviewTrainer.open"
+                                                             },
+                                                             {
+                                                                 "command":  "itInterviewTrainer.analyzeAudioFile"
+                                                             },
+                                                             {
+                                                                 "command":  "itInterviewTrainer.openSettings"
+                                                             },
+                                                             {
+                                                                 "command":  "itInterviewTrainer.openHistory"
+                                                             },
+                                                             {
+                                                                 "command":  "itInterviewTrainer.runSpecify"
+                                                             }
+                                                         ],
+                                      "explorer/context":  [
+                                                               {
+                                                                   "command":  "itInterviewTrainer.analyzeAudioFile",
+                                                                   "group":  "navigation@1"
+                                                               }
+                                                           ]
+                                  }
+                    },
+    "scripts":  {
+                    "build:webview":  "node scripts/build-webview.js",
+                    "build:extension":  "tsc -p tsconfig.json --noEmit \u0026\u0026 node scripts/build-extension.js",
+                    "build":  "npm run build:webview \u0026\u0026 npm run build:extension",
+                    "package":  "npm run build \u0026\u0026 npx @vscode/vsce package --out ./build/interview-trainer.vsix"
+                },
+    "devDependencies":  {
+                            "@types/node":  "^20.11.30",
+                            "@types/react":  "^18.2.79",
+                            "@types/react-dom":  "^18.2.25",
+                            "@types/uuid":  "^10.0.0",
+                            "@types/vscode":  "^1.80.0",
+                            "@vscode/vsce":  "^2.22.0",
+                            "esbuild":  "^0.21.5",
+                            "react":  "^18.2.0",
+                            "react-dom":  "^18.2.0",
+                            "typescript":  "^5.6.3"
+                        },
+    "dependencies":  {
+                         "axios":  "^1.13.1",
+                         "ffmpeg-static":  "^5.3.0",
+                         "uuid":  "^9.0.1",
+                         "yaml":  "^2.4.5"
+                     }
 }
