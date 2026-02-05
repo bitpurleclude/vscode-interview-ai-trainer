@@ -26,7 +26,7 @@ import {
   it_runEmbeddingWarmup,
   it_scheduleEmbeddingWarmup,
 } from "./application/useCases/it_embeddingWarmup";
-import { ItTokenService } from "./core/it_tokens";
+import { ItTokenService } from "./application/services/it_tokens";
 import {
   it_emitEvaluationStreamUpdate,
   it_emitStreamUpdate,

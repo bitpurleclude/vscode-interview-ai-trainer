@@ -16,7 +16,7 @@ import {
   it_renderTemplateRequest,
   it_resolveTemplateById,
 } from "../infra/api/it_templateExecutor";
-import { it_extractTokenInfo } from "../core/it_tokens";
+import { it_extractTokenInfo } from "../application/services/it_tokens";
 import type { ItApiTemplate } from "../../protocol/interviewTrainer";
 import {
   IT_SAMPLE_AUDIO_BASE64,
