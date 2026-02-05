@@ -80,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Right,
     100,
   );
-  specifyStatus.text = "$(tools) Specify";
+  specifyStatus.text = "$(terminal) Specify";
   specifyStatus.tooltip = "运行 specify-cli";
   specifyStatus.command = specifyCommand;
   specifyStatus.show();

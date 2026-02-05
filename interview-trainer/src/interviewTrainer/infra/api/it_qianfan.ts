@@ -32,10 +32,6 @@ export async function it_callQianfanChat(
     extra_body: {
       penalty_score: 1,
       stop: [],
-      web_search: {
-        enable: false,
-        enable_trace: false,
-      },
     },
   };
 

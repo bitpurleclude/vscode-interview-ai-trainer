@@ -17,6 +17,9 @@
   - 移除 toolsPreset/tools/webSearch 在 LLM 请求构建中的注入逻辑。
   - 清理相关配置字段（providers/config/configSnapshot/LLM config）。
   - 删除文档中工具预设与 tools 相关说明。
+- [x] 清理残留 tools 文案/字段
+  - 更新状态栏文案中的 tools 图标。
+  - 移除 Qianfan 请求中的 web_search 字段。
 
 ### P1（高优先级拆分）
 - [ ] 拆分 `webview/src/components/settings/SettingsTemplateManager.tsx`
