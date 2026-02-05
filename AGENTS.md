@@ -9,6 +9,7 @@
   - `webview/`：前端 UI（React）
   - `scripts/`：构建脚本
   - `build/`：打包产物
+  - `docs/`：架构与模块文档（给 AI/新同学）
 - `docs/`：说明文档
 - `testdata/`：测试数据
 
@@ -35,7 +36,7 @@
 
 - 日志默认关闭，仅在设置页点击“开启日志输出”后开始打印。
 - 输出位置：VS Code 输出面板 → 选择 `Interview Trainer`。
-- 当前日志范围：语料扫描、向量预计算、检索统计（笔记学习/检索阶段）。
+- 当前日志范围：语料扫描、向量预计算、检索统计、模板请求/响应 trace（已脱敏）。
 - 检索统计打印项：语料种类、query 数、query 向量缓存命中/缺失、语料补算数量、耗时。
 - 向量缓存读写：打印缓存文件路径与读取/写入条数，用于判断是否读/写成功。
 - 关闭 VS Code 后日志开关重置，需要再次手动开启。
@@ -72,6 +73,11 @@
 - 模板执行：`src/interviewTrainer/api/it_templateExecutor.ts`
 - 配置快照：`src/interviewTrainer/core/it_configSnapshot.ts`
 - 设置页：`webview/src/components/settings/*`
+
+## 模板测试与 Token 库（新增）
+- 模板测试入口：设置页 → 模板管理 → dryrun/live 测试
+- Token 模板：可在模板配置中定义 token 输出字段（valuePath/expiresInPath 等）
+- Token 库：自动刷新/到期时间显示，状态通过日志与 UI 提示
 
 ## 架构/模块文档索引
 - 总览：`interview-trainer/docs/architecture/ARCHITECTURE_OVERVIEW.md`
