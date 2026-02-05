@@ -81,6 +81,43 @@
   - `interview-trainer/src/interviewTrainer/protocol/`（占位，主协议仍在 `src/protocol/`）
 - 架构与迁移状态：`interview-trainer/docs/architecture/README.md`
 
+## 架构开发规范（放置与转接）
+
+### Interface
+- 放置：`src/interviewTrainer/interface/`（handlers/commands/webview）
+- 职责：I/O 与编排入口；只做参数校验、消息分发、调用 application
+- 转接：Webview 事件 → `interface/handlers/*` → `application/useCases/*` 或 `application/services/*`
+
+### Application
+- 放置：`src/interviewTrainer/application/`
+- 职责：用例编排、状态管理、跨域协调（调 domain + infra）
+- 转接：useCases 组织流程；services 提供跨用例能力（日志/进度/配置快照/Token）
+
+### Domain
+- 放置：`src/interviewTrainer/domain/`
+- 职责：核心业务规则与算法（纯逻辑）
+- 约束：不得直接 I/O；不依赖 infra
+
+### Infra
+- 放置：`src/interviewTrainer/infra/`
+- 职责：外部依赖实现（API/存储/录音/日志/工具）
+- 约束：只对上提供稳定接口，不反向调用 interface
+
+### Protocol
+- 放置：`src/protocol/interviewTrainer.ts`（主协议）
+- 规则：协议变更需同步 `webview/src/types.ts`
+
+### Webview
+- 放置：`webview/src/`（React）
+- 规则：UI 与 hook 通过 `webview/src/messenger.ts` 统一通信
+
+### 常见扩展流程
+- 新增 Webview 请求：在 `interface/handlers/*` 注册 → `it_webviewHandlers.ts` 汇总 → 前端 `messenger` 调用
+- 新增业务流程：在 `application/useCases/*` 组织 → 复用 `domain/*` 与 `infra/*`
+- 新增外部 API：在 `infra/api/*` 适配 → 需要时加 `infra/clients/*` 包装
+- 新增持久化：在 `infra/storage/*` 实现 → 由 application/useCases 调用
+- 新增步骤状态：更新 `application/services/it_progress.ts` 与 `webview/src/constants/defaultState.ts`
+
 ### 模板/配置体系
 - 默认配置：`config/*.yaml`
 - 模板执行：`src/interviewTrainer/infra/api/it_templateExecutor.ts`
