@@ -13,7 +13,7 @@ import {
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
 } from "../../infra/storage/it_sessions";
-import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../../core/it_report";
+import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../../infra/storage/it_report";
 import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
 import { it_extractJson } from "./shared";
 

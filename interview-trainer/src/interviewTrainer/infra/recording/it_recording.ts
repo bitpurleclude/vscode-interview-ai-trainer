@@ -3,7 +3,7 @@ import os from "os";
 import fs from "fs";
 import { spawn } from "child_process";
 import ffmpegStatic from "ffmpeg-static";
-import { ItAnalyzeRequest } from "../../protocol/interviewTrainer";
+import { ItAnalyzeRequest } from "../../../protocol/interviewTrainer";
 
 export type ItRecordingHost = {
   recordingChild: import("child_process").ChildProcess | null;

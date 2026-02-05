@@ -48,7 +48,7 @@ import {
   it_runFfmpegProbe,
   it_startNativeRecording,
   it_stopNativeRecording,
-} from "./core/it_recording";
+} from "./infra/recording/it_recording";
 import { it_registerHandlers } from "./handlers/it_webviewHandlers";
 
 export class InterviewTrainerExtension implements vscode.Disposable {

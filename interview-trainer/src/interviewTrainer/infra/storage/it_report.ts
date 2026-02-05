@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { ItAnalyzeResponse, ItEvaluation } from "../../protocol/interviewTrainer";
-import { it_formatSeconds } from "../infra/utils/it_text";
+import { ItAnalyzeResponse, ItEvaluation } from "../../../protocol/interviewTrainer";
+import { it_formatSeconds } from "../utils/it_text";
 
 export interface ItReportConfig {
   attemptHeading: string;

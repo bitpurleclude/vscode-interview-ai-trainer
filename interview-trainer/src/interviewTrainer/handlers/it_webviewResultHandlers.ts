@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { ItAnalyzeResponse } from "../../protocol/interviewTrainer";
-import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../core/it_report";
+import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../infra/storage/it_report";
 import {
   it_appendAttemptDataAsync,
   it_buildQuestionFingerprint,
