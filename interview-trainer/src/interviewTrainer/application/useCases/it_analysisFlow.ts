@@ -1,5 +1,5 @@
 import { ItAnalyzeRequest, ItAnalyzeResponse, ItStepStatus } from "../../../protocol/interviewTrainer";
-import { it_runAnalysis } from "../../core/it_analyze";
+import { it_runAnalysis } from "../../domain/analyze";
 
 export type ItAnalysisHost = {
   context: import("vscode").ExtensionContext;

@@ -1,4 +1,4 @@
-﻿export type {
+export type {
   ItCorpusItem,
   ItNoteHit,
   ItVectorSearchConfig,
@@ -6,15 +6,15 @@
   ItRetrievalMetrics,
   ItEmbeddingWarmupResult,
   ItEmbeddingWarmupOptions,
-} from "../domain/notes/types";
+} from "./types";
 
-export { it_buildCorpus, it_buildCorpusAsync } from "../domain/notes/indexer";
+export { it_buildCorpus, it_buildCorpusAsync } from "./indexer";
 export {
   it_clearEmbeddingMemoryCache,
   it_prepareEmbeddingCache,
-} from "../domain/notes/cache";
+} from "./cache";
 export {
   it_createRetrievalMetrics,
   it_retrieveNotes,
   it_retrieveNotesMulti,
-} from "../domain/notes/search";
+} from "./search";

@@ -1,6 +1,6 @@
 import path from "path";
 import fs from "fs";
-import { it_clearEmbeddingMemoryCache } from "../core/it_notes";
+import { it_clearEmbeddingMemoryCache } from "../domain/notes";
 import { it_hashText } from "../infra/utils/it_text";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 

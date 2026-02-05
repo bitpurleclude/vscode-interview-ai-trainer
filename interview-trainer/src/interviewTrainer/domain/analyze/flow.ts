@@ -23,7 +23,7 @@ import {
   it_buildCorpusAsync,
   it_createRetrievalMetrics,
   it_retrieveNotesMulti,
-} from "../../core/it_notes";
+} from "../notes";
 import {
   it_nextAttemptIndexAsync,
   it_reportPathForTopicAsync,
