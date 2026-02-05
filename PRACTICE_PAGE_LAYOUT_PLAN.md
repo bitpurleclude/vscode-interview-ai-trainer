@@ -5,6 +5,7 @@
 - 状态区改为三列网格，按指定顺序固定展示
 - 面试评价整行展示，实时输出三列横排；无输出时不渲染三列框
 - 小屏幕保持可用：状态区按断点降列数，面试评价实时输出在小屏用横向滚动查看
+- 面试评价实时输出列数按题目数量动态展示（不足 3 时按实际数量）
 - 保持现有功能与交互逻辑不变，仅调整布局与展示逻辑
 
 ## 整页布局顺序（最终）
@@ -132,7 +133,7 @@
   - <900px：1 列
 - 面试评价实时输出（三列卡片）：
   - 默认三列横排
-  - <900px：保持三列，但容器允许横向滚动查看（overflow-x: auto）
+  - <900px：保持横排，但容器允许横向滚动查看（显示滚动条）
 
 ## 组件修改清单（按文件）
 ### 1) `interview-trainer/webview/src/components/practice/PracticeFlow.tsx`
@@ -146,7 +147,7 @@
 - evaluation 行整行全宽（grid-column: 1 / -1）
 - evaluation 实时输出框仅在以下任一条件成立时显示：
   - 任意题目有输出文本
-  - evaluation 步骤状态为 running
+- 题目数不足 3 时，按题目数动态展示列数
 - 其他步骤的实时输出（StreamCard）逻辑不变
 
 ### 3) `interview-trainer/webview/src/components/StreamCard.tsx`

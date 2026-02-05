@@ -67,19 +67,17 @@ export const PracticeFlow: React.FC<PracticeFlowProps> = (props) => {
 
   return (
     <div className="it-flow">
-      <div className="it-flow__left">
-        <StepsList
-          steps={steps}
-          stepStreams={stepStreams}
-          evaluationStreams={evaluationStreams}
-          evaluationStreamQuestions={evaluationStreamQuestions}
-          streamingEnabled={streamingEnabled}
-          previewChars={previewChars}
-          onToggleStepStream={onToggleStepStream}
-          onToggleEvaluationStream={onToggleEvaluationStream}
-        />
-      </div>
-      <div className="it-flow__right">
+      <StepsList
+        steps={steps}
+        stepStreams={stepStreams}
+        evaluationStreams={evaluationStreams}
+        evaluationStreamQuestions={evaluationStreamQuestions}
+        streamingEnabled={streamingEnabled}
+        previewChars={previewChars}
+        onToggleStepStream={onToggleStepStream}
+        onToggleEvaluationStream={onToggleEvaluationStream}
+      />
+      <div className="it-flow__panel">
         <div className="it-progress">
           <div className="it-progress__label">总进度：{Math.round(overallProgress)}%</div>
           <div className="it-progress__bar">
