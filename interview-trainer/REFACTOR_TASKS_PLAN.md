@@ -22,8 +22,8 @@
   - 移除 Qianfan 请求中的 web_search 字段。
 
 ### P1（高优先级拆分）
-- [ ] 拆分 `webview/src/components/settings/SettingsTemplateManager.tsx`
-- [ ] 拆分 `domain/analyze/flow.ts`
+- [x] 拆分 `webview/src/components/settings/SettingsTemplateManager.tsx`
+- [x] 拆分 `domain/analyze/flow.ts`
 
 ### P2（中优先级拆分）
 - [ ] 拆分 `infra/api/it_templateExecutor.ts`

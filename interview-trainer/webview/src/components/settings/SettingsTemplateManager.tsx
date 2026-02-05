@@ -1,36 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { SettingsBindingProps, SettingsCommonTemplateProps } from "./settingsTypes";
-import type { ItApiTemplate, ItTemplateCategory, ItTokenState } from "../../types";
-import { InfoTip } from "../common/InfoTip";
 import { on, request } from "../../messenger";
-
-const TEMPLATE_CATEGORY_TABS: Array<{
-  key: ItTemplateCategory;
-  label: string;
-  enabled: boolean;
-}> = [
-  { key: "llm", label: "LLM", enabled: true },
-  { key: "asr", label: "ASR", enabled: true },
-  { key: "embedding", label: "Embedding", enabled: true },
-  { key: "token", label: "Token", enabled: true },
-  { key: "tts", label: "TTS", enabled: false },
-  { key: "vision", label: "Vision", enabled: false },
-];
-
-const TEMPLATE_METHODS = ["POST", "GET", "PUT", "PATCH", "DELETE"];
-const TEMPLATE_RESPONSE_MODES = [
-  { value: "json", label: "JSON" },
-  { value: "sse", label: "SSE" },
-  { value: "ndjson", label: "NDJSON" },
-  { value: "websocket", label: "WebSocket" },
-  { value: "binary", label: "Binary" },
-];
-const TEMPLATE_LOW_PRIORITY_VARS = new Set([
-  "apiKey",
-  "secretKey",
-  "timeoutSec",
-  "stream",
-]);
+import { TemplateEditor } from "./template/TemplateEditor";
+import { TemplateList } from "./template/TemplateList";
+import { TemplateSidebar } from "./template/TemplateSidebar";
+import { TemplateTestPanel } from "./template/TemplateTestPanel";
+import {
+  TEMPLATE_CATEGORY_TABS,
+  TEMPLATE_LOW_PRIORITY_VARS,
+} from "./template/templateConstants";
 
 type SettingsTemplateManagerProps = SettingsCommonTemplateProps &
   Pick<SettingsBindingProps, "templateBindings">;
@@ -82,6 +60,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     handleRefreshAllTokens,
     handleToggleTokenAutoRefresh,
   } = props;
+
   const [testInput, setTestInput] = useState("ping");
   const [testVarsDraft, setTestVarsDraft] = useState("{}");
   const [testVarsError, setTestVarsError] = useState<string | null>(null);
@@ -138,32 +117,6 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       return templateUsageSets.used.has(name);
     });
   }, [paramCatalogList, showAllVars, templateUsageSets.used]);
-  const updateTokenDraft = (patch: Partial<NonNullable<ItApiTemplate["token"]>>) => {
-    setTemplateDraft((prev) => {
-      if (!prev) {
-        return prev;
-      }
-      const name = patch.name ?? prev.token?.name ?? "";
-      return {
-        ...prev,
-        token: {
-          ...(prev.token || {}),
-          ...patch,
-          name,
-        },
-      };
-    });
-  };
-  const tokenList = (tokenStore?.tokens ?? []) as ItTokenState[];
-  const tokenAutoRefresh = tokenStore?.autoRefresh !== false;
-  const formatTokenTime = (value?: string) => {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-    return date.toLocaleString();
-  };
 
   useEffect(() => {
     const dispose = on("it/templateTestDelta", (data) => {
@@ -288,7 +241,9 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       <div className="it-settings__header">
         <div>
           <div className="it-settings__title">API 模板管理</div>
-          <div className="it-settings__desc">模板化接入，支持多厂商 API 与多任务绑定</div>
+          <div className="it-settings__desc">
+            模板化接入，支持多厂商 API 与多任务绑定
+          </div>
         </div>
         <div className="it-settings__actions">
           <button
@@ -322,854 +277,80 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
         ))}
       </div>
       <div className="it-template">
-        <div className="it-template__list">
-          <div className="it-template__list-header">
-            <div className="it-template__list-title">模板列表</div>
-            <button
-              className="it-button it-button--secondary it-button--compact"
-              disabled={uiLocked}
-              onClick={handleCreateTemplate}
-            >
-              新建
-            </button>
-          </div>
-          <div className="it-template__list-body">
-            {templatesByCategory.length ? (
-              templatesByCategory.map((item) => {
-                const isSelected = selectedTemplateId === item.id;
-                const isBound = boundIds.has(item.id);
-                return (
-                  <div key={item.id} className="it-template__list-row">
-                    <button
-                      className={`it-template__list-item ${isSelected ? "is-active" : ""}`}
-                      type="button"
-                      onClick={() => setSelectedTemplateId(item.id)}
-                      aria-pressed={isSelected}
-                    >
-                      <div className="it-template__list-name">{item.name || item.id}</div>
-                      <div className="it-template__list-meta">{item.id}</div>
-                    </button>
-                    <div className="it-template__list-actions">
-                      {isSelected && (
-                        <span className="it-template__list-tag">已选中</span>
-                      )}
-                      {isBound && (
-                        <span className="it-template__list-tag it-template__list-tag--bound">
-                          已绑定
-                        </span>
-                      )}
-                      {deleteConfirmId === item.id ? (
-                        <>
-                          <button
-                            className="it-button it-button--danger it-button--compact it-template__list-delete"
-                            type="button"
-                            disabled={uiLocked || isBound}
-                            onClick={() => {
-                              setDeleteConfirmId(null);
-                              handleDeleteTemplate(item.id);
-                            }}
-                          >
-                            确认删除
-                          </button>
-                          <button
-                            className="it-button it-button--secondary it-button--compact"
-                            type="button"
-                            disabled={uiLocked}
-                            onClick={() => setDeleteConfirmId(null)}
-                          >
-                            取消
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="it-button it-button--secondary it-button--compact it-template__list-delete"
-                          type="button"
-                          disabled={uiLocked || isBound}
-                          title={isBound ? "已绑定，无法删除" : "删除模板"}
-                          onClick={() => setDeleteConfirmId(item.id)}
-                        >
-                          删除
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="it-placeholder">暂无模板，请新建。</div>
-            )}
-          </div>
-        </div>
-
-        <div className="it-template__editor">
-          {templateDraft ? (
-            (() => {
-              const responseMode = templateDraft.response?.mode || "json";
-              const doneSignalsText = (templateDraft.streaming?.doneSignals || []).join(", ");
-              const isToken = templateDraft.category === "token";
-              const tokenConfig = (templateDraft.token || {}) as NonNullable<
-                ItApiTemplate["token"]
-              >;
-              return (
-                <>
-                  <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 70 }} className="it-label">
-                      模板 ID
-                      <InfoTip text="唯一标识，建议小写加下划线，用于模板引用与绑定。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.id}
-                      onChange={(event) =>
-                        setTemplateDraft((prev) =>
-                          prev ? { ...prev, id: event.target.value } : prev,
-                        )
-                      }
-                    />
-                    <div style={{ minWidth: 60 }} className="it-label">
-                      名称
-                      <InfoTip text="展示名称，可中文；不影响实际调用。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.name || ""}
-                      onChange={(event) =>
-                        setTemplateDraft((prev) =>
-                          prev ? { ...prev, name: event.target.value } : prev,
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 70 }} className="it-label">
-                      分类
-                      <InfoTip text="选择模板用途：LLM / ASR / Embedding。" />
-                    </div>
-                    <select
-                      className="it-select"
-                      value={templateDraft.category}
-                      onChange={(event) => {
-                        const next = event.target.value as ItTemplateCategory;
-                        setTemplateDraft((prev) => (prev ? { ...prev, category: next } : prev));
-                        setTemplateCategory(next);
-                      }}
-                    >
-                      {TEMPLATE_CATEGORY_TABS.map((tab) => (
-                        <option key={tab.key} value={tab.key} disabled={!tab.enabled}>
-                          {tab.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div style={{ minWidth: 80 }} className="it-label">
-                      解析模式
-                      <InfoTip text="与响应格式一致：JSON=一次性返回，SSE=流式返回。" />
-                    </div>
-                    <select
-                      className="it-select"
-                      value={responseMode}
-                      onChange={(event) => {
-                        const next = event.target.value;
-                        updateTemplateResponse({ mode: next as any });
-                        if (next === "sse") {
-                          updateTemplateStreaming({
-                            eventDelimiter: templateDraft.streaming?.eventDelimiter || "\n\n",
-                            dataPrefix: templateDraft.streaming?.dataPrefix || "data:",
-                            deltaPath: templateDraft.streaming?.deltaPath || "",
-                            doneSignals:
-                              templateDraft.streaming?.doneSignals &&
-                              templateDraft.streaming.doneSignals.length
-                                ? templateDraft.streaming.doneSignals
-                                : ["[DONE]"],
-                          });
-                          updateTemplateRequest({ stream: true });
-                        }
-                      }}
-                    >
-                      {TEMPLATE_RESPONSE_MODES.map((mode) => (
-                        <option key={mode.value} value={mode.value}>
-                          {mode.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div style={{ minWidth: 70 }} className="it-label">
-                      Method
-                      <InfoTip text="HTTP 方法，绝大多数接口使用 POST。" />
-                    </div>
-                    <select
-                      className="it-select"
-                      value={templateDraft.request?.method || "POST"}
-                      onChange={(event) => updateTemplateRequest({ method: event.target.value })}
-                    >
-                      {TEMPLATE_METHODS.map((method) => (
-                        <option key={method} value={method}>
-                          {method}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 70 }} className="it-label">
-                      URL
-                      <InfoTip text="完整请求地址或相对路径（视运行环境而定）。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.request?.url || ""}
-                      onChange={(event) => updateTemplateRequest({ url: event.target.value })}
-                    />
-                  </div>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 70 }} className="it-label">
-                      Stream
-                      <InfoTip text="是否以流式读取响应（接口支持时才开启）。" />
-                    </div>
-                    <label className="it-toggle">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(templateDraft.request?.stream)}
-                        onChange={(event) =>
-                          updateTemplateRequest({ stream: event.target.checked })
-                        }
-                      />
-                      <span>请求 stream</span>
-                    </label>
-                  </div>
-                  <div className="it-template__json-grid">
-                    <div className="it-template__json-block">
-                      <div className="it-settings__title it-label">
-                        Headers (JSON)
-                        <InfoTip text="请求头，一般包含 Authorization 与 Content-Type。" />
-                      </div>
-                      <textarea
-                        className="it-textarea it-template__textarea"
-                        value={templateJsonDraft.headers}
-                        onChange={(event) => {
-                          setTemplateJsonDraft((prev) => ({
-                            ...prev,
-                            headers: event.target.value,
-                          }));
-                          setTemplateJsonErrors((prev) => ({ ...prev, headers: undefined }));
-                        }}
-                      />
-                      {templateJsonErrors.headers && (
-                        <div className="it-settings__hint it-settings__hint--error">
-                          {templateJsonErrors.headers}
-                        </div>
-                      )}
-                    </div>
-                    <div className="it-template__json-block">
-                      <div className="it-settings__title it-label">
-                        Query (JSON)
-                        <InfoTip text="URL 查询参数，未使用可留空 {}。" />
-                      </div>
-                      <textarea
-                        className="it-textarea it-template__textarea"
-                        value={templateJsonDraft.query}
-                        onChange={(event) => {
-                          setTemplateJsonDraft((prev) => ({
-                            ...prev,
-                            query: event.target.value,
-                          }));
-                          setTemplateJsonErrors((prev) => ({ ...prev, query: undefined }));
-                        }}
-                      />
-                      {templateJsonErrors.query && (
-                        <div className="it-settings__hint it-settings__hint--error">
-                          {templateJsonErrors.query}
-                        </div>
-                      )}
-                    </div>
-                    <div className="it-template__json-block">
-                      <div className="it-settings__title it-label">
-                        Body (JSON)
-                        <InfoTip text="请求体 JSON，可引用变量占位符，例如 {{model}}、{{input}}。" />
-                      </div>
-                      <textarea
-                        className="it-textarea it-template__textarea"
-                        value={templateJsonDraft.body}
-                        onChange={(event) => {
-                          setTemplateJsonDraft((prev) => ({
-                            ...prev,
-                            body: event.target.value,
-                          }));
-                          setTemplateJsonErrors((prev) => ({ ...prev, body: undefined }));
-                        }}
-                      />
-                      {templateJsonErrors.body && (
-                        <div className="it-settings__hint it-settings__hint--error">
-                          {templateJsonErrors.body}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 90 }} className="it-label">
-                      textPath
-                      <InfoTip text="纯文本输出路径（JSON 模式常用）。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.response?.textPath || ""}
-                      onChange={(event) => updateTemplateResponse({ textPath: event.target.value })}
-                    />
-                    <div style={{ minWidth: 90 }} className="it-label">
-                      jsonPath
-                      <InfoTip text="结构化输出路径（JSON 模式常用）。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.response?.jsonPath || ""}
-                      onChange={(event) => updateTemplateResponse({ jsonPath: event.target.value })}
-                    />
-                  </div>
-                  <div className="it-input-row it-input-row--nowrap">
-                    <div style={{ minWidth: 90 }} className="it-label">
-                      errorPath
-                      <InfoTip text="错误信息所在路径，用于提示接口错误。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.response?.errorPath || ""}
-                      onChange={(event) => updateTemplateResponse({ errorPath: event.target.value })}
-                    />
-                    <div style={{ minWidth: 90 }} className="it-label">
-                      statusPath
-                      <InfoTip text="状态码或状态字段路径（可选）。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.response?.statusPath || ""}
-                      onChange={(event) =>
-                        updateTemplateResponse({ statusPath: event.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="it-input-row">
-                    <div style={{ minWidth: 90 }} className="it-label">
-                      doneSignal
-                      <InfoTip text="JSON 模式下的结束标记（可选）。" />
-                    </div>
-                    <input
-                      className="it-input"
-                      value={templateDraft.response?.doneSignal || ""}
-                      onChange={(event) => updateTemplateResponse({ doneSignal: event.target.value })}
-                    />
-                  </div>
-                      {responseMode === "sse" && (
-                    <div className="it-template__stream-grid">
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          eventDelimiter
-                          <InfoTip text="事件分隔符，常见为 \\n\\n。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={templateDraft.streaming?.eventDelimiter || ""}
-                          onChange={(event) =>
-                            updateTemplateStreaming({
-                              eventDelimiter: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          dataPrefix
-                          <InfoTip text="数据前缀，常见为 data:。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={templateDraft.streaming?.dataPrefix || ""}
-                          onChange={(event) =>
-                            updateTemplateStreaming({
-                              dataPrefix: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          deltaPath
-                          <InfoTip text="增量文本字段路径，用于拼接输出。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={templateDraft.streaming?.deltaPath || ""}
-                          onChange={(event) =>
-                            updateTemplateStreaming({
-                              deltaPath: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          doneSignals
-                          <InfoTip text="流结束标记数组，例如 [DONE]。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={doneSignalsText}
-                          onChange={(event) =>
-                            updateTemplateStreaming({
-                              doneSignals: event.target.value
-                                .split(/[,|\n]/)
-                                .map((item) => item.trim())
-                                .filter(Boolean),
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          heartbeatPattern
-                          <InfoTip text="心跳包匹配模式（可选）。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={templateDraft.streaming?.heartbeatPattern || ""}
-                          onChange={(event) =>
-                            updateTemplateStreaming({
-                              heartbeatPattern: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {isToken && (
-                    <div className="it-template__token-config">
-                      <div className="it-settings__title it-label">
-                        Token 输出配置
-                        <InfoTip text="保存后会进入 Token 库，可在其他模板用 {{tokens.xxx}} 引用。" />
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 90 }} className="it-label">
-                          Token 名称
-                          <InfoTip text="用于 {{tokens.xxx}} 的 xxx 部分，建议小写+下划线。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={tokenConfig.name || ""}
-                          onChange={(event) => updateTokenDraft({ name: event.target.value })}
-                        />
-                        <div style={{ minWidth: 90 }} className="it-label">
-                          tokenPath
-                          <InfoTip text="响应 JSON 中 token 的路径，例如 access_token。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={tokenConfig.valuePath || ""}
-                          onChange={(event) => updateTokenDraft({ valuePath: event.target.value })}
-                        />
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          expiresInPath
-                          <InfoTip text="响应中的有效期秒数字段，例如 expires_in。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={tokenConfig.expiresInPath || ""}
-                          onChange={(event) =>
-                            updateTokenDraft({ expiresInPath: event.target.value })
-                          }
-                        />
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          expiresAtPath
-                          <InfoTip text="响应中的到期时间字段（ISO 或时间戳）。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          value={tokenConfig.expiresAtPath || ""}
-                          onChange={(event) =>
-                            updateTokenDraft({ expiresAtPath: event.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="it-input-row it-input-row--nowrap">
-                        <div style={{ minWidth: 110 }} className="it-label">
-                          refreshBeforeSec
-                          <InfoTip text="提前多久刷新（秒），例如 300。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={tokenConfig.refreshBeforeSec ?? 300}
-                          onChange={(event) =>
-                            updateTokenDraft({ refreshBeforeSec: Number(event.target.value) })
-                          }
-                        />
-                        <div style={{ minWidth: 90 }} className="it-label">
-                          failureRetry
-                          <InfoTip text="失败重试次数（模板执行重试）。" />
-                        </div>
-                        <input
-                          className="it-input"
-                          type="number"
-                          value={tokenConfig.maxRetries ?? 0}
-                          onChange={(event) =>
-                            updateTokenDraft({ maxRetries: Number(event.target.value) })
-                          }
-                        />
-                        <div style={{ minWidth: 70 }} className="it-label">
-                          启用
-                          <InfoTip text="关闭后该 Token 不会自动刷新。" />
-                        </div>
-                        <label className="it-toggle">
-                          <input
-                            type="checkbox"
-                            checked={tokenConfig.enabled !== false}
-                            onChange={(event) =>
-                              updateTokenDraft({ enabled: event.target.checked })
-                            }
-                          />
-                          <span>自动续期</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                  <div className="it-settings__actions">
-                    <button
-                      className="it-button it-button--primary it-button--compact"
-                      disabled={uiLocked || savingTemplate}
-                      onClick={handleSaveTemplate}
-                    >
-                      {savingTemplate ? "保存中..." : "保存模板"}
-                    </button>
-                    {isCreatingTemplate && (
-                      <button
-                        className="it-button it-button--secondary it-button--compact"
-                        disabled={uiLocked || savingTemplate}
-                        onClick={handleCancelTemplateDraft}
-                      >
-                        取消
-                      </button>
-                    )}
-                  </div>
-                  {templateSaveMessage && (
-                    <div className="it-settings__hint">{templateSaveMessage}</div>
-                  )}
-                </>
-              );
-            })()
-          ) : (
-            <div className="it-placeholder">选择或新建模板后编辑。</div>
-          )}
-        </div>
-
-        <div className="it-template__sidebar">
-          <div className="it-template__panel">
-            <div className="it-template__panel-title it-label">
-              可引用变量
-              <InfoTip text="模板中引用到才会发送；未引用会标记出来。" />
-            </div>
-            <div className="it-input-row it-input-row--nowrap">
-              <label className="it-toggle">
-                <input
-                  type="checkbox"
-                  checked={showAllVars}
-                  onChange={(event) => setShowAllVars(event.target.checked)}
-                />
-                <span>显示全部</span>
-              </label>
-            </div>
-            <div className="it-template__param-list">
-              {visibleParamList.length ? (
-                visibleParamList.map((name) => {
-                  let status = "unused";
-                  if (templateUsageSets.used.has(name)) {
-                    status = "used";
-                  } else if (templateUsageSets.empty.has(name)) {
-                    status = "empty";
-                  } else if (templateUsageSets.unknown.has(name)) {
-                    status = "unknown";
-                  } else if (templateUsageSets.unused.has(name)) {
-                    status = "unused";
-                  }
-                  return (
-                    <div key={name} className={`it-template__param-item ${status}`}>
-                      <span>{`{{${name}}}`}</span>
-                      <span className="it-template__param-status">
-                        {status === "used"
-                          ? "已引用"
-                          : status === "empty"
-                            ? "空值"
-                            : status === "unknown"
-                              ? "未定义"
-                              : "未引用"}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="it-placeholder">暂无变量清单</div>
-              )}
-            </div>
-            {templateUsageSets.unknown.size > 0 && (
-              <div className="it-template__param-extra">
-                未定义变量：{Array.from(templateUsageSets.unknown).join(", ")}
-              </div>
-            )}
-            {templateUsageSets.empty.size > 0 && (
-              <div className="it-template__param-extra">
-                空值变量：{Array.from(templateUsageSets.empty).join(", ")}
-              </div>
-            )}
-          </div>
-
-          <div className="it-template__panel">
-            <div className="it-template__panel-title it-label">
-              密钥库
-              <InfoTip text="存放 API Key 等敏感值，模板里用 {{apiKey}} 引用。" />
-            </div>
-            <div className="it-template__secret-list">
-              {templateSecrets.length ? (
-                templateSecrets.map((name) => (
-                  <div key={name} className="it-template__secret-item">
-                    <span>{name}</span>
-                    <button
-                      className="it-button it-button--secondary it-button--compact"
-                      disabled={uiLocked || savingSecret}
-                      onClick={() => handleDeleteSecret(name)}
-                    >
-                      删除
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="it-settings__hint">暂无密钥</div>
-              )}
-            </div>
-            <div className="it-input-row it-input-row--nowrap">
-              <input
-                className="it-input"
-                placeholder="名称"
-                value={secretDraft.name}
-                onChange={(event) =>
-                  setSecretDraft((prev) => ({ ...prev, name: event.target.value }))
-                }
-              />
-              <input
-                className="it-input"
-                placeholder="密钥"
-                type="password"
-                value={secretDraft.value}
-                onChange={(event) =>
-                  setSecretDraft((prev) => ({ ...prev, value: event.target.value }))
-                }
-              />
-              <button
-                className="it-button it-button--secondary it-button--compact"
-                disabled={uiLocked || savingSecret}
-                onClick={handleSaveSecret}
-              >
-                {savingSecret ? "保存中..." : "保存"}
-              </button>
-            </div>
-          {secretMessage && <div className="it-settings__hint">{secretMessage}</div>}
-        </div>
-
-        <div className="it-template__panel">
-          <div className="it-template__panel-title it-label">
-            Token 库
-            <InfoTip text="由 Token 模板生成并自动续期，可通过 {{tokens.xxx}} 引用。" />
-          </div>
-          <div className="it-template__token-list">
-            {tokenList.length ? (
-              tokenList.map((token) => {
-                const statusLabel =
-                  token.status === "ok"
-                    ? "可用"
-                    : token.status === "refreshing"
-                      ? "刷新中"
-                      : token.status === "error"
-                        ? "失败"
-                        : "未获取";
-                const expiresText = token.expiresAt
-                  ? `有效至 ${formatTokenTime(token.expiresAt)}`
-                  : "无到期信息";
-                return (
-                  <div key={token.name} className="it-template__token-item">
-                    <span className={`it-token-dot ${token.status}`} />
-                    <div className="it-template__token-main">
-                      <div className="it-template__token-name">{token.name}</div>
-                      <div className="it-template__token-meta">
-                        {statusLabel} · {expiresText}
-                      </div>
-                      {token.lastError && (
-                        <div className="it-template__token-error">{token.lastError}</div>
-                      )}
-                    </div>
-                    <button
-                      className="it-button it-button--secondary it-button--compact"
-                      disabled={uiLocked}
-                      onClick={() => handleRefreshToken(token.name)}
-                    >
-                      刷新
-                    </button>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="it-settings__hint">暂无 Token</div>
-            )}
-          </div>
-          <div className="it-input-row it-input-row--nowrap">
-            <label className="it-toggle">
-              <input
-                type="checkbox"
-                checked={tokenAutoRefresh}
-                disabled={uiLocked}
-                onChange={(event) => handleToggleTokenAutoRefresh(event.target.checked)}
-              />
-              <span>自动续期</span>
-            </label>
-            <button
-              className="it-button it-button--secondary it-button--compact"
-              disabled={uiLocked || !tokenList.length}
-              onClick={handleRefreshAllTokens}
-            >
-              刷新全部
-            </button>
-          </div>
-        </div>
-
-        <div className="it-template__panel">
-          <div className="it-template__panel-title it-label">
-            reasoning.effort 选项
-            <InfoTip text="可选的思考强度列表，供模板/配置下拉选择。" />
-          </div>
-            <div className="it-template__chips">
-              {templateParamOptions.length ? (
-                templateParamOptions.map((item) => (
-                  <span key={item} className="it-chip it-chip--outline">
-                    {item}
-                  </span>
-                ))
-              ) : (
-                <span className="it-settings__hint">暂无选项</span>
-              )}
-            </div>
-            <div className="it-input-row it-input-row--nowrap">
-              <input
-                className="it-input"
-                placeholder="新增选项"
-                value={templateParamInput}
-                onChange={(event) => setTemplateParamInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleAddParamOption();
-                  }
-                }}
-              />
-              <button
-                className="it-button it-button--secondary it-button--compact"
-                disabled={uiLocked}
-                onClick={handleAddParamOption}
-              >
-                添加
-              </button>
-              <button
-                className="it-button it-button--secondary it-button--compact"
-                disabled={uiLocked || savingParamOptions}
-                onClick={handleSaveParamOptions}
-              >
-                {savingParamOptions ? "保存中..." : "保存"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <TemplateList
+          uiLocked={uiLocked}
+          templatesByCategory={templatesByCategory}
+          selectedTemplateId={selectedTemplateId}
+          setSelectedTemplateId={setSelectedTemplateId}
+          boundIds={boundIds}
+          handleCreateTemplate={handleCreateTemplate}
+          handleDeleteTemplate={handleDeleteTemplate}
+          deleteConfirmId={deleteConfirmId}
+          setDeleteConfirmId={setDeleteConfirmId}
+        />
+        <TemplateEditor
+          uiLocked={uiLocked}
+          templateDraft={templateDraft}
+          setTemplateDraft={setTemplateDraft}
+          templateCategory={templateCategory}
+          setTemplateCategory={setTemplateCategory}
+          templateJsonDraft={templateJsonDraft}
+          setTemplateJsonDraft={setTemplateJsonDraft}
+          templateJsonErrors={templateJsonErrors}
+          setTemplateJsonErrors={setTemplateJsonErrors}
+          templateSaveMessage={templateSaveMessage}
+          savingTemplate={savingTemplate}
+          isCreatingTemplate={isCreatingTemplate}
+          handleCancelTemplateDraft={handleCancelTemplateDraft}
+          handleSaveTemplate={handleSaveTemplate}
+          updateTemplateRequest={updateTemplateRequest}
+          updateTemplateResponse={updateTemplateResponse}
+          updateTemplateStreaming={updateTemplateStreaming}
+        />
+        <TemplateSidebar
+          uiLocked={uiLocked}
+          visibleParamList={visibleParamList}
+          templateUsageSets={templateUsageSets}
+          showAllVars={showAllVars}
+          setShowAllVars={setShowAllVars}
+          templateSecrets={templateSecrets}
+          secretDraft={secretDraft}
+          setSecretDraft={setSecretDraft}
+          savingSecret={savingSecret}
+          secretMessage={secretMessage}
+          handleSaveSecret={handleSaveSecret}
+          handleDeleteSecret={handleDeleteSecret}
+          templateParamOptions={templateParamOptions}
+          templateParamInput={templateParamInput}
+          setTemplateParamInput={setTemplateParamInput}
+          savingParamOptions={savingParamOptions}
+          handleAddParamOption={handleAddParamOption}
+          handleSaveParamOptions={handleSaveParamOptions}
+          tokenStore={tokenStore}
+          handleRefreshToken={handleRefreshToken}
+          handleRefreshAllTokens={handleRefreshAllTokens}
+          handleToggleTokenAutoRefresh={handleToggleTokenAutoRefresh}
+        />
       </div>
-      <div className="it-template__test">
-        <div className="it-template__test-header">
-          <div className="it-settings__title">模板测试</div>
-          <div className="it-settings__desc">
-            Dry-run 仅渲染请求（不发送）；Live 会真实调用并显示响应。
-          </div>
-        </div>
-        <div className="it-template__test-grid">
-          <div className="it-template__json-block">
-            <div className="it-settings__title it-label">
-              测试输入
-              <InfoTip text="默认作为 input / messages / embeddingInput 使用，可在变量 JSON 中覆盖。" />
-            </div>
-            <textarea
-              className="it-textarea it-template__textarea"
-              value={testInput}
-              onChange={(event) => setTestInput(event.target.value)}
-            />
-          </div>
-          <div className="it-template__json-block">
-            <div className="it-settings__title it-label">
-              变量 (JSON)
-              <InfoTip text={'可选，传入模板变量；例如 { "model": "gpt-4" }。'} />
-            </div>
-            <textarea
-              className="it-textarea it-template__textarea"
-              value={testVarsDraft}
-              onChange={(event) => setTestVarsDraft(event.target.value)}
-            />
-            {testVarsError && (
-              <div className="it-settings__hint it-settings__hint--error">
-                {testVarsError}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="it-template__test-actions">
-          <button
-            className="it-button it-button--secondary it-button--compact"
-            disabled={uiLocked || !canTest || testRunning}
-            onClick={handleDryRun}
-          >
-            Dry-run
-          </button>
-          <button
-            className="it-button it-button--secondary it-button--compact"
-            disabled={uiLocked || !canTest || testRunning}
-            onClick={handleLiveTest}
-          >
-            Live
-          </button>
-          {selectedTemplateName && (
-            <span className="it-settings__hint">当前模板：{selectedTemplateName}</span>
-          )}
-        </div>
-        {testMessage && <div className="it-settings__hint">{testMessage}</div>}
-        {testMissingVars.length > 0 && (
-          <div className="it-settings__hint it-settings__hint--error">
-            缺失变量：{testMissingVars.join(", ")}
-          </div>
-        )}
-        {testTokenInfo && (
-          <div>
-            <div className="it-settings__title">Token 解析</div>
-            <pre className="it-settings__raw">
-              {JSON.stringify(testTokenInfo, null, 2)}
-            </pre>
-          </div>
-        )}
-        {requestPreviewText && (
-          <div>
-            <div className="it-settings__title">请求预览</div>
-            <pre className="it-settings__raw">{requestPreviewText}</pre>
-          </div>
-        )}
-        {testStreamOutput && (
-          <div>
-            <div className="it-settings__title">实时输出</div>
-            <pre className="it-settings__raw">{testStreamOutput}</pre>
-          </div>
-        )}
-        {responsePreviewText && (
-          <div>
-            <div className="it-settings__title">响应预览</div>
-            <pre className="it-settings__raw">{responsePreviewText}</pre>
-          </div>
-        )}
-      </div>
+      <TemplateTestPanel
+        uiLocked={uiLocked}
+        canTest={canTest}
+        testInput={testInput}
+        setTestInput={setTestInput}
+        testVarsDraft={testVarsDraft}
+        setTestVarsDraft={setTestVarsDraft}
+        testVarsError={testVarsError}
+        testRunning={testRunning}
+        handleDryRun={handleDryRun}
+        handleLiveTest={handleLiveTest}
+        selectedTemplateName={selectedTemplateName}
+        testMessage={testMessage}
+        testMissingVars={testMissingVars}
+        testTokenInfo={testTokenInfo}
+        requestPreviewText={requestPreviewText}
+        testStreamOutput={testStreamOutput}
+        responsePreviewText={responsePreviewText}
+      />
     </div>
   );
 };
