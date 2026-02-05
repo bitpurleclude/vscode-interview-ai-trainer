@@ -1,4 +1,4 @@
-﻿# Webview 视图与桥接（backend-webview-bridge）
+# Webview 视图与桥接（backend-webview-bridge）
 
 ## 模块定位与职责
 提供 Webview 容器、HTML 注入与消息协议桥，用于扩展端与前端通信。

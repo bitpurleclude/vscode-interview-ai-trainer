@@ -1,4 +1,4 @@
-﻿import type { ItToolsPreset } from "./types";
+import type { ItToolsPreset } from "./types";
 import { IT_CODEX_LIKE_TOOLS } from "./presets/codexLike";
 
 export function it_resolveToolsPreset(preset?: string): ItToolsPreset | undefined {

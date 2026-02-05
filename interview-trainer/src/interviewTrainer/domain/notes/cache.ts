@@ -1,4 +1,4 @@
-﻿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import { it_requestEmbeddings } from "../../infra/clients/embeddingClient";
 import { it_hashText } from "../../infra/utils/it_text";

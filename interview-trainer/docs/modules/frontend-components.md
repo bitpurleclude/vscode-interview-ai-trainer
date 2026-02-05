@@ -1,4 +1,4 @@
-﻿# 前端组件（frontend-components）
+# 前端组件（frontend-components）
 
 ## 模块定位与职责
 包含 Practice 与 Settings 页面 UI 组件，负责展示分析状态、实时输出与配置管理。

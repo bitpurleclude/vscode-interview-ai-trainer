@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ItAudioSegment,
   ItQuestionTiming,
 } from "../../../protocol/interviewTrainer";

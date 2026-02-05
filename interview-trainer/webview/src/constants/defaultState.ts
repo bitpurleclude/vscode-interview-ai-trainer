@@ -1,4 +1,4 @@
-﻿import type { ItState } from "../types";
+import type { ItState } from "../types";
 
 export const DEFAULT_STATE: ItState = {
   statusMessage: "等待开始面试训练",

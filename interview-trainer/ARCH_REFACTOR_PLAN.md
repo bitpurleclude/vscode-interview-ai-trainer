@@ -1,4 +1,4 @@
-﻿# 架构重构规划（ARCH_REFACTOR_PLAN）
+# 架构重构规划（ARCH_REFACTOR_PLAN）
 
 更新时间：2026-02-05
 

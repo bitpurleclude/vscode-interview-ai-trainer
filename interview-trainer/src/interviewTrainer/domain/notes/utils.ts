@@ -1,4 +1,4 @@
-﻿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import { it_hashText } from "../../infra/utils/it_text";
 import type { ItCorpusItem } from "./types";

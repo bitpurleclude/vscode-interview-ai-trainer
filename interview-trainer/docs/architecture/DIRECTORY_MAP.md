@@ -1,4 +1,4 @@
-﻿# 目录分类与职责（Directory Map）
+# 目录分类与职责（Directory Map）
 
 ```
 interview-trainer/

@@ -1,4 +1,4 @@
-﻿# 构建脚本（scripts）
+# 构建脚本（scripts）
 
 ## 模块定位与职责
 构建 Webview 与 Extension 的打包流程。

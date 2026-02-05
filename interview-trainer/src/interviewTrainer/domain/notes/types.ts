@@ -1,4 +1,4 @@
-﻿import type { ItEmbeddingConfig } from "../../infra/api/it_embedding";
+import type { ItEmbeddingConfig } from "../../infra/api/it_embedding";
 
 export interface ItCorpusItem {
   kind: string;

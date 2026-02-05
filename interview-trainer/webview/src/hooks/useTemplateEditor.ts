@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { request } from "../messenger";
 import type { ItApiTemplate, ItConfigSnapshot, ItTemplateCategory } from "../types";
 import { cloneTemplate, formatJson, parseJson } from "../utils/template";

@@ -26,7 +26,7 @@
 
 ## 说明
 
-- 所有写入文件必须使用 UTF-8 编码，避免中文乱码。
+- 所有写入文件必须使用 UTF-8 编码且不允许 BOM（无 BOM），避免中文乱码。
 - 发布 Release 前必须确认文本类文件与发布说明为 UTF-8（README/AGENTS/变更说明），打包与上传 VSIX 时也要确保文件名/说明均为 UTF-8，避免 Release 页面出现乱码。
 - 目前无独立测试脚本；如修改核心逻辑，建议至少运行 `npm run build` 验证。
 - VSIX 打包产物位于 `interview-trainer/build/`。
@@ -53,20 +53,20 @@
 ### 后端主链路（音频 → 结果）
 - `src/extension.ts`：扩展入口，注册 Webview 与命令
 - `src/interviewTrainer/InterviewTrainerExtension.ts`：扩展主控制器（配置/状态/日志/录音/分析）
-- `src/interviewTrainer/handlers/it_webviewCoreHandlers.ts` → `core/it_analysisFlow.ts` → `core/analyze/flow.ts`：分析主流程
+- `src/interviewTrainer/interface/handlers/it_webviewResultHandlers.ts` → `application/useCases/it_analysisFlow.ts` → `domain/analyze/flow.ts`：分析主流程
 - 关键子流程：
-  - ASR：`core/analyze/asr.ts` → `core/clients/asrClient.ts`
-  - 多题分段：`core/analyze/questions.ts`
-  - 检索：`core/notes/*` → `core/clients/embeddingClient.ts`
-  - 评价：`core/it_evaluation.ts` → `core/clients/llmClient.ts`
-  - 结果写入：`core/analyze/result.ts` → `storage/*`
+  - ASR：`domain/analyze/asr.ts` → `infra/clients/asrClient.ts`
+  - 多题分段：`domain/analyze/questions.ts`
+  - 检索：`domain/notes/*` → `infra/clients/embeddingClient.ts`
+  - 评价：`domain/analyze/evaluation.ts` → `infra/clients/llmClient.ts`
+  - 结果写入：`domain/analyze/result.ts` → `infra/storage/*`
 
 ### 前端主链路（UI → 消息 → 后端）
 - `webview/src/messenger.ts`：request/response 通道
 - `src/webview/WebviewProtocol.ts`：后端消息桥
 - `webview/src/InterviewTrainer.tsx`：页面主容器
 - `webview/src/hooks/useAnalysisFlow.ts`：分析请求/取消/保存
-- 实时输出：`core/it_logging.ts` → `it/evaluationStreamUpdate` → `webview/src/hooks/useStreaming.ts` → `StepsList/StreamCard`
+- 实时输出：`application/services/it_logging.ts` → `it/evaluationStreamUpdate` → `webview/src/hooks/useStreaming.ts` → `StepsList/StreamCard`
 
 ## 分层架构约束（重构中）
 
@@ -83,8 +83,8 @@
 
 ### 模板/配置体系
 - 默认配置：`config/*.yaml`
-- 模板执行：`src/interviewTrainer/api/it_templateExecutor.ts`
-- 配置快照：`src/interviewTrainer/core/it_configSnapshot.ts`
+- 模板执行：`src/interviewTrainer/infra/api/it_templateExecutor.ts`
+- 配置快照：`src/interviewTrainer/application/services/it_configSnapshot.ts`
 - 设置页：`webview/src/components/settings/*`
 
 ## 模板测试与 Token 库（新增）
@@ -98,7 +98,7 @@
 - 模块文档：`interview-trainer/docs/modules/*`
 
 ## 常见注意事项（AI 维护）
-- 改动步骤顺序需同步前端 `webview/src/constants/defaultState.ts` 与后端 `core/it_progress.ts`
+- 改动步骤顺序需同步前端 `webview/src/constants/defaultState.ts` 与后端 `application/services/it_progress.ts`
 - 实时输出列数依赖 `it/evaluationStreamUpdate` 的索引；UI 会按“题目列表 + 已到达 stream”合并
 - 模板变量与“可引用变量”必须对齐，否则 dryrun 与 live 行为不一致
 - Release 流程：**先 beta → 用户测试 → 正式版**（不要跳过）

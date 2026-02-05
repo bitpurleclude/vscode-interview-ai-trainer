@@ -1,4 +1,4 @@
-﻿import {
+import {
   ItAcousticMetrics,
   ItEvaluation,
   ItNoteHit,

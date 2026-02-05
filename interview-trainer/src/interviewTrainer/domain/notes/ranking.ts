@@ -1,4 +1,4 @@
-﻿import type { ItNoteHit } from "./types";
+import type { ItNoteHit } from "./types";
 
 export function it_mergeQueryHits(
   lists: ItNoteHit[][],

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import type { ItStepState } from "../../types";
 import { StreamCard } from "../StreamCard";
 

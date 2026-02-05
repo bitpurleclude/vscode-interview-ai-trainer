@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { request } from "../messenger";
 import type { ItConfigSnapshot } from "../types";
 import type { StreamingSettings } from "../components/settings/settingsTypes";

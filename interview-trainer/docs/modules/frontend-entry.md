@@ -1,4 +1,4 @@
-﻿# 前端入口与样式（frontend-entry）
+# 前端入口与样式（frontend-entry）
 
 ## 模块定位与职责
 Webview 前端入口、全局样式与通信封装。
