@@ -146,6 +146,8 @@ export function useConfigSync({
                 "audio.byteLength",
                 "asr.lang",
                 "asr.dev_pid",
+                "asr.language",
+                "asr.devPid",
               ],
               embedding: ["embeddingInput", "model"],
             },

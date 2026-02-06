@@ -5,10 +5,14 @@ import {
   it_appendAttemptDataAsync,
   it_buildQuestionFingerprint,
   it_nextAttemptIndexAsync,
+  it_reportPathForTopicAsync,
+  it_resolveTopicDirAsync,
+  it_storeAudioCopy,
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
 } from "../../infra/storage/it_sessions";
 import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
+import { it_deriveTopicTitle, it_sanitizeTopicTitle } from "../../domain/analyze/result";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {
@@ -37,12 +41,48 @@ export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {
         ? response.questionList.map((item: any) => String(item)).filter(Boolean)
         : [];
     const topicTitle = String(
-      payload.topicTitle || response.evaluation?.topicTitle || "未命名",
+      payload.topicTitle || response.evaluation?.topicTitle || "",
     );
-    const attemptIndex = await it_nextAttemptIndexAsync(response.reportPath);
+    const skillConfig = host.configBundle.skill || {};
+    const maxTitleLen = Number(skillConfig.topics?.max_title_len ?? 18);
+    let resolvedTitle = topicTitle.trim();
+    if (!resolvedTitle) {
+      resolvedTitle = it_deriveTopicTitle(
+        questionText,
+        questionList,
+        response.transcript,
+        maxTitleLen,
+      );
+    }
+    resolvedTitle = it_sanitizeTopicTitle(resolvedTitle, maxTitleLen);
+    const sessionsConfig = {
+      sessionsDir: skillConfig.sessions_dir || "sessions",
+      allowUnicode: skillConfig.filenames?.allow_unicode ?? true,
+      maxSlugLen: skillConfig.filenames?.max_slug_len ?? 16,
+      similarityThreshold: Number(skillConfig.topics?.similarity_threshold ?? 0.72),
+      centerSubdir: skillConfig.topics?.center_subdir || "",
+    };
+    const workspaceRoot = host.requireWorkspaceRoot();
+    const topicDir = await it_resolveTopicDirAsync(
+      workspaceRoot,
+      resolvedTitle,
+      questionText,
+      questionList,
+      sessionsConfig,
+    );
+    const reportPath = await it_reportPathForTopicAsync(
+      topicDir,
+      resolvedTitle,
+      sessionsConfig,
+    );
+    const attemptIndex = await it_nextAttemptIndexAsync(reportPath);
+    const storedAudioPath =
+      topicDir !== response.topicDir && response.audioPath
+        ? it_storeAudioCopy(response.audioPath, topicDir, attemptIndex)
+        : response.audioPath;
     await it_appendReportAsync(
-      response.reportPath,
-      topicTitle,
+      reportPath,
+      resolvedTitle,
       questionText || undefined,
       questionList.length ? questionList : undefined,
       attemptIndex,
@@ -53,11 +93,11 @@ export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {
         attemptNote: "评分仅供参考，请结合标准文件自评。",
       },
     );
-    await it_updateReferenceNotesFileAsync(response.topicDir, response.evaluation);
+    await it_updateReferenceNotesFileAsync(topicDir, response.evaluation);
     const attemptData = {
       attemptIndex,
       timestamp: new Date().toISOString(),
-      audioPath: response.audioPath,
+      audioPath: storedAudioPath,
       durationSec: response.acoustic.durationSec,
       transcript: response.transcript,
       detailedTranscript: response.detailedTranscript,
@@ -66,14 +106,14 @@ export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {
       audioSegments: response.audioSegments,
       questionTimings: response.questionTimings,
     };
-    await it_appendAttemptDataAsync(response.topicDir, attemptData);
+    await it_appendAttemptDataAsync(topicDir, attemptData);
 
-    const meta = await it_readTopicMetaAsync(response.topicDir);
+    const meta = await it_readTopicMetaAsync(topicDir);
     const fingerprint = it_buildQuestionFingerprint(questionText, questionList);
-    const normalized = fingerprint || it_normalizeText(questionText || topicTitle);
+    const normalized = fingerprint || it_normalizeText(questionText || resolvedTitle);
     const now = new Date().toISOString();
-    await it_writeTopicMetaAsync(response.topicDir, {
-      topicTitle: meta.topicTitle || topicTitle,
+    await it_writeTopicMetaAsync(topicDir, {
+      topicTitle: meta.topicTitle || resolvedTitle,
       questionText: questionText || meta.questionText || "",
       questionList: questionList.length ? questionList : meta.questionList || [],
       questionHash: meta.questionHash || it_hashText(normalized),
@@ -81,7 +121,7 @@ export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {
       updatedAt: now,
       overallScore: response.evaluation.overallScore,
     });
-    return { ok: true, attemptIndex, reportPath: response.reportPath };
+    return { ok: true, attemptIndex, reportPath };
   });
   host.webviewProtocol.on("it/cancelAnalyze", () => {
     if (host.analysisAbort) {

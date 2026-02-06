@@ -14,3 +14,4 @@
 ## 注意事项
 - 必须在 webview 实例可用后才能发送消息
 - `messageId` 存在时按 request/response 处理，否则为广播
+- 设置类更新通过 `it/updateAsrSettings`、`it/updateStreamingSettings` 等消息回写配置

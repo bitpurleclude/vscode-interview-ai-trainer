@@ -39,6 +39,8 @@ function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
       "audio.byteLength",
       "asr.lang",
       "asr.dev_pid",
+      "asr.language",
+      "asr.devPid",
     ],
     embedding: ["embeddingInput", "embeddingInputs", "model"],
     token: [],

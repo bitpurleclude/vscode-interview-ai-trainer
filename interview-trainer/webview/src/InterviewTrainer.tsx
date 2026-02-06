@@ -18,8 +18,10 @@ import { useQuestionInput } from "./hooks/useQuestionInput";
 import { useTemplateEditor } from "./hooks/useTemplateEditor";
 import { useTemplateBindings } from "./hooks/useTemplateBindings";
 import { useEnvironmentSettings } from "./hooks/useEnvironmentSettings";
+import { useAsrSettings } from "./hooks/useAsrSettings";
 import { useRetrievalSettings } from "./hooks/useRetrievalSettings";
 import { useDerivedViews } from "./hooks/useDerivedViews";
+import type { AsrForm } from "./components/settings/settingsTypes";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -40,6 +42,15 @@ const InterviewTrainer: React.FC = () => {
     enabled: true,
     autoCollapse: true,
     previewChars: 200,
+  });
+  const [asrForm, setAsrForm] = useState<AsrForm>({
+    language: "zh",
+    devPid: 1537,
+    maxChunkSec: 50,
+    maxConcurrency: 1,
+    timeoutSec: 120,
+    maxRetries: 1,
+    mockText: "",
   });
   const {
     stepStreams,
@@ -317,6 +328,17 @@ const InterviewTrainer: React.FC = () => {
   });
 
   const {
+    savingAsr,
+    asrSaveMessage,
+    handleSaveAsrSettings,
+  } = useAsrSettings({
+    config,
+    setConfig,
+    asrForm,
+    setAsrForm,
+  });
+
+  const {
     savingRetrieval,
     retrievalSaveMessage,
     clearingEmbeddingCache,
@@ -468,6 +490,11 @@ const InterviewTrainer: React.FC = () => {
     handleSelectSessionsDir,
     traceLogEnabled,
     handleEnableTraceLogs,
+    asrForm,
+    setAsrForm,
+    savingAsr,
+    asrSaveMessage,
+    handleSaveAsrSettings,
     templateCategory,
     setTemplateCategory,
     templatesByCategory,

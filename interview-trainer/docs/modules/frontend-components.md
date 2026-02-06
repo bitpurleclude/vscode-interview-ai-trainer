@@ -11,6 +11,7 @@
 - `webview/src/components/settings/SettingsTemplateManager.tsx`：模板配置主容器
 - `webview/src/components/settings/template/*`：模板列表/编辑/侧边栏/测试拆分组件
 - `webview/src/components/settings/*`：其余配置、绑定与测试面板
+- `webview/src/components/settings/SettingsAsrPanel.tsx`：ASR 模板化参数设置
 - `webview/src/components/StreamCard.tsx`：通用实时输出卡片
 
 ## 关键调用链

@@ -17,3 +17,4 @@
 ## 注意事项
 - `templates.yaml` 的字段应与前端“可引用变量”保持一致
 - provider 默认参数会被环境配置覆盖
+- ASR 环境配置仅维护语言/分片/并发/超时/重试/Mock 等参数，模板引用使用 `asr.lang`、`asr.dev_pid`

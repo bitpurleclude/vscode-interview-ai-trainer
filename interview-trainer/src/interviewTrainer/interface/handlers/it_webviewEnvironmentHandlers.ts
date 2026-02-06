@@ -146,6 +146,69 @@ export function it_registerEnvironmentHandlers(host: ItWebviewHandlersHost): voi
     return { titleMode, maxTitleLen };
   });
 
+  host.webviewProtocol.on("it/updateAsrSettings", async (msg) => {
+    const payload = msg.data || {};
+    const incoming = payload.asr || {};
+    host.configBundle = host.configService.loadBundle();
+    let apiConfig = { ...host.configBundle.api };
+    const resolved = host.configService.resolveEnvironment(
+      apiConfig,
+      payload.environment,
+    );
+    const environment = resolved.environment;
+    const envConfig = resolved.envConfig;
+    const current = envConfig.asr || {};
+    const toNumber = (value: any, fallback: number) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+    const nextAsr = {
+      ...current,
+      language: String(incoming.language ?? incoming.lang ?? current.language ?? "zh"),
+      dev_pid: Math.max(0, Math.floor(toNumber(incoming.devPid ?? incoming.dev_pid, current.dev_pid ?? 1537))),
+      max_chunk_sec: Math.max(
+        5,
+        Math.floor(
+          toNumber(incoming.maxChunkSec ?? incoming.max_chunk_sec, current.max_chunk_sec ?? 50),
+        ),
+      ),
+      max_concurrency: Math.max(
+        1,
+        Math.floor(
+          toNumber(
+            incoming.maxConcurrency ?? incoming.max_concurrency,
+            current.max_concurrency ?? 1,
+          ),
+        ),
+      ),
+      timeout_sec: Math.max(
+        5,
+        Math.floor(
+          toNumber(incoming.timeoutSec ?? incoming.timeout_sec, current.timeout_sec ?? 120),
+        ),
+      ),
+      max_retries: Math.max(
+        0,
+        Math.floor(
+          toNumber(incoming.maxRetries ?? incoming.max_retries, current.max_retries ?? 1),
+        ),
+      ),
+      mock_text: String(incoming.mockText ?? incoming.mock_text ?? current.mock_text ?? ""),
+    };
+    apiConfig.environments = {
+      ...(apiConfig.environments || {}),
+      [environment]: {
+        ...envConfig,
+        asr: nextAsr,
+      },
+    };
+    host.configService.saveApiConfig(apiConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
   host.webviewProtocol.on("it/updateLlmTaskProfiles", async (msg) => {
     const payload = msg.data || {};
     const tasks = payload.tasks || {};

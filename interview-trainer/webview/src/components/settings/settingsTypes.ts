@@ -58,6 +58,16 @@ export type RetrievalDir = {
   value: string;
 };
 
+export type AsrForm = {
+  language: string;
+  devPid: number;
+  maxChunkSec: number;
+  maxConcurrency: number;
+  timeoutSec: number;
+  maxRetries: number;
+  mockText: string;
+};
+
 export type SettingsCommonTemplateProps = {
   uiLocked: boolean;
   templateCategory: ItTemplateCategory;
@@ -199,4 +209,13 @@ export type SettingsRetrievalProps = {
   topicSaveMessage: string | null;
   retrievalDirs: RetrievalDir[];
   handleSelectWorkspaceDir: (key: string) => void;
+};
+
+export type SettingsAsrProps = {
+  uiLocked: boolean;
+  asrForm: AsrForm;
+  setAsrForm: React.Dispatch<React.SetStateAction<AsrForm>>;
+  savingAsr: boolean;
+  asrSaveMessage: string | null;
+  handleSaveAsrSettings: () => void;
 };
