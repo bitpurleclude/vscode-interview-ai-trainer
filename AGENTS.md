@@ -28,7 +28,7 @@
 
 - 所有写入文件必须使用 UTF-8 编码且不允许 BOM（无 BOM），避免中文乱码。
 - 发布 Release 前必须确认文本类文件与发布说明为 UTF-8（README/AGENTS/变更说明），打包与上传 VSIX 时也要确保文件名/说明均为 UTF-8，避免 Release 页面出现乱码。
-- 目前无独立测试脚本；如修改核心逻辑，建议至少运行 `npm run build` 验证。
+- 已提供单元测试脚本；如修改核心逻辑，建议至少运行 `npm run build` 与 `npm run test` 验证。
 - VSIX 打包产物位于 `interview-trainer/build/`。
 - 插件依赖内置 ffmpeg（`ffmpeg-static`），打包时必须包含 `node_modules/ffmpeg-static`，否则录音/转写/音频处理无法正常运行。
 

@@ -183,6 +183,7 @@ inputs/examples    # 示范/例子
 cd interview-trainer
 npm install
 npm run build
+npm run test
 npm run package
 ```
 
