@@ -477,6 +477,15 @@ export async function it_runAnalysis(
           streamHandler,
         );
         evaluations[idx] = result;
+        deps.onPartial?.({
+          evaluation: it_mergeEvaluations({
+            topicTitle: questionText || topicTitle,
+            questions: evalQuestions,
+            answers: evalAnswers,
+            evaluations,
+            timePlan,
+          }),
+        });
         completed += 1;
         const progress = Math.min(
           95,
@@ -493,7 +502,7 @@ export async function it_runAnalysis(
     );
     await Promise.all(tasks);
   } else {
-    const parallel = await Promise.all(
+    await Promise.all(
       evalQuestions.map((question, idx) =>
         (async () => {
           const result = await it_evaluateAnswer(
@@ -521,6 +530,16 @@ export async function it_runAnalysis(
             deps.onCorpusTrace,
             undefined,
           );
+          evaluations[idx] = result;
+          deps.onPartial?.({
+            evaluation: it_mergeEvaluations({
+              topicTitle: questionText || topicTitle,
+              questions: evalQuestions,
+              answers: evalAnswers,
+              evaluations,
+              timePlan,
+            }),
+          });
           completed += 1;
           const progress = Math.min(
             95,
@@ -536,7 +555,6 @@ export async function it_runAnalysis(
         })(),
       ),
     );
-    evaluations.push(...parallel);
   }
 
   const evaluation: ItEvaluation = it_mergeEvaluations({
