@@ -87,5 +87,5 @@
 - [x] package.json 中文显示修复
 - [x] 文档同步更新
 - [x] `npm run build`
-- [ ] `npm run package`
+- [x] `npm run package`
 - [ ] Git 发布 beta
