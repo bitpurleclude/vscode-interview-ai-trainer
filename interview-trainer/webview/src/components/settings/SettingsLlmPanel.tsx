@@ -1,3 +1,4 @@
+import React from "react";
 import type { SettingsLlmProps } from "./settingsTypes";
 
 export const SettingsLlmPanel: React.FC<SettingsLlmProps> = (props) => {
