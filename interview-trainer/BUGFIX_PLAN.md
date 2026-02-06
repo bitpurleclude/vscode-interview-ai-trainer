@@ -88,4 +88,4 @@
 - [x] 文档同步更新
 - [x] `npm run build`
 - [x] `npm run package`
-- [ ] Git 发布 beta
+- [x] Git 发布 beta
