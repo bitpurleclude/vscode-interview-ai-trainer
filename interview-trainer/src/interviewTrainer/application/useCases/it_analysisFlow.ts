@@ -74,6 +74,9 @@ export async function it_handleAnalyze(
     host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
     const workspaceRoot = host.requireWorkspaceRoot();
+    const activeEnv = host.configBundle.api.active?.environment || "prod";
+    const envConfig = host.configBundle.api.environments?.[activeEnv] || {};
+    const envAsr = envConfig.asr || {};
     const response = await it_runAnalysis(
       {
         context: host.context,
@@ -81,6 +84,10 @@ export async function it_handleAnalyze(
         templatesConfig: host.configBundle.templates,
         skillConfig: {
           ...host.configBundle.skill,
+          asr: {
+            ...envAsr,
+            ...(host.configBundle.skill.asr || {}),
+          },
           providers: host.configBundle.providers,
         },
         workspaceRoot,
