@@ -5,7 +5,6 @@
 
 ## 关键文件
 - `config/api_config.yaml`：API/环境/绑定默认值
-- `config/app_config.yaml`：应用层配置
 - `config/skill_config.yaml`：分析/检索/评价策略
 - `config/templates.yaml`：模板定义
 - `config/providers/*.yaml`：厂商 provider 默认参数

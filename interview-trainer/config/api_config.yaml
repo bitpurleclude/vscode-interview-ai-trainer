@@ -79,13 +79,3 @@ environments:
       api_key_is_encrypted: false
       timeout_sec: 60
       max_retries: 1
-local:
-  whisper:
-    model_path: ""
-    language: zh
-  acoustic:
-    enabled: false
-    mode: basic
-ccswitch:
-  enabled: false
-  config_path: ""

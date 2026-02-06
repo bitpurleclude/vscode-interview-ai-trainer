@@ -18,7 +18,7 @@ interview-trainer/
 
 ## 重点目录说明
 - `assets/`：插件图标与侧边栏图标（VS Code manifest 使用）。
-- `config/`：默认配置（api/app/skill/templates/providers）。
+- `config/`：默认配置（api/skill/templates/providers）。
 - `src/interviewTrainer/`：后端核心逻辑（分析、检索、评价、模板、日志）。
 - `webview/src/`：前端 UI、数据流与与扩展端通信。
 

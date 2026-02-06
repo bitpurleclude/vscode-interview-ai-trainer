@@ -1,6 +1,4 @@
 import path from "path";
-import os from "os";
-import fs from "fs";
 import * as vscode from "vscode";
 
 import { InterviewTrainerExtension } from "./interviewTrainer/InterviewTrainerExtension";
@@ -20,32 +18,6 @@ export function activate(context: vscode.ExtensionContext) {
   const trainer = new InterviewTrainerExtension(context, viewProvider.webviewProtocol);
   context.subscriptions.push(trainer);
 
-  const specifyCommand = "itInterviewTrainer.runSpecify";
-  let specifyTerminal: vscode.Terminal | undefined;
-  const getSpecifyTerminal = (): vscode.Terminal => {
-    if (specifyTerminal) {
-      return specifyTerminal;
-    }
-    specifyTerminal = vscode.window.createTerminal("Specify");
-    context.subscriptions.push(
-      vscode.window.onDidCloseTerminal((terminal) => {
-        if (terminal === specifyTerminal) {
-          specifyTerminal = undefined;
-        }
-      }),
-    );
-    return specifyTerminal;
-  };
-  const resolveSpecifyCommand = (): string => {
-    const userBin = path.join(os.homedir(), ".local", "bin");
-    const exe = process.platform === "win32" ? "specify.exe" : "specify";
-    const localPath = path.join(userBin, exe);
-    if (fs.existsSync(localPath)) {
-      return process.platform === "win32" ? `"${localPath}"` : localPath;
-    }
-    return "specify";
-  };
-
   const sendToWebview = async (messageType: string, data?: any): Promise<boolean> => {
     await vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
     await new Promise((resolve) => setTimeout(resolve, 150));
@@ -61,30 +33,6 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
     }),
   );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(specifyCommand, async () => {
-      const args = await vscode.window.showInputBox({
-        prompt: "specify 参数（可选）",
-        placeHolder: "例如: spec init 或 --help",
-      });
-      const base = resolveSpecifyCommand();
-      const command = args && args.trim() ? `${base} ${args.trim()}` : base;
-      const terminal = getSpecifyTerminal();
-      terminal.show(true);
-      terminal.sendText(command);
-    }),
-  );
-
-  const specifyStatus = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    100,
-  );
-  specifyStatus.text = "$(terminal) Specify";
-  specifyStatus.tooltip = "运行 specify-cli";
-  specifyStatus.command = specifyCommand;
-  specifyStatus.show();
-  context.subscriptions.push(specifyStatus);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(

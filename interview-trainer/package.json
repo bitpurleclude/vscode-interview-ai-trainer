@@ -18,8 +18,7 @@
   ],
   "activationEvents": [
     "onView:itInterviewTrainer.mainView",
-    "onCommand:itInterviewTrainer.open",
-    "onCommand:itInterviewTrainer.runSpecify"
+    "onCommand:itInterviewTrainer.open"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -43,11 +42,6 @@
         "command": "itInterviewTrainer.openHistory",
         "category": "Interview Trainer",
         "title": "打开历史记录"
-      },
-      {
-        "command": "itInterviewTrainer.runSpecify",
-        "category": "Interview Trainer",
-        "title": "运行 Specify"
       }
     ],
     "viewsContainers": {
@@ -95,9 +89,6 @@
         },
         {
           "command": "itInterviewTrainer.openHistory"
-        },
-        {
-          "command": "itInterviewTrainer.runSpecify"
         }
       ],
       "explorer/context": [

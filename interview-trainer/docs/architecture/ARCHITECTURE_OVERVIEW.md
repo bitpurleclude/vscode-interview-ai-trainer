@@ -32,7 +32,7 @@
 - `src/interviewTrainer/application/useCases/it_analysisFlow.ts` → `it_runAnalysis`
 - `src/interviewTrainer/application/flows/analyze/flow.ts`
   - ASR：`domain/analyze/asr.ts` → `infra/clients/asrClient.ts`
-  - 多题分段：`domain/analyze/questions.ts`
+  - 多题分段：`domain/analyze/questionsSegments.ts`
   - 笔记检索：`infra/notes/*` → `infra/clients/embeddingClient.ts`（算法在 `domain/notes/*`）
   - 面试评价：`application/services/it_evaluation.ts` / `application/services/it_evaluationLlm.ts` → `infra/clients/llmClient.ts`
   - 结果汇总与写入：`domain/analyze/result.ts` → `infra/storage/*`

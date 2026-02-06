@@ -12,8 +12,6 @@ export interface ItApiConfig {
     acoustic: string;
   };
   environments: Record<string, any>;
-  local?: Record<string, any>;
-  ccswitch?: Record<string, any>;
 }
 
 export interface ItTemplatesConfig {
@@ -25,7 +23,6 @@ export interface ItConfigBundle {
   api: ItApiConfig;
   templates: ItTemplatesConfig;
   skill: Record<string, any>;
-  app: Record<string, any>;
   providers: Record<string, any>;
 }
 
@@ -33,7 +30,6 @@ const IT_CONFIG_DIR = "config";
 const IT_DEFAULT_FILES = [
   "api_config.yaml",
   "skill_config.yaml",
-  "app_config.yaml",
   "templates.yaml",
 ];
 const IT_PROVIDER_DIR = "providers";
@@ -146,14 +142,12 @@ export function it_loadConfigBundle(
   const api = it_readYamlFile(path.join(baseDir, "api_config.yaml")) as ItApiConfig;
   const templates = it_readYamlFile(path.join(baseDir, "templates.yaml")) as ItTemplatesConfig;
   const skill = it_readYamlFile(path.join(baseDir, "skill_config.yaml"));
-  const app = it_readYamlFile(path.join(baseDir, "app_config.yaml"));
   const providers = it_readProviderConfigs(providerDir);
 
   return {
     api,
     templates: templates || { version: 1, environments: {} },
     skill,
-    app,
     providers,
   };
 }

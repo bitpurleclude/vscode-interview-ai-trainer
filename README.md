@@ -159,7 +159,6 @@ inputs/examples    # 示范/例子
 - 主要文件：
   - `api_config.yaml`：LLM/ASR 配置
   - `skill_config.yaml`：检索与目录配置
-  - `app_config.yaml`：UI/流程参数
   - `providers/*.yaml`：Provider 配置
 
 设置页点击“查看配置文件”可直接打开。
