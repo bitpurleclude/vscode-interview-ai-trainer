@@ -124,7 +124,7 @@ export function useConfigSync({
           },
           templates: {
             templates: [],
-            bindings: { llm: {}, asr: {}, embedding: {} },
+            bindings: { llm: { title: "" }, asr: {}, embedding: {} },
             paramCatalog: {
               common: ["apiKey", "secretKey", "timeoutSec", "stream"],
               llm: [

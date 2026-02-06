@@ -51,6 +51,29 @@ export const SettingsBindingPanel: React.FC<SettingsBindingProps> = (props) => {
             </select>
           </div>
           <div className="it-input-row">
+            <div style={{ minWidth: 80 }}>文件命名/标题</div>
+            <select
+              className="it-select"
+              value={templateBindings.llm?.title || ""}
+              onChange={(event) =>
+                setTemplateBindings((prev) => ({
+                  ...prev,
+                  llm: {
+                    ...(prev.llm || {}),
+                    title: event.target.value,
+                  },
+                }))
+              }
+            >
+              <option value="">未绑定</option>
+              {llmTemplates.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name || item.id}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="it-input-row">
             <div style={{ minWidth: 80 }}>多题分段</div>
             <select
               className="it-select"

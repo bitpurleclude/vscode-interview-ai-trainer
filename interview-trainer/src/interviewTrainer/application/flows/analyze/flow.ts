@@ -61,6 +61,8 @@ export async function it_runAnalysis(
     "questionParse",
   );
   const questionParseRuntime = it_buildTemplateRuntime(deps, questionParseTemplate);
+  const titleTemplate = it_resolveBindingTemplate(templatesConfig, env, "llm", "title");
+  const titleRuntime = it_buildTemplateRuntime(deps, titleTemplate);
   const asrTemplate = it_resolveBindingTemplate(
     templatesConfig,
     env,
@@ -101,9 +103,16 @@ export async function it_runAnalysis(
   const questionParseLlmConfig = questionParseRuntime
     ? it_buildTemplateLlmConfig(questionParseRuntime)
     : null;
-  const titleLlmConfig = questionParseRuntime
-    ? questionParseLlmConfig
-    : it_buildTemplateLlmConfig(evaluationRuntime);
+  const titleLlmConfig = titleRuntime
+    ? it_buildTemplateLlmConfig(titleRuntime)
+    : questionParseRuntime
+      ? questionParseLlmConfig
+      : it_buildTemplateLlmConfig(evaluationRuntime);
+  const titleTemplateId =
+    titleRuntime?.template?.id ||
+    questionParseRuntime?.template?.id ||
+    evaluationRuntime?.template?.id ||
+    "";
   if (!questionText && !questionList.length) {
     throw new Error("请先填写题干或导入题干文件。");
   }
@@ -313,6 +322,10 @@ export async function it_runAnalysis(
     );
     if (generatedTitle) {
       topicTitle = generatedTitle;
+    } else {
+      deps.onCorpusTrace?.("文件命名 LLM 失败，已回退", {
+        templateId: titleTemplateId,
+      });
     }
   }
 

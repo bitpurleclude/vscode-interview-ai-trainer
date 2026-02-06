@@ -76,6 +76,7 @@ export interface ItApiTemplate {
 export interface ItTemplateBindings {
   llm?: {
     questionParse?: string;
+    title?: string;
     segment?: string;
     evaluation?: string;
   };

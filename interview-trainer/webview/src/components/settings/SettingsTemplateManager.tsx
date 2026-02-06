@@ -82,6 +82,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
       new Set(
         [
           templateBindings.llm?.questionParse,
+          templateBindings.llm?.title,
           templateBindings.llm?.segment,
           templateBindings.llm?.evaluation,
           templateBindings.asr?.transcription,
