@@ -2,7 +2,7 @@
   "name": "interview-trainer",
   "displayName": "面试训练助手",
   "description": "结构化面试训练插件，支持录音/导入音频、自动转写、笔记检索与评审",
-  "version": "0.1.4-beta.23",
+  "version": "0.1.4-beta.24",
   "publisher": "interview-trainer",
   "license": "MIT",
   "repository": {
@@ -103,7 +103,8 @@
     "build:webview": "node scripts/build-webview.js",
     "build:extension": "tsc -p tsconfig.json --noEmit && node scripts/build-extension.js",
     "build": "npm run build:webview && npm run build:extension",
-    "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix"
+    "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix",
+    "test": "vitest run --coverage"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
@@ -115,7 +116,9 @@
     "esbuild": "^0.21.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "@vitest/coverage-v8": "^1.6.0",
+    "vitest": "^1.6.0"
   },
   "dependencies": {
     "axios": "^1.13.1",
