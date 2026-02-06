@@ -19,9 +19,10 @@ import { useTemplateEditor } from "./hooks/useTemplateEditor";
 import { useTemplateBindings } from "./hooks/useTemplateBindings";
 import { useEnvironmentSettings } from "./hooks/useEnvironmentSettings";
 import { useAsrSettings } from "./hooks/useAsrSettings";
+import { useLlmSettings } from "./hooks/useLlmSettings";
 import { useRetrievalSettings } from "./hooks/useRetrievalSettings";
 import { useDerivedViews } from "./hooks/useDerivedViews";
-import type { AsrForm } from "./components/settings/settingsTypes";
+import type { AsrForm, LlmForm } from "./components/settings/settingsTypes";
 import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -51,6 +52,10 @@ const InterviewTrainer: React.FC = () => {
     timeoutSec: 120,
     maxRetries: 1,
     mockText: "",
+  });
+  const [llmForm, setLlmForm] = useState<LlmForm>({
+    timeoutSec: 60,
+    maxRetries: 1,
   });
   const {
     stepStreams,
@@ -339,6 +344,17 @@ const InterviewTrainer: React.FC = () => {
   });
 
   const {
+    savingLlm,
+    llmSaveMessage,
+    handleSaveLlmSettings,
+  } = useLlmSettings({
+    config,
+    setConfig,
+    llmForm,
+    setLlmForm,
+  });
+
+  const {
     savingRetrieval,
     retrievalSaveMessage,
     clearingEmbeddingCache,
@@ -495,6 +511,11 @@ const InterviewTrainer: React.FC = () => {
     savingAsr,
     asrSaveMessage,
     handleSaveAsrSettings,
+    llmForm,
+    setLlmForm,
+    savingLlm,
+    llmSaveMessage,
+    handleSaveLlmSettings,
     templateCategory,
     setTemplateCategory,
     templatesByCategory,

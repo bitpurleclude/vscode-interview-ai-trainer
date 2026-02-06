@@ -68,6 +68,11 @@ export type AsrForm = {
   mockText: string;
 };
 
+export type LlmForm = {
+  timeoutSec: number;
+  maxRetries: number;
+};
+
 export type SettingsCommonTemplateProps = {
   uiLocked: boolean;
   templateCategory: ItTemplateCategory;
@@ -218,4 +223,13 @@ export type SettingsAsrProps = {
   savingAsr: boolean;
   asrSaveMessage: string | null;
   handleSaveAsrSettings: () => void;
+};
+
+export type SettingsLlmProps = {
+  uiLocked: boolean;
+  llmForm: LlmForm;
+  setLlmForm: React.Dispatch<React.SetStateAction<LlmForm>>;
+  savingLlm: boolean;
+  llmSaveMessage: string | null;
+  handleSaveLlmSettings: () => void;
 };

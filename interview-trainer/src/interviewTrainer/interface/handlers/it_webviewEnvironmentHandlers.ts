@@ -209,6 +209,47 @@ export function it_registerEnvironmentHandlers(host: ItWebviewHandlersHost): voi
     return host.configSnapshot;
   });
 
+  host.webviewProtocol.on("it/updateLlmSettings", async (msg) => {
+    const payload = msg.data || {};
+    const incoming = payload.llm || {};
+    host.configBundle = host.configService.loadBundle();
+    let apiConfig = { ...host.configBundle.api };
+    const resolved = host.configService.resolveEnvironment(
+      apiConfig,
+      payload.environment,
+    );
+    const environment = resolved.environment;
+    const envConfig = resolved.envConfig;
+    const current = envConfig.llm || {};
+    const toNumber = (value: any, fallback: number) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+    const nextLlm = {
+      ...current,
+      timeout_sec: Math.max(
+        5,
+        Math.floor(toNumber(incoming.timeoutSec ?? incoming.timeout_sec, current.timeout_sec ?? 60)),
+      ),
+      max_retries: Math.max(
+        0,
+        Math.floor(toNumber(incoming.maxRetries ?? incoming.max_retries, current.max_retries ?? 1)),
+      ),
+    };
+    apiConfig.environments = {
+      ...(apiConfig.environments || {}),
+      [environment]: {
+        ...envConfig,
+        llm: nextLlm,
+      },
+    };
+    host.configService.saveApiConfig(apiConfig);
+    host.configBundle = host.configService.loadBundle();
+    host.configSnapshot = await host.refreshConfigSnapshot();
+    host.webviewProtocol.send("it/configUpdate", host.configSnapshot);
+    return host.configSnapshot;
+  });
+
   host.webviewProtocol.on("it/updateLlmTaskProfiles", async (msg) => {
     const payload = msg.data || {};
     const tasks = payload.tasks || {};
