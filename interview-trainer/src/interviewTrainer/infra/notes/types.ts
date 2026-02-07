@@ -3,6 +3,7 @@ import type { ItEmbeddingConfig } from "../api/it_embedding";
 export interface ItVectorSearchConfig extends ItEmbeddingConfig {
   batchSize: number;
   queryMaxChars: number;
+  embeddingRequestSplitThreshold?: number;
 }
 
 export interface ItRetrievalOptions {
@@ -14,6 +15,7 @@ export interface ItRetrievalOptions {
   cacheKey?: string;
   maxConcurrency?: number;
   queryCacheSize?: number;
+  queryWindowSize?: number;
   metrics?: ItRetrievalMetrics;
   onPhase?: (phase: string) => void;
   onTrace?: (message: string, detail?: Record<string, unknown>) => void;

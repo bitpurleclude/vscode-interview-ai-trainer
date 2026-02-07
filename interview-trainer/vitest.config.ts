@@ -8,6 +8,7 @@ export default defineConfig({
       "src/interviewTrainer/domain/notes/**/*.test.ts",
       "src/interviewTrainer/infra/utils/**/*.test.ts",
       "src/interviewTrainer/infra/api/**/*.test.ts",
+      "src/interviewTrainer/infra/notes/**/*.test.ts",
       "src/interviewTrainer/application/services/**/*.test.ts",
       "src/interviewTrainer/application/useCases/**/*.test.ts",
       "src/webview/**/*.test.ts",

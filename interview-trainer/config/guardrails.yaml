@@ -1,0 +1,65 @@
+# Centralized guardrails for all upper-bound style controls.
+# Keep hard limits here instead of scattering constants in code.
+version: 1
+
+retrieval:
+  # Hard clamp ranges for values coming from UI/skill config.
+  limits:
+    # Maximum number of merged hits per retrieval category.
+    top_k:
+      min: 1
+      max: 50
+
+    # Maximum query concurrency inside one retrieval kind.
+    max_concurrency:
+      min: 1
+      max: 1024
+
+    # Maximum embedding worker concurrency requested by retrieval settings.
+    embedding_max_concurrency:
+      min: 1
+      max: 256
+
+    # Maximum embedding worker concurrency used by warmup jobs.
+    warmup_concurrency:
+      min: 1
+      max: 256
+
+    # Similarity threshold range used during retrieval filtering.
+    min_score:
+      min: 0
+      max: 1
+
+    # Embedding request batch size range from retrieval settings.
+    vector_batch_size:
+      min: 1
+      max: 256
+
+    # Maximum characters per retrieval query sent to embedding.
+    vector_query_max_chars:
+      min: 64
+      max: 4000
+
+    # Query count per retrieval window before auto-splitting to next window.
+    query_window_size:
+      min: 1
+      max: 64
+
+    # Maximum concurrent question-level retrieval tasks.
+    question_max_concurrency:
+      min: 1
+      max: 16
+
+    # Maximum concurrent corpus-kind tasks per question.
+    kind_max_concurrency:
+      min: 1
+      max: 4
+
+  # Runtime defaults when skill config does not provide optional knobs.
+  defaults:
+    query_window_size: 8
+    question_max_concurrency: 3
+    kind_max_concurrency: 2
+
+  # If one embedding request payload exceeds this size, split into sub-requests.
+  embedding_request_split_threshold: 64

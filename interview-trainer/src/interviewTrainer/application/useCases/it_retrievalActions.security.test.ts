@@ -55,6 +55,9 @@ describe("it_retrievalActions security", () => {
           maxConcurrency: 999,
           embeddingMaxConcurrency: 999,
           minScore: 999,
+          queryWindowSize: 999,
+          questionMaxConcurrency: 999,
+          kindMaxConcurrency: 999,
           vector: {
             batchSize: 999,
             queryMaxChars: 999999,
@@ -69,10 +72,13 @@ describe("it_retrievalActions security", () => {
     expect(retrieval.top_k_knowledge).toBeLessThanOrEqual(50);
     expect(retrieval.top_k_rubrics).toBeLessThanOrEqual(50);
     expect(retrieval.top_k_examples).toBeLessThanOrEqual(50);
-    expect(retrieval.max_concurrency).toBeLessThanOrEqual(8);
-    expect(retrieval.embedding_max_concurrency).toBeLessThanOrEqual(8);
+    expect(retrieval.max_concurrency).toBeLessThanOrEqual(1024);
+    expect(retrieval.embedding_max_concurrency).toBeLessThanOrEqual(256);
     expect(retrieval.min_score).toBeLessThanOrEqual(1);
-    expect(retrieval.vector.batch_size).toBeLessThanOrEqual(64);
+    expect(retrieval.query_window_size).toBeLessThanOrEqual(64);
+    expect(retrieval.question_max_concurrency).toBeLessThanOrEqual(16);
+    expect(retrieval.kind_max_concurrency).toBeLessThanOrEqual(4);
+    expect(retrieval.vector.batch_size).toBeLessThanOrEqual(256);
     expect(retrieval.vector.query_max_chars).toBeLessThanOrEqual(4000);
   });
 
@@ -87,6 +93,9 @@ describe("it_retrievalActions security", () => {
           maxConcurrency: Number.NaN,
           embeddingMaxConcurrency: 0,
           minScore: -2,
+          queryWindowSize: -100,
+          questionMaxConcurrency: 0,
+          kindMaxConcurrency: Number.NaN,
           vector: {
             batchSize: -100,
             queryMaxChars: Number.POSITIVE_INFINITY,
@@ -100,6 +109,9 @@ describe("it_retrievalActions security", () => {
     expect(retrieval.max_concurrency).toBeGreaterThanOrEqual(1);
     expect(retrieval.embedding_max_concurrency).toBeGreaterThanOrEqual(1);
     expect(retrieval.min_score).toBeGreaterThanOrEqual(0);
+    expect(retrieval.query_window_size).toBeGreaterThanOrEqual(1);
+    expect(retrieval.question_max_concurrency).toBeGreaterThanOrEqual(1);
+    expect(retrieval.kind_max_concurrency).toBeGreaterThanOrEqual(1);
     expect(retrieval.vector.batch_size).toBeGreaterThanOrEqual(1);
     expect(retrieval.vector.query_max_chars).toBeGreaterThanOrEqual(64);
     expect(Number.isFinite(retrieval.max_concurrency)).toBe(true);

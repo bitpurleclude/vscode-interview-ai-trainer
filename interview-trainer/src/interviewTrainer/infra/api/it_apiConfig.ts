@@ -19,11 +19,36 @@ export interface ItTemplatesConfig {
   environments: Record<string, any>;
 }
 
+export interface ItGuardrailsConfig {
+  version: number;
+  retrieval?: {
+    limits?: {
+      top_k?: { min?: number; max?: number };
+      max_concurrency?: { min?: number; max?: number };
+      embedding_max_concurrency?: { min?: number; max?: number };
+      warmup_concurrency?: { min?: number; max?: number };
+      min_score?: { min?: number; max?: number };
+      vector_batch_size?: { min?: number; max?: number };
+      vector_query_max_chars?: { min?: number; max?: number };
+      query_window_size?: { min?: number; max?: number };
+      question_max_concurrency?: { min?: number; max?: number };
+      kind_max_concurrency?: { min?: number; max?: number };
+    };
+    defaults?: {
+      query_window_size?: number;
+      question_max_concurrency?: number;
+      kind_max_concurrency?: number;
+    };
+    embedding_request_split_threshold?: number;
+  };
+}
+
 export interface ItConfigBundle {
   api: ItApiConfig;
   templates: ItTemplatesConfig;
   skill: Record<string, any>;
   providers: Record<string, any>;
+  guardrails?: ItGuardrailsConfig;
 }
 
 const IT_CONFIG_DIR = "config";
@@ -31,6 +56,7 @@ const IT_DEFAULT_FILES = [
   "api_config.yaml",
   "skill_config.yaml",
   "templates.yaml",
+  "guardrails.yaml",
 ];
 const IT_PROVIDER_DIR = "providers";
 
@@ -142,6 +168,7 @@ export function it_loadConfigBundle(
   const api = it_readYamlFile(path.join(baseDir, "api_config.yaml")) as ItApiConfig;
   const templates = it_readYamlFile(path.join(baseDir, "templates.yaml")) as ItTemplatesConfig;
   const skill = it_readYamlFile(path.join(baseDir, "skill_config.yaml"));
+  const guardrails = it_readYamlFile(path.join(baseDir, "guardrails.yaml")) as ItGuardrailsConfig;
   const providers = it_readProviderConfigs(providerDir);
 
   return {
@@ -149,6 +176,7 @@ export function it_loadConfigBundle(
     templates: templates || { version: 1, environments: {} },
     skill,
     providers,
+    guardrails: guardrails || { version: 1 },
   };
 }
 

@@ -1,4 +1,4 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 本仓库包含 VS Code/Windsurf 插件：面试训练助手（interview-trainer）。本文件为 AI 编码代理提供最小开发指引。
 
@@ -126,6 +126,13 @@
 - 模板执行：`src/interviewTrainer/infra/api/it_templateExecutor.ts`
 - 配置快照：`src/interviewTrainer/application/services/it_configSnapshot.ts`
 - 设置页：`webview/src/components/settings/*`
+
+## Guardrails (Upper-Bound Policy)
+- Keep all limits, thresholds, concurrency caps, split windows, and character caps in `interview-trainer/config/guardrails.yaml`.
+- Do not hardcode upper bounds in business code.
+- Parse/clamp guardrails only via `src/interviewTrainer/application/services/it_guardrails.ts`.
+- Every guardrail key in YAML must include comments: purpose, unit, trigger behavior, and risk when too large.
+- When any guardrail changes, also update architecture/config docs and related tests.
 
 ## 模板测试与 Token 库（新增）
 - 模板测试入口：设置页 → 模板管理 → dryrun/live 测试

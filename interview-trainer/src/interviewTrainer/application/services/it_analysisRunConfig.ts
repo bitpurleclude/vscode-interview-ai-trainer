@@ -23,6 +23,7 @@ export async function it_prepareAnalysisRunDeps(
     context: host.context,
     apiConfig: host.configBundle.api,
     templatesConfig: host.configBundle.templates,
+    guardrails: host.configBundle.guardrails,
     skillConfig: {
       ...host.configBundle.skill,
       asr: {

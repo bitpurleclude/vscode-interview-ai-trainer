@@ -216,11 +216,17 @@ export async function it_retrieveNotesMulti(
       queries.map((q) => q.trim()).filter((q) => q.length > 0),
     ),
   );
-  const maxQueries = 8;
-  const limited = normalized.slice(0, maxQueries);
-  if (!limited.length || !corpus.length) {
+  if (!normalized.length || !corpus.length) {
     return [];
   }
+  const windowSize = Number.isFinite(options.queryWindowSize)
+    ? Math.max(1, Math.floor(Number(options.queryWindowSize)))
+    : 8;
+  const windows: string[][] = [];
+  for (let i = 0; i < normalized.length; i += windowSize) {
+    windows.push(normalized.slice(i, i + windowSize));
+  }
+
   const topK = Number.isFinite(options.topK) ? Math.max(1, options.topK) : 5;
   const baseMinScore = Number.isFinite(options.minScore) ? options.minScore : 0;
   const perQueryTopK = Math.max(topK, Math.min(topK * 2, 20));
@@ -229,7 +235,7 @@ export async function it_retrieveNotesMulti(
     : 3;
   const metrics = options.metrics ?? it_createRetrievalMetrics();
   options.metrics = metrics;
-  metrics.queryCount = limited.length;
+  metrics.queryCount = normalized.length;
 
   const runWithLimit = async <T, R>(
     list: T[],
@@ -250,14 +256,18 @@ export async function it_retrieveNotesMulti(
   };
 
   const runOnce = async (minScore: number): Promise<ItNoteHit[]> => {
-    const lists = await runWithLimit(limited, maxConcurrency, (query) =>
-      it_retrieveNotes(query, corpus, {
-        ...options,
-        topK: perQueryTopK,
-        minScore,
-      }),
-    );
-    return it_mergeQueryHits(lists, topK);
+    const collectedLists: ItNoteHit[][] = [];
+    for (const windowQueries of windows) {
+      const lists = await runWithLimit(windowQueries, maxConcurrency, (query) =>
+        it_retrieveNotes(query, corpus, {
+          ...options,
+          topK: perQueryTopK,
+          minScore,
+        }),
+      );
+      collectedLists.push(...lists);
+    }
+    return it_mergeQueryHits(collectedLists, topK);
   };
 
   const minHits = Math.min(topK, 3);

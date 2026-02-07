@@ -3,6 +3,10 @@ import { it_resolveBindingTemplate } from "../services/it_templateGateway";
 import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "../services/it_notesGateway";
 import { it_hashText } from "../services/it_textGateway";
 import { it_normalizeWorkspaceKey } from "../services/it_configSnapshot";
+import {
+  it_clampInteger,
+  it_getRetrievalGuardrails,
+} from "../services/it_guardrails";
 
 export type ItEmbeddingWarmupHost = {
   context: import("vscode").ExtensionContext;
@@ -29,13 +33,7 @@ export function it_isIdleForWarmup(host: ItEmbeddingWarmupHost): boolean {
 }
 
 
-function it_resolveWarmupConcurrency(raw: unknown): number {
-  const parsed = Math.floor(Number(raw));
-  if (!Number.isFinite(parsed)) {
-    return 1;
-  }
-  return Math.min(8, Math.max(1, parsed));
-}
+
 
 export function it_scheduleEmbeddingWarmup(
   host: ItEmbeddingWarmupHost,
@@ -93,6 +91,7 @@ export async function it_runEmbeddingWarmup(
     return;
   }
   const retrievalCfg = host.configBundle.skill.retrieval ?? {};
+  const retrievalGuardrails = it_getRetrievalGuardrails(host.configBundle);
   const env = host.configBundle.api.active?.environment || "prod";
   const templatesConfig = host.configBundle.templates || { version: 1, environments: {} };
   const embeddingTemplate = it_resolveBindingTemplate(
@@ -101,8 +100,14 @@ export async function it_runEmbeddingWarmup(
     "embedding",
     "retrieval",
   );
-  const warmupConcurrency = it_resolveWarmupConcurrency(
-    retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency ?? 1,
+  const warmupConcurrency = it_clampInteger(
+    retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency,
+    Number(
+      retrievalCfg.embedding_max_concurrency ??
+        retrievalCfg.embeddingMaxConcurrency ??
+        retrievalGuardrails.warmupConcurrency.min,
+    ),
+    retrievalGuardrails.warmupConcurrency,
   );
   const cacheRoot = host.context.globalStorageUri?.fsPath;
   const corpusCacheMb = Number(
@@ -164,8 +169,17 @@ export async function it_runEmbeddingWarmup(
     model: providerEmbedding.model || vectorCfg.model || "",
     timeoutSec: Number(providerEmbedding.timeout_sec ?? vectorCfg.timeout_sec ?? 30),
     maxRetries: Number(providerEmbedding.max_retries ?? vectorCfg.max_retries ?? 1),
-    batchSize: Number(vectorCfg.batch_size ?? 16),
-    queryMaxChars: Number(vectorCfg.query_max_chars ?? 1500),
+    batchSize: it_clampInteger(
+      vectorCfg.batch_size,
+      Number(vectorCfg.batch_size ?? 16),
+      retrievalGuardrails.vectorBatchSize,
+    ),
+    queryMaxChars: it_clampInteger(
+      vectorCfg.query_max_chars,
+      Number(vectorCfg.query_max_chars ?? 1500),
+      retrievalGuardrails.vectorQueryMaxChars,
+    ),
+    embeddingRequestSplitThreshold: retrievalGuardrails.embeddingRequestSplitThreshold,
     template: embeddingTemplate || undefined,
     templateEnv: env,
     templateContext: host.context,

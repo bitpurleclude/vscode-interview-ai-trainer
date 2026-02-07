@@ -6,7 +6,11 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import type { ItApiConfig, ItTemplatesConfig } from "../../services/it_configGateway";
+import type {
+  ItApiConfig,
+  ItGuardrailsConfig,
+  ItTemplatesConfig,
+} from "../../services/it_configGateway";
 
 export type ItAnalyzeContext = {
   globalStorageUri?: { fsPath: string };
@@ -17,6 +21,7 @@ export interface ItAnalyzeDeps {
   apiConfig: ItApiConfig;
   templatesConfig: ItTemplatesConfig;
   skillConfig: Record<string, any>;
+  guardrails?: ItGuardrailsConfig;
   workspaceRoot: string;
   onProgress?: (update: ItAnalyzeProgress) => void;
   onPartial?: (partial: {

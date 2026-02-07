@@ -13,6 +13,11 @@ import {
   it_removeEmbeddingCacheDirAsync,
 } from "../services/it_storageGateway";
 import { it_hashText } from "../services/it_textGateway";
+import {
+  it_clampFloat,
+  it_clampInteger,
+  it_getRetrievalGuardrails,
+} from "../services/it_guardrails";
 
 export type ItRetrievalUseCaseContext = {
   extensionContext: vscode.ExtensionContext;
@@ -42,33 +47,6 @@ function it_asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
-function it_toNumber(value: unknown, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function it_clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function it_toClampedInteger(
-  value: unknown,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const parsed = Math.floor(it_toNumber(value, fallback));
-  return Math.floor(it_clampNumber(parsed, min, max));
-}
-
-function it_toClampedFloat(
-  value: unknown,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  return it_clampNumber(it_toNumber(value, fallback), min, max);
-}
 
 export async function it_setRetrievalEnabledFromWebview(params: {
   context: ItRetrievalUseCaseContext;
@@ -106,6 +84,7 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
   const configBundle = params.context.configService.loadBundle();
   const current = configBundle.skill.retrieval || {};
   const currentVector = current.vector || {};
+  const guardrails = it_getRetrievalGuardrails(configBundle);
 
   const modeCandidate = String(incoming.mode || current.mode || "vector");
   const mode = modeCandidate === "keyword" ? "keyword" : "vector";
@@ -116,57 +95,64 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
       ...current,
       enabled: incoming.enabled ?? current.enabled,
       mode,
-      top_k: it_toClampedInteger(incoming.topK, Number(current.top_k ?? 5), 1, 50),
-      top_k_notes: it_toClampedInteger(
+      top_k: it_clampInteger(incoming.topK, Number(current.top_k ?? 5), guardrails.topK),
+      top_k_notes: it_clampInteger(
         incoming.topKNotes,
         Number(current.top_k_notes ?? current.top_k ?? 5),
-        1,
-        50,
+        guardrails.topK,
       ),
-      top_k_knowledge: it_toClampedInteger(
+      top_k_knowledge: it_clampInteger(
         incoming.topKKnowledge,
         Number(current.top_k_knowledge ?? current.top_k ?? 5),
-        1,
-        50,
+        guardrails.topK,
       ),
-      top_k_rubrics: it_toClampedInteger(
+      top_k_rubrics: it_clampInteger(
         incoming.topKRubrics,
         Number(current.top_k_rubrics ?? current.top_k ?? 5),
-        1,
-        50,
+        guardrails.topK,
       ),
-      top_k_examples: it_toClampedInteger(
+      top_k_examples: it_clampInteger(
         incoming.topKExamples,
         Number(current.top_k_examples ?? current.top_k ?? 5),
-        1,
-        50,
+        guardrails.topK,
       ),
-      max_concurrency: it_toClampedInteger(
+      max_concurrency: it_clampInteger(
         incoming.maxConcurrency,
         Number(current.max_concurrency ?? 3),
-        1,
-        8,
+        guardrails.maxConcurrency,
       ),
-      embedding_max_concurrency: it_toClampedInteger(
+      embedding_max_concurrency: it_clampInteger(
         incoming.embeddingMaxConcurrency,
         Number(current.embedding_max_concurrency ?? 1),
-        1,
-        8,
+        guardrails.embeddingMaxConcurrency,
       ),
-      min_score: it_toClampedFloat(incoming.minScore, Number(current.min_score ?? 0.2), 0, 1),
+      min_score: it_clampFloat(incoming.minScore, Number(current.min_score ?? 0.2), guardrails.minScore),
+      query_window_size: it_clampInteger(
+        incoming.queryWindowSize,
+        Number(current.query_window_size ?? guardrails.defaults.queryWindowSize),
+        guardrails.queryWindowSize,
+      ),
+      question_max_concurrency: it_clampInteger(
+        incoming.questionMaxConcurrency,
+        Number(current.question_max_concurrency ?? guardrails.defaults.questionMaxConcurrency),
+        guardrails.questionMaxConcurrency,
+      ),
+      kind_max_concurrency: it_clampInteger(
+        incoming.kindMaxConcurrency,
+        Number(current.kind_max_concurrency ?? guardrails.defaults.kindMaxConcurrency),
+        guardrails.kindMaxConcurrency,
+      ),
       vector: {
         ...currentVector,
-        batch_size: it_toClampedInteger(
+        batch_size: it_clampInteger(
           incomingVector.batchSize,
           Number(currentVector.batch_size ?? 16),
-          1,
-          64,
+          guardrails.vectorBatchSize,
         ),
-        query_max_chars: it_toClampedInteger(
+        query_max_chars: it_clampInteger(
           incomingVector.queryMaxChars,
           Number(currentVector.query_max_chars ?? 1500),
-          64,
-          4000,
+          guardrails.vectorQueryMaxChars,
         ),
       },
     },

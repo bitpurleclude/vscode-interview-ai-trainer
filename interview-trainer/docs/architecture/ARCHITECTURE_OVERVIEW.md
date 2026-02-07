@@ -56,7 +56,19 @@
 - Interface must not call Domain/Infra directly; always go through use-cases/gateways.
 - Any code change must include matching updates in `docs/architecture/*` and `docs/modules/*`.
 
-## 6. Validation and Release Rules
+## 6. Guardrails (Upper-Bound Controls)
+- Single source of truth: `config/guardrails.yaml`.
+- Any hard limit (concurrency, batch, split threshold, query window, char cap) must be defined in guardrails config.
+- Runtime clamp/parsing entry: `src/interviewTrainer/application/services/it_guardrails.ts`.
+- Retrieval stack currently reads guardrails in:
+  - `src/interviewTrainer/application/useCases/it_retrievalActions.ts`
+  - `src/interviewTrainer/application/useCases/it_embeddingWarmup.ts`
+  - `src/interviewTrainer/application/flows/analyze/flow_retrievalStage.ts`
+  - `src/interviewTrainer/infra/notes/search.ts`
+  - `src/interviewTrainer/infra/notes/cache_embedding.ts`
+- Adding a new upper-bound parameter requires synchronized updates in guardrails config, tests, and docs.
+
+## 7. Validation and Release Rules
 - All text files must be UTF-8 without BOM.
 - VSIX package must include `node_modules/ffmpeg-static`.
 - Minimum verification before release: `npm run build`, `npm run test`, `npm run package`.

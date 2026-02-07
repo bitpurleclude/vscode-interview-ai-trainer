@@ -104,6 +104,14 @@ export function it_getEmbeddingCache(
   return cache;
 }
 
+function it_resolveEmbeddingSplitThreshold(cfg: ItVectorSearchConfig, total: number): number {
+  const candidate = Number(cfg.embeddingRequestSplitThreshold);
+  if (!Number.isFinite(candidate)) {
+    return Math.max(1, total);
+  }
+  return Math.max(1, Math.floor(candidate));
+}
+
 export async function it_embedTexts(
   cfg: ItVectorSearchConfig,
   texts: string[],
@@ -111,7 +119,21 @@ export async function it_embedTexts(
   if (!texts.length) {
     return [];
   }
-  return it_requestEmbeddings(cfg, texts);
+  const splitThreshold = it_resolveEmbeddingSplitThreshold(cfg, texts.length);
+  if (texts.length <= splitThreshold) {
+    return it_requestEmbeddings(cfg, texts);
+  }
+
+  const merged: number[][] = [];
+  for (let i = 0; i < texts.length; i += splitThreshold) {
+    const chunk = texts.slice(i, i + splitThreshold);
+    const vectors = await it_requestEmbeddings(cfg, chunk);
+    if (!vectors.length) {
+      continue;
+    }
+    merged.push(...vectors);
+  }
+  return merged;
 }
 
 async function it_ensureEmbeddings(

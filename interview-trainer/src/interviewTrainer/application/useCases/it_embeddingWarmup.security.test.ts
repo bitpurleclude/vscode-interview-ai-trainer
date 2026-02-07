@@ -111,7 +111,7 @@ describe("it_embeddingWarmup security", () => {
 
     expect(mocks.prepareEmbeddingCache).toHaveBeenCalledTimes(1);
     const options = mocks.prepareEmbeddingCache.mock.calls[0][2];
-    expect(options.maxConcurrency).toBeLessThanOrEqual(8);
+    expect(options.maxConcurrency).toBeLessThanOrEqual(256);
     expect(options.maxConcurrency).toBeGreaterThanOrEqual(1);
   });
 
