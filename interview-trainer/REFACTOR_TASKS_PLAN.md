@@ -253,3 +253,10 @@
 - [x] Synced services/useCases docs for new delegation boundary.
 - [ ] Follow-up: continue replacing `application/useCases/it_analysisFlow.ts` host type imports with app-level gateway types.
 
+
+## P6-7 (2026-02-07) Analysis Host Type Boundary Alignment Progress
+- [x] `application/useCases/it_analysisFlow.ts` host type imports switched from infra module paths to `application/services/it_configGateway` types.
+- [x] Removed direct `application/useCases -> infra/api/*` type coupling for analysis flow host contract.
+- [x] Synced use-case docs for updated host type boundary.
+- [ ] Follow-up: continue replacing legacy cancellation placeholder strings (`"?????"`) with explicit cancellation semantics in a dedicated cleanup task.
+

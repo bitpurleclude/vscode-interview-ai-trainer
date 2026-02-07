@@ -1,4 +1,11 @@
-import { ItAnalyzeRequest, ItAnalyzeResponse, ItStepStatus } from "../../../protocol/interviewTrainer";
+import {
+  ItAnalyzeRequest,
+  ItAnalyzeResponse,
+  ItState,
+  ItStepState,
+  ItStepStatus,
+  ItWorkflowStep,
+} from "../../../protocol/interviewTrainer";
 import { it_runAnalysis } from "../flows/analyze/flow";
 import {
   it_applyAnalysisPartial,
@@ -9,27 +16,32 @@ import {
   it_startAnalysisSession,
 } from "../services/it_analysisSessionState";
 import { it_prepareAnalysisRunDeps } from "../services/it_analysisRunConfig";
+import type {
+  ItApiConfig,
+  ItConfigBundle,
+  ItConfigService,
+} from "../services/it_configGateway";
 
 export type ItAnalysisHost = {
   context: import("vscode").ExtensionContext;
-  configService: import("../../infra/api/it_configService").ItConfigService;
-  configBundle: import("../../infra/api/it_apiConfig").ItConfigBundle;
-  state: import("../../../protocol/interviewTrainer").ItState;
+  configService: ItConfigService;
+  configBundle: ItConfigBundle;
+  state: ItState;
   analysisAbort: { aborted: boolean } | null;
   embeddingWarmupAbort: { aborted: boolean } | null;
   corpusDirty: boolean;
   corpusDirtyFiles: Set<string>;
-  buildRunSteps: () => import("../../../protocol/interviewTrainer").ItStepState[];
-  computeOverallProgress: (steps: import("../../../protocol/interviewTrainer").ItStepState[]) => number;
-  updateState: (next: Partial<import("../../../protocol/interviewTrainer").ItState>) => void;
+  buildRunSteps: () => ItStepState[];
+  computeOverallProgress: (steps: ItStepState[]) => number;
+  updateState: (next: Partial<ItState>) => void;
   updateProgress: (update: {
-    step: import("../../../protocol/interviewTrainer").ItWorkflowStep;
+    step: ItWorkflowStep;
     progress: number;
     message?: string;
     status?: ItStepStatus;
   }) => void;
   emitStreamUpdate: (update: {
-    step: import("../../../protocol/interviewTrainer").ItWorkflowStep;
+    step: ItWorkflowStep;
     text: string;
     done?: boolean;
     reset?: boolean;
@@ -42,7 +54,7 @@ export type ItAnalysisHost = {
   }) => void;
   logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
   requireWorkspaceRoot: () => string;
-  resolveApiConfigWithProviders: (apiConfig: import("../../infra/api/it_apiConfig").ItApiConfig) => import("../../infra/api/it_apiConfig").ItApiConfig;
+  resolveApiConfigWithProviders: (apiConfig: ItApiConfig) => ItApiConfig;
   scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
 };
 
