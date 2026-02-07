@@ -14,18 +14,12 @@ import { ItApiConfig, ItConfigBundle } from "./infra/api/it_apiConfig";
 import { ItConfigService } from "./infra/api/it_configService";
 import type { ItLlmConfig } from "./application/services/it_llmGateway";
 import { WebviewProtocol } from "../webview/WebviewProtocol";
-import { it_handleAnalyze } from "./application/useCases/it_analysisFlow";
 import {
   it_buildConfigSnapshot,
   it_normalizeWorkspaceKey,
   it_refreshConfigSnapshot,
   it_updateCorpusWatchers,
 } from "./application/services/it_configSnapshot";
-import {
-  it_isIdleForWarmup,
-  it_runEmbeddingWarmup,
-  it_scheduleEmbeddingWarmup,
-} from "./application/useCases/it_embeddingWarmup";
 import { ItTokenService } from "./application/services/it_tokens";
 import {
   it_emitEvaluationStreamUpdate,
@@ -34,13 +28,7 @@ import {
   it_logEmbeddingTestFailure,
   it_logLlmTestFailure,
 } from "./application/services/it_logging";
-import {
-  IT_STATUS_INIT,
-  it_buildRunSteps,
-  it_computeOverallProgress,
-  it_updateEmbeddingWarmupState,
-  it_updateProgress,
-} from "./application/services/it_progress";
+import { IT_STATUS_INIT } from "./application/services/it_progress";
 import {
   it_detectRecordingInput,
   it_findRecordingFfmpeg,
@@ -61,6 +49,17 @@ import {
 } from "./application/services/it_extensionLifecycle";
 import { it_updateHostState } from "./application/services/it_extensionState";
 import { it_bootstrapExtensionHost } from "./application/services/it_extensionBootstrap";
+import {
+  it_buildHostRunSteps,
+  it_computeHostOverallProgress,
+  it_handleHostAnalyze,
+  it_hostIdleForWarmup,
+  it_runHostEmbeddingWarmup,
+  it_scheduleHostEmbeddingWarmup,
+  it_updateHostEmbeddingWarmup,
+  it_updateHostProgress,
+} from "./application/services/it_extensionRuntime";
+import { IT_EXTENSION_RUNTIME_DEPS } from "./application/services/it_extensionRuntimeDeps";
 
 export class InterviewTrainerExtension implements vscode.Disposable {
   public state: ItState = { ...IT_STATUS_INIT };
@@ -162,19 +161,19 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   public updateEmbeddingWarmup(next: Partial<ItEmbeddingWarmupState>): void {
-    it_updateEmbeddingWarmupState(this, next);
+    it_updateHostEmbeddingWarmup(this, next, IT_EXTENSION_RUNTIME_DEPS);
   }
 
   public isIdleForWarmup(): boolean {
-    return it_isIdleForWarmup(this);
+    return it_hostIdleForWarmup(this, IT_EXTENSION_RUNTIME_DEPS);
   }
 
   public scheduleEmbeddingWarmup(reason: string, delayMs: number = 2500): void {
-    it_scheduleEmbeddingWarmup(this, reason, delayMs);
+    it_scheduleHostEmbeddingWarmup(this, reason, delayMs, IT_EXTENSION_RUNTIME_DEPS);
   }
 
   public async runEmbeddingWarmup(reason: string): Promise<void> {
-    await it_runEmbeddingWarmup(this, reason);
+    await it_runHostEmbeddingWarmup(this, reason, IT_EXTENSION_RUNTIME_DEPS);
   }
 
   public resolveApiConfigWithProviders(apiConfig: ItApiConfig): ItApiConfig {
@@ -182,11 +181,11 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   public buildRunSteps(): ItStepState[] {
-    return it_buildRunSteps();
+    return it_buildHostRunSteps(IT_EXTENSION_RUNTIME_DEPS);
   }
 
   public computeOverallProgress(steps: ItStepState[]): number {
-    return it_computeOverallProgress(steps);
+    return it_computeHostOverallProgress(steps, IT_EXTENSION_RUNTIME_DEPS);
   }
 
 
@@ -196,7 +195,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     message?: string;
     status?: ItStepStatus;
   }): void {
-    it_updateProgress(this, update);
+    it_updateHostProgress(this, update, IT_EXTENSION_RUNTIME_DEPS);
   }
 
   public it_firstNonEmpty(...values: Array<string | undefined | null>): string {
@@ -248,7 +247,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   public async handleAnalyze(
     request: ItAnalyzeRequest,
   ): Promise<ItAnalyzeResponse> {
-    return await it_handleAnalyze(this, request);
+    return await it_handleHostAnalyze(this, request, IT_EXTENSION_RUNTIME_DEPS);
   }
 
   dispose(): void {

@@ -229,3 +229,11 @@
 - [x] Kept host API and startup behavior unchanged (config load, token sync, watchers/handlers/warmup).
 - [ ] Follow-up: continue splitting extension runtime session orchestration in next P6 tasks.
 
+
+## P6-4 (2026-02-07) Extension Runtime Delegation Facade Progress
+- [x] Added `application/services/it_extensionRuntime.ts` + `it_extensionRuntimeDeps.ts` to unify analyze/warmup/progress delegates and production bindings.
+- [x] `InterviewTrainerExtension` switched to runtime facade methods for `handleAnalyze`, warmup scheduling/running, and progress updates.
+- [x] Added runtime facade unit tests (`it_extensionRuntime.test.ts`).
+- [x] Kept extension host external method signatures unchanged for handler/use-case compatibility.
+- [ ] Follow-up: continue splitting extension run-session state orchestration in next P6 tasks.
+
