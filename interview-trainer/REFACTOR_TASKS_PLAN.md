@@ -130,3 +130,9 @@
 - [x] Moved provider config orchestration into application use-case (`it_providerActions.ts`).
 - [x] `it_webviewProviderHandlers.ts` now dispatches commands only.
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-11 (2026-02-07) Core Handler UseCase Progress
+- [x] Moved core actions orchestration into application use-case (`it_coreActions.ts`).
+- [x] `it_webviewCoreHandlers.ts` now dispatches commands only.
+- [x] Synced use-case docs and verified build/test/package.

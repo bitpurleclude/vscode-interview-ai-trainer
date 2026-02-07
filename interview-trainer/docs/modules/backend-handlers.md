@@ -40,3 +40,4 @@
 - ??????`it_webviewWorkspaceHandlers.ts` ? `application/useCases/it_workspaceActions.ts`
 - Provider ???`it_webviewProviderHandlers.ts` ? `application/useCases/it_providerActions.ts`
 - Handler ?????????????????? `application/useCases/*`?
+- Core ???`it_webviewCoreHandlers.ts` ? `application/useCases/it_coreActions.ts`

@@ -15,3 +15,4 @@
 - `it_templateActions.ts`: template/secrets/tokens use-cases for Webview commands.
 - `it_workspaceActions.ts`: workspace and sessions directory selection use-cases.
 - `it_providerActions.ts`: provider profile create/save/open use-cases for Webview commands.
+- `it_coreActions.ts`: core webview actions (config/history/settings/reload) use-cases.
