@@ -1,7 +1,9 @@
 import path from "path";
 import fs from "fs";
-import { it_clearEmbeddingMemoryCache } from "../../infra/notes";
-import { it_hashText } from "../../infra/utils/it_text";
+import {
+  it_clearEmbeddingMemoryCache,
+  it_hashText,
+} from "../../application/services/it_infraBridge";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerRetrievalHandlers(host: ItWebviewHandlersHost): void {

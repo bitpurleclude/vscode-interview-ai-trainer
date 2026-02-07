@@ -1,6 +1,8 @@
-import { it_callBaiduAsr } from "../../infra/api/it_baidu";
-import { it_callVolcAsr } from "../../infra/api/it_volc_asr";
-import { it_pcm16ToWavBuffer } from "../../infra/utils/it_wav";
+import {
+  it_callBaiduAsr,
+  it_callVolcAsr,
+  it_pcm16ToWavBuffer,
+} from "../../application/services/it_infraBridge";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerAsrTestHandler(host: ItWebviewHandlersHost): void {

@@ -6,9 +6,12 @@ import {
   ItEmbeddingWarmupState,
   ItState,
 } from "../../../protocol/interviewTrainer";
-import { ItApiConfig, ItConfigBundle } from "../../infra/api/it_apiConfig";
-import { ItConfigService } from "../../infra/api/it_configService";
-import { ItLlmConfig } from "../../infra/api/it_llmTypes";
+import {
+  type ItApiConfig,
+  type ItConfigBundle,
+  ItConfigService,
+  type ItLlmConfig,
+} from "../../application/services/it_infraBridge";
 import { WebviewProtocol } from "../../../webview/WebviewProtocol";
 import { ItTokenService } from "../../application/services/it_tokens";
 import { it_registerConfigHandlers } from "./it_webviewConfigHandlers";

@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import type { ItAnalyzeResponse } from "../../../protocol/interviewTrainer";
-import { it_appendReportAsync, it_updateReferenceNotesFileAsync } from "../../infra/storage/it_report";
 import {
+  it_appendReportAsync,
+  it_updateReferenceNotesFileAsync,
   it_appendAttemptDataAsync,
   it_buildQuestionFingerprint,
   it_nextAttemptIndexAsync,
@@ -10,8 +11,9 @@ import {
   it_storeAudioCopy,
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
-} from "../../infra/storage/it_sessions";
-import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
+  it_hashText,
+  it_normalizeText,
+} from "../../application/services/it_infraBridge";
 import { it_deriveTopicTitle, it_sanitizeTopicTitle } from "../../application/services/it_topicTitle";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 

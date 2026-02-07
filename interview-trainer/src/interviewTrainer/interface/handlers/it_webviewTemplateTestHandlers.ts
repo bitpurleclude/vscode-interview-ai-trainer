@@ -3,7 +3,7 @@ import {
   it_executeTemplate,
   it_renderTemplateRequest,
   it_resolveTemplateById,
-} from "../../infra/api/it_templateExecutor";
+} from "../../application/services/it_infraBridge";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 import {
   it_buildTemplateTestDefaults,

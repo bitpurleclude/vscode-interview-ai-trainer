@@ -1,4 +1,4 @@
-import { it_callEmbedding } from "../../infra/api/it_embedding";
+import { it_callEmbedding } from "../../application/services/it_infraBridge";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerEmbeddingTestHandler(host: ItWebviewHandlersHost): void {

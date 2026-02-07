@@ -75,4 +75,9 @@
 - [x] Moved title generation and persistence I/O to application services (`it_topicTitle.ts`, `it_analysisPersistence.ts`).
 - [x] Removed Interface -> Domain direct import by switching `it_webviewResultHandlers.ts` to application service API.
 - [x] Build and test passed after migration.
+## P5-1 (2026-02-07) Interface Migration Progress
+- [x] Removed direct `Interface -> Infra` imports in `src/interviewTrainer/interface/handlers/*`.
+- [x] Added `application/services/it_infraBridge.ts` as a temporary migration bridge.
+- [x] Kept runtime behavior unchanged; handlers still work through same APIs.
+- [x] Build/test/package verified after migration.
 

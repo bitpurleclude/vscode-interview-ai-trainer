@@ -7,3 +7,4 @@ Application service layer (cross-use-case reuse).
   - `it_asrTranscription.ts`: ASR request orchestration and template tracing.
   - `it_topicTitle.ts`: LLM topic-title generation and title sanitizing bridge.
   - `it_analysisPersistence.ts`: persistence for analysis result/report/session metadata.
+  - `it_infraBridge.ts`: temporary application-level bridge for Interface migration (remove direct Interface -> Infra imports).

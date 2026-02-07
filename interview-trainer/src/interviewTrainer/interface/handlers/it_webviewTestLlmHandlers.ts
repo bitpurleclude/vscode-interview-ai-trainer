@@ -1,11 +1,12 @@
-import { it_callLlmChat } from "../../infra/api/it_llm";
-import type { ItLlmConfig, ItLlmMessage } from "../../infra/api/it_llmTypes";
 import {
+  it_callLlmChat,
+  type ItLlmConfig,
+  type ItLlmMessage,
   it_buildDoubaoChatRequest,
   it_buildDoubaoResponsesRequest,
   it_buildOpenAiChatRequest,
   it_buildOpenAiResponsesRequest,
-} from "../../infra/api/it_requestBuilder";
+} from "../../application/services/it_infraBridge";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 import { it_emitLlmTestRequest, it_maskHeaders } from "./it_webviewTestHelpers";
 
