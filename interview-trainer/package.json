@@ -2,7 +2,7 @@
   "name": "interview-trainer",
   "displayName": "面试训练助手",
   "description": "结构化面试训练插件，支持录音/导入音频、自动转写、笔记检索与评审",
-  "version": "0.1.4-beta.29",
+  "version": "0.1.4-beta.30",
   "publisher": "interview-trainer",
   "license": "MIT",
   "repository": {
