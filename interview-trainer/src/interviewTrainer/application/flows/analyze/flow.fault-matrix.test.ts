@@ -562,4 +562,100 @@ describe("flow fault matrix", () => {
     expect(mocks.persistAnalysis).not.toHaveBeenCalled();
   });
 
+
+  it("rejects early when embedding template binding is missing for vector retrieval", async () => {
+    mocks.resolveBindingTemplate.mockImplementation(
+      (_cfg: unknown, _env: string, provider: string, purpose: string) => {
+        const key = `${provider}:${purpose}`;
+        if (key === "asr:transcription") {
+          return { id: "tpl-asr" };
+        }
+        if (key === "llm:questionParse") {
+          return { id: "tpl-question" };
+        }
+        if (key === "llm:title") {
+          return { id: "tpl-title" };
+        }
+        if (key === "llm:evaluation") {
+          return { id: "tpl-evaluation" };
+        }
+        if (key === "llm:segment") {
+          return { id: "tpl-segment" };
+        }
+        if (key === "embedding:retrieval") {
+          return null;
+        }
+        return null;
+      },
+    );
+
+    const context = createDeps();
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).rejects.toThrow();
+    expect(mocks.runAudioStage).not.toHaveBeenCalled();
+    expect(mocks.runRetrievalStage).not.toHaveBeenCalled();
+    expect(mocks.persistAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("allows keyword retrieval mode when embedding template is missing", async () => {
+    mocks.resolveBindingTemplate.mockImplementation(
+      (_cfg: unknown, _env: string, provider: string, purpose: string) => {
+        const key = `${provider}:${purpose}`;
+        if (key === "asr:transcription") {
+          return { id: "tpl-asr" };
+        }
+        if (key === "llm:questionParse") {
+          return { id: "tpl-question" };
+        }
+        if (key === "llm:title") {
+          return { id: "tpl-title" };
+        }
+        if (key === "llm:evaluation") {
+          return { id: "tpl-evaluation" };
+        }
+        if (key === "llm:segment") {
+          return { id: "tpl-segment" };
+        }
+        if (key === "embedding:retrieval") {
+          return null;
+        }
+        return null;
+      },
+    );
+
+    const context = createDeps();
+    (context.deps as any).skillConfig.retrieval.mode = "keyword";
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).resolves.toBeDefined();
+    expect(mocks.runAudioStage).toHaveBeenCalledTimes(1);
+    expect(mocks.runRetrievalStage).toHaveBeenCalledTimes(1);
+    expect(mocks.evaluateAnswer).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails fast when retrieval stage throws and skips evaluation/persistence", async () => {
+    mocks.runRetrievalStage.mockRejectedValue(new Error("retrieval stage boom"));
+
+    const context = createDeps();
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).rejects.toThrow(
+      "retrieval stage boom",
+    );
+    expect(mocks.evaluateAnswer).not.toHaveBeenCalled();
+    expect(mocks.persistAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when question parse preparation throws and skips audio stage", async () => {
+    mocks.prepareQuestionParseStage.mockImplementation(() => {
+      throw new Error("question stage boom");
+    });
+
+    const context = createDeps();
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).rejects.toThrow(
+      "question stage boom",
+    );
+    expect(mocks.runAudioStage).not.toHaveBeenCalled();
+    expect(mocks.persistAnalysis).not.toHaveBeenCalled();
+  });
+
 });

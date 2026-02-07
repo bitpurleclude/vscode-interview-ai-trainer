@@ -36,6 +36,8 @@
 - [x] P2-15 VS Code Host smoke skeleton (`test/e2e/smoke/index.js`, `npm run test:e2e:smoke`).
 - [x] P2-16 Analysis use-case integration tests (`it_analysisFlow.integration.test.ts`).
 - [x] P2-17 Template binding guard tests for ASR/Evaluation/Segment (`flow.fault-matrix.test.ts`).
+- [x] P2-18 Retrieval and stage-failure pair tests (`flow.fault-matrix.test.ts`).
+- [x] P2-19 Smoke command stability assertions + command timeout guards (`test/e2e/smoke/index.js`).
 - [ ] P2 suites pending (stream interruption, cross-platform path edge cases, large-payload pressure).
 
 ## Analyze Full-Flow Fault Matrix (new)
@@ -99,10 +101,10 @@
 ### L2 - VS Code Host Smoke E2E (medium term)
 - Use `@vscode/test-electron` to run extension host tests. (Smoke skeleton done)
 - Minimum cases:
-  1. Open plugin view.
-  2. Trigger analyze with fixture payload.
-  3. Observe output state reaches completion/failure deterministically.
-  4. Verify report artifact path exists for success case.
+  1. Validate command registration includes focus/open/settings/history entries.
+  2. Execute focus/open/settings/history smoke commands with timeout guard.
+  3. Assert extension remains active after command roundtrip.
+  4. Keep follow-up fixture-based analyze run as next phase.
 
 ### L3 - Optional UI DOM E2E (long term)
 - Add Playwright-based webview DOM assertions if needed.
