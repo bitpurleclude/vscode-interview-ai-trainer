@@ -38,7 +38,10 @@
 - [x] P2-17 Template binding guard tests for ASR/Evaluation/Segment (`flow.fault-matrix.test.ts`).
 - [x] P2-18 Retrieval and stage-failure pair tests (`flow.fault-matrix.test.ts`).
 - [x] P2-19 Smoke command stability assertions + command timeout guards (`test/e2e/smoke/index.js`).
-- [ ] P2 suites pending (stream interruption, cross-platform path edge cases, large-payload pressure).
+- [x] P2-20 SSE stream interruption and malformed-frame resilience tests (`it_templateHttp.security.test.ts`).
+- [x] P2-21 Cross-platform sessions path edge-case tests (`it_workspaceActions.security.test.ts`).
+- [x] P2-22 Guardrails range-normalization and poison-number clamp tests (`it_guardrails.security.test.ts`).
+- [ ] P2 suites pending (large-payload pressure and host-fixture end-to-end assertions).
 
 ## Analyze Full-Flow Fault Matrix (new)
 
