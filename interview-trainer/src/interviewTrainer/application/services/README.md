@@ -7,5 +7,9 @@ Application service layer (cross-use-case reuse).
   - `it_asrTranscription.ts`: ASR request orchestration and template tracing.
   - `it_topicTitle.ts`: LLM topic-title generation and title sanitizing bridge.
   - `it_analysisPersistence.ts`: persistence for analysis result/report/session metadata.
-  - `it_infraBridge.ts`: temporary application-level bridge for Interface migration (remove direct Interface -> Infra imports).
   - `it_webviewPort.ts`: application-level webview messaging port types.
+  - `it_configGateway.ts`: config-related application gateway.
+  - `it_templateGateway.ts`: template runtime/execute gateway.
+  - `it_storageGateway.ts`: report/session/history/cache storage gateway.
+  - `it_llmGateway.ts` / `it_embeddingGateway.ts` / `it_asrGateway.ts`: provider API gateways.
+  - `it_notesGateway.ts` / `it_textGateway.ts`: notes cache and utility gateways.

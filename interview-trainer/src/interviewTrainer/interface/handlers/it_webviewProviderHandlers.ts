@@ -1,6 +1,6 @@
 import path from "path";
 import * as vscode from "vscode";
-import { it_getUserProviderDir } from "../../application/services/it_infraBridge";
+import { it_getUserProviderDir } from "../../application/services/it_configGateway";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerProviderHandlers(host: ItWebviewHandlersHost): void {

@@ -10,8 +10,8 @@ import {
   type ItApiConfig,
   type ItConfigBundle,
   ItConfigService,
-  type ItLlmConfig,
-} from "../../application/services/it_infraBridge";
+} from "../../application/services/it_configGateway";
+import type { ItLlmConfig } from "../../application/services/it_llmGateway";
 import { WebviewProtocol } from "../../../webview/WebviewProtocol";
 import { ItTokenService } from "../../application/services/it_tokens";
 import { it_registerConfigHandlers } from "./it_webviewConfigHandlers";

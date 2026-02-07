@@ -3,17 +3,17 @@ import type {
   ItNoteHit,
   ItRevisedAnswer,
 } from "../../../protocol/interviewTrainer";
+import type { ItLlmConfig } from "../../application/services/it_llmGateway";
 import {
-  type ItLlmConfig,
   it_resolveBindingTemplate,
   type ItTemplateRuntime,
-} from "../../application/services/it_infraBridge";
+} from "../../application/services/it_templateGateway";
 import { it_evaluateAnswer } from "../../application/services/it_evaluation";
 import { it_parseQuestions } from "../../application/services/it_questionParser";
 import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
-} from "../../application/services/it_infraBridge";
+} from "../../application/services/it_storageGateway";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {

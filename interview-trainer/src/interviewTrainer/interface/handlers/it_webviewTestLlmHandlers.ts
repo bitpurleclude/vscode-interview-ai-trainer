@@ -6,7 +6,7 @@ import {
   it_buildDoubaoResponsesRequest,
   it_buildOpenAiChatRequest,
   it_buildOpenAiResponsesRequest,
-} from "../../application/services/it_infraBridge";
+} from "../../application/services/it_llmGateway";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 import { it_emitLlmTestRequest, it_maskHeaders } from "./it_webviewTestHelpers";
 

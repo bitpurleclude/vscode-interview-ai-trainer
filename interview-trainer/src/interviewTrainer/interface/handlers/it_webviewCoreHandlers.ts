@@ -1,9 +1,7 @@
 import path from "path";
 import * as vscode from "vscode";
-import {
-  it_ensureConfigFiles,
-  it_listHistoryItems,
-} from "../../application/services/it_infraBridge";
+import { it_ensureConfigFiles } from "../../application/services/it_configGateway";
+import { it_listHistoryItems } from "../../application/services/it_storageGateway";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerCoreHandlers(host: ItWebviewHandlersHost): void {

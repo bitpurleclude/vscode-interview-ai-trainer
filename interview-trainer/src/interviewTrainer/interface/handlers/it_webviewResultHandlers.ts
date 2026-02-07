@@ -11,9 +11,11 @@ import {
   it_storeAudioCopy,
   it_readTopicMetaAsync,
   it_writeTopicMetaAsync,
+} from "../../application/services/it_storageGateway";
+import {
   it_hashText,
   it_normalizeText,
-} from "../../application/services/it_infraBridge";
+} from "../../application/services/it_textGateway";
 import { it_deriveTopicTitle, it_sanitizeTopicTitle } from "../../application/services/it_topicTitle";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 

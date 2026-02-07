@@ -85,4 +85,9 @@
 - [x] Added `application/services/it_webviewPort.ts` as app-level port contract.
 - [x] Updated `it_logging.ts` and `it_tokens.ts` to consume `ItWebviewPort`.
 - [x] Build/test/package verified after decoupling.
+## P5-3 (2026-02-07) Bridge Decomposition Progress
+- [x] Removed monolithic `it_infraBridge.ts` transitional bridge.
+- [x] Added focused gateways (`it_configGateway.ts`, `it_templateGateway.ts`, `it_storageGateway.ts`, `it_llmGateway.ts`, `it_embeddingGateway.ts`, `it_asrGateway.ts`, `it_notesGateway.ts`, `it_textGateway.ts`).
+- [x] Updated all interface handlers to import from focused application gateways.
+- [x] Build/test/package verified after gateway decomposition.
 
