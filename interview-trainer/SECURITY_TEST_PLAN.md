@@ -17,6 +17,15 @@
 - No claim of 100% vulnerability prevention.
 - No dynamic malware behavior analysis (covered by runtime hardening, not unit tests).
 
+
+## Progress (2026-02-07)
+- [x] P0-1 Analyze payload poisoning tests + request-shape guard in `it_resultActions.ts`.
+- [x] P0-2 Retrieval numeric poisoning tests + clamp logic in `it_retrievalActions.ts`.
+- [x] P0-3 Warmup concurrency abuse tests + safe bound logic in `it_embeddingWarmup.ts`.
+- [x] P0-4 Workspace path traversal tests for in-workspace enforcement in `it_workspaceActions.ts`.
+- [x] P0-5 Template missing-variable / non-Error failure tests in `it_templateExecutor.ts`.
+- [ ] P1-P2 suites pending (cancel races, protocol flood, stream interruption, large-payload pressure).
+
 ## Test Strategy
 
 ### Layer 1: Input Boundary Tests (highest priority)

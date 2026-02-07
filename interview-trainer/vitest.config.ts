@@ -4,10 +4,12 @@ export default defineConfig({
   test: {
     environment: "node",
     include: [
-      "webview/src/utils/**/*.test.ts",
+      "webview/src/**/*.test.ts",
       "src/interviewTrainer/domain/notes/**/*.test.ts",
       "src/interviewTrainer/infra/utils/**/*.test.ts",
+      "src/interviewTrainer/infra/api/**/*.test.ts",
       "src/interviewTrainer/application/services/**/*.test.ts",
+      "src/interviewTrainer/application/useCases/**/*.test.ts",
     ],
     coverage: {
       provider: "v8",

@@ -43,7 +43,31 @@ function it_asRecord(value: unknown): Record<string, unknown> {
 }
 
 function it_toNumber(value: unknown, fallback: number): number {
-  return Number(value ?? fallback);
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function it_clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function it_toClampedInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const parsed = Math.floor(it_toNumber(value, fallback));
+  return Math.floor(it_clampNumber(parsed, min, max));
+}
+
+function it_toClampedFloat(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  return it_clampNumber(it_toNumber(value, fallback), min, max);
 }
 
 export async function it_setRetrievalEnabledFromWebview(params: {
@@ -83,38 +107,66 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
   const current = configBundle.skill.retrieval || {};
   const currentVector = current.vector || {};
 
+  const modeCandidate = String(incoming.mode || current.mode || "vector");
+  const mode = modeCandidate === "keyword" ? "keyword" : "vector";
+
   configBundle.skill = {
     ...configBundle.skill,
     retrieval: {
       ...current,
       enabled: incoming.enabled ?? current.enabled,
-      mode: String(incoming.mode || current.mode || "vector"),
-      top_k: it_toNumber(incoming.topK, Number(current.top_k ?? 5)),
-      top_k_notes: it_toNumber(incoming.topKNotes, Number(current.top_k_notes ?? current.top_k ?? 5)),
-      top_k_knowledge: it_toNumber(
+      mode,
+      top_k: it_toClampedInteger(incoming.topK, Number(current.top_k ?? 5), 1, 50),
+      top_k_notes: it_toClampedInteger(
+        incoming.topKNotes,
+        Number(current.top_k_notes ?? current.top_k ?? 5),
+        1,
+        50,
+      ),
+      top_k_knowledge: it_toClampedInteger(
         incoming.topKKnowledge,
         Number(current.top_k_knowledge ?? current.top_k ?? 5),
+        1,
+        50,
       ),
-      top_k_rubrics: it_toNumber(
+      top_k_rubrics: it_toClampedInteger(
         incoming.topKRubrics,
         Number(current.top_k_rubrics ?? current.top_k ?? 5),
+        1,
+        50,
       ),
-      top_k_examples: it_toNumber(
+      top_k_examples: it_toClampedInteger(
         incoming.topKExamples,
         Number(current.top_k_examples ?? current.top_k ?? 5),
+        1,
+        50,
       ),
-      max_concurrency: it_toNumber(incoming.maxConcurrency, Number(current.max_concurrency ?? 3)),
-      embedding_max_concurrency: it_toNumber(
+      max_concurrency: it_toClampedInteger(
+        incoming.maxConcurrency,
+        Number(current.max_concurrency ?? 3),
+        1,
+        8,
+      ),
+      embedding_max_concurrency: it_toClampedInteger(
         incoming.embeddingMaxConcurrency,
         Number(current.embedding_max_concurrency ?? 1),
+        1,
+        8,
       ),
-      min_score: it_toNumber(incoming.minScore, Number(current.min_score ?? 0.2)),
+      min_score: it_toClampedFloat(incoming.minScore, Number(current.min_score ?? 0.2), 0, 1),
       vector: {
         ...currentVector,
-        batch_size: it_toNumber(incomingVector.batchSize, Number(currentVector.batch_size ?? 16)),
-        query_max_chars: it_toNumber(
+        batch_size: it_toClampedInteger(
+          incomingVector.batchSize,
+          Number(currentVector.batch_size ?? 16),
+          1,
+          64,
+        ),
+        query_max_chars: it_toClampedInteger(
           incomingVector.queryMaxChars,
           Number(currentVector.query_max_chars ?? 1500),
+          64,
+          4000,
         ),
       },
     },

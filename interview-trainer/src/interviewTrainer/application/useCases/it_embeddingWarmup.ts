@@ -28,6 +28,15 @@ export function it_isIdleForWarmup(host: ItEmbeddingWarmupHost): boolean {
   return !host.state.steps.some((step) => step.status === "running");
 }
 
+
+function it_resolveWarmupConcurrency(raw: unknown): number {
+  const parsed = Math.floor(Number(raw));
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+  return Math.min(8, Math.max(1, parsed));
+}
+
 export function it_scheduleEmbeddingWarmup(
   host: ItEmbeddingWarmupHost,
   reason: string,
@@ -92,7 +101,7 @@ export async function it_runEmbeddingWarmup(
     "embedding",
     "retrieval",
   );
-  const warmupConcurrency = Number(
+  const warmupConcurrency = it_resolveWarmupConcurrency(
     retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency ?? 1,
   );
   const cacheRoot = host.context.globalStorageUri?.fsPath;
