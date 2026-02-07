@@ -124,3 +124,9 @@
 - [x] Moved workspace/sessions directory selection orchestration into application use-case (`it_workspaceActions.ts`).
 - [x] `it_webviewTemplateHandlers.ts` and `it_webviewWorkspaceHandlers.ts` now dispatch commands only.
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-10 (2026-02-07) Provider Handler UseCase Progress
+- [x] Moved provider config orchestration into application use-case (`it_providerActions.ts`).
+- [x] `it_webviewProviderHandlers.ts` now dispatches commands only.
+- [x] Synced use-case docs and verified build/test/package.

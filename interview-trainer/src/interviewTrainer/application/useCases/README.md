@@ -14,3 +14,4 @@
 - `it_retrievalActions.ts`: retrieval settings and cache-maintenance use-cases for Webview commands.
 - `it_templateActions.ts`: template/secrets/tokens use-cases for Webview commands.
 - `it_workspaceActions.ts`: workspace and sessions directory selection use-cases.
+- `it_providerActions.ts`: provider profile create/save/open use-cases for Webview commands.

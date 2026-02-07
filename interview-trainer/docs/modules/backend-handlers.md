@@ -36,3 +36,7 @@
 ## 常见问题
 - Webview 无响应：检查 `WebviewProtocol` 是否已绑定 webview。
 - 消息没有回调：前端请求缺少 `messageId` 或后端未返回。
+- ?????`it_webviewTemplateHandlers.ts` ? `application/useCases/it_templateActions.ts`
+- ??????`it_webviewWorkspaceHandlers.ts` ? `application/useCases/it_workspaceActions.ts`
+- Provider ???`it_webviewProviderHandlers.ts` ? `application/useCases/it_providerActions.ts`
+- Handler ?????????????????? `application/useCases/*`?
