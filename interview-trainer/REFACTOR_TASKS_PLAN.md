@@ -143,3 +143,10 @@
 - [x] `it_webviewRecordingHandlers.ts` now dispatches commands only.
 - [x] Added recording gateway export and infra converter helper (`it_recordingGateway.ts`, `infra/recording/it_recording.ts`).
 - [x] Synced use-case/docs and verified build/test/package.
+
+
+## P5-13 (2026-02-07) Template Test Handler UseCase Progress
+- [x] Moved template dry-run/live orchestration into application use-case (`it_templateTestActions.ts`).
+- [x] `it_webviewTemplateTestHandlers.ts` now dispatches commands only.
+- [x] Simplified interface test helper to logger-only API (`it_webviewTestHelpers.ts`).
+- [x] Synced use-case docs and verified build/test/package.

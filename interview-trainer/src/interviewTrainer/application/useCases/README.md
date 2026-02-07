@@ -17,3 +17,4 @@
 - `it_providerActions.ts`: provider profile create/save/open use-cases for Webview commands.
 - `it_coreActions.ts`: core webview actions (config/history/settings/reload) use-cases.
 - `it_recordingActions.ts`: recording controls and audio-to-PCM conversion use-cases.
+- `it_templateTestActions.ts`: template dry-run/live test orchestration use-cases for Webview commands.
