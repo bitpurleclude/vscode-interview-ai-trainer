@@ -150,3 +150,9 @@
 - [x] `it_webviewTemplateTestHandlers.ts` now dispatches commands only.
 - [x] Simplified interface test helper to logger-only API (`it_webviewTestHelpers.ts`).
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-14 (2026-02-07) Result Handler UseCase Progress
+- [x] Moved result handler orchestration into application use-case (`it_resultActions.ts`).
+- [x] `it_webviewResultHandlers.ts` now dispatches commands only.
+- [x] Synced use-case docs and verified build/test/package.

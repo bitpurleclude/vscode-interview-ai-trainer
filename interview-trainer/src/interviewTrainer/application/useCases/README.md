@@ -18,3 +18,4 @@
 - `it_coreActions.ts`: core webview actions (config/history/settings/reload) use-cases.
 - `it_recordingActions.ts`: recording controls and audio-to-PCM conversion use-cases.
 - `it_templateTestActions.ts`: template dry-run/live test orchestration use-cases for Webview commands.
+- `it_resultActions.ts`: result-view actions (open file/analyze/cancel) use-cases for Webview commands.
