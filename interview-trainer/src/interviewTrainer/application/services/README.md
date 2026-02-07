@@ -24,3 +24,4 @@ Application service layer (cross-use-case reuse).
   - `it_extensionLifecycle.ts`: workspace-root resolution and extension dispose cleanup helpers.
   - `it_extensionRecording.ts`: extension host recording lifecycle delegates (ffmpeg probe/input/start/stop).
   - `it_extensionState.ts`: extension state merge + `it/stateUpdate` dispatch helper.
+  - `it_extensionBootstrap.ts`: extension constructor bootstrap flow (output channel/config/token/watcher/handler/warmup startup).

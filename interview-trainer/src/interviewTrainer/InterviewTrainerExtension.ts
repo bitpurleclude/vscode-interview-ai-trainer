@@ -60,12 +60,13 @@ import {
   it_requireWorkspaceRoot,
 } from "./application/services/it_extensionLifecycle";
 import { it_updateHostState } from "./application/services/it_extensionState";
+import { it_bootstrapExtensionHost } from "./application/services/it_extensionBootstrap";
 
 export class InterviewTrainerExtension implements vscode.Disposable {
   public state: ItState = { ...IT_STATUS_INIT };
-  public configSnapshot: ItConfigSnapshot;
-  public configBundle: ItConfigBundle;
-  public configService: ItConfigService;
+  public configSnapshot!: ItConfigSnapshot;
+  public configBundle!: ItConfigBundle;
+  public configService!: ItConfigService;
   public traceLogsEnabled = false;
   public recordingChild: import("child_process").ChildProcess | null = null;
   public recordingTempDir: string | null = null;
@@ -77,7 +78,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   } | null = null;
   public detectedInput: string | null = null;
   public availableInputs: string[] | null = null;
-  public outputChannel: vscode.OutputChannel;
+  public outputChannel!: vscode.OutputChannel;
   public embeddingWarmupTimer: ReturnType<typeof setTimeout> | null = null;
   public embeddingWarmupAbort: { aborted: boolean } | null = null;
   public embeddingWarmupRunning = false;
@@ -85,21 +86,17 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   public corpusDirty = true;
   public corpusDirtyFiles = new Set<string>();
   public corpusWatchers: vscode.FileSystemWatcher[] = [];
-  public tokenService: ItTokenService;
+  public tokenService!: ItTokenService;
 
   constructor(
     public readonly context: vscode.ExtensionContext,
     public readonly webviewProtocol: WebviewProtocol,
   ) {
-    this.outputChannel = vscode.window.createOutputChannel("Interview Trainer");
-    this.configService = new ItConfigService(this.context);
-    this.configBundle = this.configService.loadBundle();
-    this.tokenService = new ItTokenService(this);
-    this.tokenService.sync();
-    this.configSnapshot = this.buildConfigSnapshot(this.configBundle.api);
-    this.updateCorpusWatchers();
-    this.registerHandlers();
-    this.scheduleEmbeddingWarmup("startup");
+    it_bootstrapExtensionHost(this, {
+      createOutputChannel: (name) => vscode.window.createOutputChannel(name),
+      createConfigService: (context) => new ItConfigService(context),
+      createTokenService: (host) => new ItTokenService(host),
+    });
   }
 
   public logEmbeddingTestFailure(error: unknown): void {

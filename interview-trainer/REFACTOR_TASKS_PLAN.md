@@ -221,3 +221,11 @@
 - [x] Added unit test for state delegate (`it_extensionState.test.ts`).
 - [ ] Follow-up: continue splitting extension session lifecycle orchestration in next P6 tasks.
 
+
+## P6-3 (2026-02-07) Extension Constructor Bootstrap Delegation Progress
+- [x] Added `application/services/it_extensionBootstrap.ts` for constructor startup sequence orchestration.
+- [x] `InterviewTrainerExtension` constructor now delegates initialization to bootstrap helper.
+- [x] Added bootstrap unit test (`it_extensionBootstrap.test.ts`) with dependency injection.
+- [x] Kept host API and startup behavior unchanged (config load, token sync, watchers/handlers/warmup).
+- [ ] Follow-up: continue splitting extension runtime session orchestration in next P6 tasks.
+
