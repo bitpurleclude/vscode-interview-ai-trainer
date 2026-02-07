@@ -9,3 +9,4 @@
 - `it_testLlm.ts`: LLM connectivity test use-case.
 - `it_testAsr.ts`: ASR connectivity test use-case.
 - `it_testEmbedding.ts`: embedding connectivity test use-case.
+- `it_environmentConfig.ts`: environment/config update use-cases for Webview setting events.

@@ -99,3 +99,8 @@
 - [x] `it_webviewTestLlmHandlers.ts`, `it_webviewTestAsrHandlers.ts`, `it_webviewTestEmbeddingHandlers.ts` now dispatch only.
 - [x] Synced use-case docs and verified build/test/package.
 
+
+## P5-6 (2026-02-07) Environment Handler UseCase Progress
+- [x] Moved environment/settings orchestration from interface handler into application use-case (`it_environmentConfig.ts`).
+- [x] `it_webviewEnvironmentHandlers.ts` now dispatches commands only.
+- [x] Synced use-case docs and verified build/test/package.
