@@ -204,3 +204,11 @@
 - [x] Application non-gateway direct infra imports found: `0`.
 - [x] Wrote compliance report with residual structural risks: `ARCH_COMPLIANCE_REPORT.md`.
 - [x] Verified build/test/package after sweep.
+
+## P6-1 (2026-02-07) Extension Host Lifecycle Decomposition Progress
+- [x] Extracted extension host config helpers into `application/services/it_extensionConfig.ts` (`it_getLlmConfig`, `it_resolveApiConfigWithProviders`, `it_firstNonEmpty`).
+- [x] Extracted workspace/dispose lifecycle helpers into `application/services/it_extensionLifecycle.ts`.
+- [x] `InterviewTrainerExtension.ts` now delegates these responsibilities instead of keeping long inline logic.
+- [x] Added unit tests for the extracted config helpers (`it_extensionConfig.test.ts`).
+- [ ] Follow-up: continue splitting `InterviewTrainerExtension` state/session orchestration in next P6 tasks.
+

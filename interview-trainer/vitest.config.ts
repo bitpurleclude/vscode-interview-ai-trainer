@@ -7,6 +7,7 @@ export default defineConfig({
       "webview/src/utils/**/*.test.ts",
       "src/interviewTrainer/domain/notes/**/*.test.ts",
       "src/interviewTrainer/infra/utils/**/*.test.ts",
+      "src/interviewTrainer/application/services/**/*.test.ts",
     ],
     coverage: {
       provider: "v8",

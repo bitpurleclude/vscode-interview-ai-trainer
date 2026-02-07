@@ -20,3 +20,5 @@ Application service layer (cross-use-case reuse).
   - `it_audioGateway.ts`: audio metrics and detailed-transcript helper gateway.
   - `it_notesGateway.ts` / `it_recordingGateway.ts`: expanded for analyze-flow corpus/retrieval/recording operations.
   - `it_notesGateway.ts`: includes embedding prewarm helpers (`it_prepareEmbeddingCache`) for warmup use-case.
+  - `it_extensionConfig.ts`: extension host config composition helpers (`it_getLlmConfig`, `it_resolveApiConfigWithProviders`, `it_firstNonEmpty`).
+  - `it_extensionLifecycle.ts`: workspace-root resolution and extension dispose cleanup helpers.
