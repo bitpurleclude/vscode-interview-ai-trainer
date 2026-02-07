@@ -4,6 +4,7 @@ export { it_callLlmChat } from "../../infra/api/it_llm";
 export type {
   ItLlmConfig,
   ItLlmMessage,
+  ItLlmReasoningEffort,
 } from "../../infra/api/it_llmTypes";
 export {
   it_buildDoubaoChatRequest,

@@ -94,4 +94,8 @@
 - [x] Moved `it/saveCurrentResult` orchestration out of interface handler to application use-case (`it_saveCurrentResult.ts`).
 - [x] `it_webviewResultHandlers.ts` now performs dispatch-only for save action.
 - [x] Synced use-case docs and verified build/test/package.
+## P5-5 (2026-02-07) Test Handler UseCase Progress
+- [x] Moved LLM/ASR/Embedding test orchestration from interface handlers into application use-cases.
+- [x] `it_webviewTestLlmHandlers.ts`, `it_webviewTestAsrHandlers.ts`, `it_webviewTestEmbeddingHandlers.ts` now dispatch only.
+- [x] Synced use-case docs and verified build/test/package.
 
