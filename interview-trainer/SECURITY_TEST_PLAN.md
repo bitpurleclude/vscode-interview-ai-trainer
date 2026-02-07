@@ -35,6 +35,7 @@
 - [x] P2-14 useAnalysisFlow payload/response contract tests (`webview/src/hooks/useAnalysisFlow.contract.test.ts`).
 - [x] P2-15 VS Code Host smoke skeleton (`test/e2e/smoke/index.js`, `npm run test:e2e:smoke`).
 - [x] P2-16 Analysis use-case integration tests (`it_analysisFlow.integration.test.ts`).
+- [x] P2-17 Template binding guard tests for ASR/Evaluation/Segment (`flow.fault-matrix.test.ts`).
 - [ ] P2 suites pending (stream interruption, cross-platform path edge cases, large-payload pressure).
 
 ## Analyze Full-Flow Fault Matrix (new)

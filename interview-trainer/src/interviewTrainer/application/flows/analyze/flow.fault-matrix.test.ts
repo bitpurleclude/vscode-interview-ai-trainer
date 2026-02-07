@@ -460,4 +460,106 @@ describe("flow fault matrix", () => {
     );
     expect(mocks.persistAnalysis).not.toHaveBeenCalled();
   });
+
+  it("rejects early when ASR template binding is missing", async () => {
+    mocks.resolveBindingTemplate.mockImplementation(
+      (_cfg: unknown, _env: string, provider: string, purpose: string) => {
+        const key = `${provider}:${purpose}`;
+        if (key === "asr:transcription") {
+          return null;
+        }
+        if (key === "llm:questionParse") {
+          return { id: "tpl-question" };
+        }
+        if (key === "llm:title") {
+          return { id: "tpl-title" };
+        }
+        if (key === "llm:evaluation") {
+          return { id: "tpl-evaluation" };
+        }
+        if (key === "llm:segment") {
+          return { id: "tpl-segment" };
+        }
+        if (key === "embedding:retrieval") {
+          return { id: "tpl-embedding" };
+        }
+        return null;
+      },
+    );
+
+    const context = createDeps();
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).rejects.toThrow();
+    expect(mocks.runAudioStage).not.toHaveBeenCalled();
+    expect(mocks.persistAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("rejects early when evaluation template binding is missing", async () => {
+    mocks.resolveBindingTemplate.mockImplementation(
+      (_cfg: unknown, _env: string, provider: string, purpose: string) => {
+        const key = `${provider}:${purpose}`;
+        if (key === "asr:transcription") {
+          return { id: "tpl-asr" };
+        }
+        if (key === "llm:questionParse") {
+          return { id: "tpl-question" };
+        }
+        if (key === "llm:title") {
+          return { id: "tpl-title" };
+        }
+        if (key === "llm:evaluation") {
+          return null;
+        }
+        if (key === "llm:segment") {
+          return { id: "tpl-segment" };
+        }
+        if (key === "embedding:retrieval") {
+          return { id: "tpl-embedding" };
+        }
+        return null;
+      },
+    );
+
+    const context = createDeps();
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).rejects.toThrow();
+    expect(mocks.runAudioStage).not.toHaveBeenCalled();
+    expect(mocks.persistAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("rejects multi-question flow when segment template binding is missing", async () => {
+    mocks.resolveBindingTemplate.mockImplementation(
+      (_cfg: unknown, _env: string, provider: string, purpose: string) => {
+        const key = `${provider}:${purpose}`;
+        if (key === "asr:transcription") {
+          return { id: "tpl-asr" };
+        }
+        if (key === "llm:questionParse") {
+          return { id: "tpl-question" };
+        }
+        if (key === "llm:title") {
+          return { id: "tpl-title" };
+        }
+        if (key === "llm:evaluation") {
+          return { id: "tpl-evaluation" };
+        }
+        if (key === "llm:segment") {
+          return null;
+        }
+        if (key === "embedding:retrieval") {
+          return { id: "tpl-embedding" };
+        }
+        return null;
+      },
+    );
+
+    const context = createDeps();
+
+    await expect(it_runAnalysis(context.deps as any, createRequest())).rejects.toThrow();
+    expect(mocks.runAudioStage).toHaveBeenCalledTimes(1);
+    expect(mocks.runSegmentStage).not.toHaveBeenCalled();
+    expect(mocks.runRetrievalStage).not.toHaveBeenCalled();
+    expect(mocks.persistAnalysis).not.toHaveBeenCalled();
+  });
+
 });
