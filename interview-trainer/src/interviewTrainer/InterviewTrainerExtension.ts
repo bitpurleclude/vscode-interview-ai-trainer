@@ -42,13 +42,13 @@ import {
   it_updateProgress,
 } from "./application/services/it_progress";
 import {
-  it_detectDefaultInput,
-  it_findFfmpeg,
-  it_listInputs,
-  it_runFfmpegProbe,
-  it_startNativeRecording,
-  it_stopNativeRecording,
-} from "./infra/recording/it_recording";
+  it_detectRecordingInput,
+  it_findRecordingFfmpeg,
+  it_listRecordingInputs,
+  it_probeRecordingFfmpeg,
+  it_startHostRecording,
+  it_stopHostRecording,
+} from "./application/services/it_extensionRecording";
 import { it_registerHandlers } from "./interface/handlers/it_webviewHandlers";
 import {
   it_firstNonEmpty,
@@ -59,6 +59,7 @@ import {
   it_disposeExtensionHost,
   it_requireWorkspaceRoot,
 } from "./application/services/it_extensionLifecycle";
+import { it_updateHostState } from "./application/services/it_extensionState";
 
 export class InterviewTrainerExtension implements vscode.Disposable {
   public state: ItState = { ...IT_STATUS_INIT };
@@ -160,8 +161,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   public updateState(nextState: Partial<ItState>): void {
-    this.state = { ...this.state, ...nextState };
-    this.webviewProtocol.send("it/stateUpdate", this.state);
+    it_updateHostState(this, nextState);
   }
 
   public updateEmbeddingWarmup(next: Partial<ItEmbeddingWarmupState>): void {
@@ -215,22 +215,22 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   public async it_findFfmpeg(): Promise<string | null> {
-    return await it_findFfmpeg();
+    return await it_findRecordingFfmpeg();
   }
 
   public async it_detectDefaultInput(ffmpeg: string): Promise<string | null> {
-    return await it_detectDefaultInput(this, ffmpeg);
+    return await it_detectRecordingInput(this, ffmpeg);
   }
 
   public async it_runFfmpegProbe(
     ffmpeg: string,
     args: string[],
   ): Promise<{ stderr: string; exitCode: number | null; exitSignal: string | null }> {
-    return await it_runFfmpegProbe(ffmpeg, args);
+    return await it_probeRecordingFfmpeg(ffmpeg, args);
   }
 
   public async it_listInputs(ffmpeg: string): Promise<string[]> {
-    return await it_listInputs(this, ffmpeg);
+    return await it_listRecordingInputs(this, ffmpeg);
   }
 
   public async it_startNativeRecording(deviceOverride?: string): Promise<{
@@ -238,14 +238,14 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     tmpPath: string;
     startedAt: number;
   }> {
-    return await it_startNativeRecording(this, deviceOverride);
+    return await it_startHostRecording(this, deviceOverride);
   }
 
   public async it_stopNativeRecording(): Promise<{
     audio: ItAnalyzeRequest["audio"];
     locked?: string[];
   }> {
-    return await it_stopNativeRecording(this);
+    return await it_stopHostRecording(this);
   }
 
   public async handleAnalyze(

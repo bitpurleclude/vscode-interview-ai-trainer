@@ -22,3 +22,5 @@ Application service layer (cross-use-case reuse).
   - `it_notesGateway.ts`: includes embedding prewarm helpers (`it_prepareEmbeddingCache`) for warmup use-case.
   - `it_extensionConfig.ts`: extension host config composition helpers (`it_getLlmConfig`, `it_resolveApiConfigWithProviders`, `it_firstNonEmpty`).
   - `it_extensionLifecycle.ts`: workspace-root resolution and extension dispose cleanup helpers.
+  - `it_extensionRecording.ts`: extension host recording lifecycle delegates (ffmpeg probe/input/start/stop).
+  - `it_extensionState.ts`: extension state merge + `it/stateUpdate` dispatch helper.

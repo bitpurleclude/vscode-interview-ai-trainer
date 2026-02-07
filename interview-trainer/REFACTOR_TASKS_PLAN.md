@@ -212,3 +212,12 @@
 - [x] Added unit tests for the extracted config helpers (`it_extensionConfig.test.ts`).
 - [ ] Follow-up: continue splitting `InterviewTrainerExtension` state/session orchestration in next P6 tasks.
 
+
+## P6-2 (2026-02-07) Extension Recording/State Delegation Progress
+- [x] Added `application/services/it_extensionRecording.ts` to isolate recording-host delegates (ffmpeg probe/input/start/stop).
+- [x] Added `application/services/it_extensionState.ts` to isolate host state merge and `it/stateUpdate` emit.
+- [x] Expanded `it_recordingGateway.ts` to expose recording host APIs and types for application-level delegation.
+- [x] `InterviewTrainerExtension.ts` switched recording/state methods to delegated helpers; host keeps API surface unchanged.
+- [x] Added unit test for state delegate (`it_extensionState.test.ts`).
+- [ ] Follow-up: continue splitting extension session lifecycle orchestration in next P6 tasks.
+
