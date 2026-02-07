@@ -19,3 +19,4 @@ Application service layer (cross-use-case reuse).
   - `it_configSnapshot.ts`: now consumes config/text gateways instead of direct infra imports.
   - `it_audioGateway.ts`: audio metrics and detailed-transcript helper gateway.
   - `it_notesGateway.ts` / `it_recordingGateway.ts`: expanded for analyze-flow corpus/retrieval/recording operations.
+  - `it_notesGateway.ts`: includes embedding prewarm helpers (`it_prepareEmbeddingCache`) for warmup use-case.

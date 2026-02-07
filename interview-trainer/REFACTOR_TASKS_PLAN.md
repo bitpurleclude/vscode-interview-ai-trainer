@@ -189,3 +189,10 @@
 - [x] Added `it_audioGateway.ts` and expanded notes/recording/config gateways for flow-stage usage.
 - [x] Kept flow behavior intact (question parse, ASR, retrieval, segment, evaluation pipeline).
 - [x] Synced service docs and verified build/test/package.
+
+
+## P5-20 (2026-02-07) Embedding Warmup Gateway Alignment Progress
+- [x] `it_embeddingWarmup.ts` switched from direct infra imports to `it_templateGateway`, `it_notesGateway`, `it_textGateway`.
+- [x] Warmup host type references switched to `it_configGateway` types.
+- [x] Expanded `it_notesGateway.ts` with `it_prepareEmbeddingCache` export for precompute workflow reuse.
+- [x] Synced service docs and verified build/test/package.

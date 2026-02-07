@@ -4,5 +4,6 @@ export {
   it_buildCorpusAsync,
   it_clearEmbeddingMemoryCache,
   it_createRetrievalMetrics,
+  it_prepareEmbeddingCache,
   it_retrieveNotesMulti,
 } from "../../infra/notes";
