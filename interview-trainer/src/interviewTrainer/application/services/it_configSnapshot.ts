@@ -1,10 +1,10 @@
 import path from "path";
 import * as vscode from "vscode";
 import {
-  ItApiConfig,
-  ItConfigBundle,
-} from "../../infra/api/it_apiConfig";
-import { ItConfigService } from "../../infra/api/it_configService";
+  ItConfigService,
+  type ItApiConfig,
+  type ItConfigBundle,
+} from "./it_configGateway";
 import {
   ItApiTemplate,
   ItConfigSnapshot,
@@ -13,7 +13,7 @@ import {
   ItTokenStoreSnapshot,
   ItTemplatesSnapshot,
 } from "../../../protocol/interviewTrainer";
-import { it_hashText } from "../../infra/utils/it_text";
+import { it_hashText } from "./it_textGateway";
 
 const IT_TEMPLATE_VAR_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 

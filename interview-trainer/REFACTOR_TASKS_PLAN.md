@@ -176,3 +176,9 @@
 - [x] `it_analysisPersistence.ts` switched to `it_storageGateway` + `it_textGateway`.
 - [x] Extended `it_recordingGateway.ts` to expose PCM chunk splitter for ASR chunked transcription.
 - [x] Synced service docs and verified build/test/package.
+
+
+## P5-18 (2026-02-07) Config Snapshot Gateway Alignment Progress
+- [x] `it_configSnapshot.ts` switched from direct infra config/text imports to `it_configGateway` and `it_textGateway`.
+- [x] No runtime behavior change; snapshot/migration/watcher logic kept intact.
+- [x] Synced service docs and verified build/test/package.
