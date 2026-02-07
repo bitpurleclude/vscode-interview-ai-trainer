@@ -12,3 +12,5 @@
 - `it_environmentConfig.ts`: environment/config update use-cases for Webview setting events.
 - `it_questionActions.ts`: question parse and demo-regeneration use-cases for Webview commands.
 - `it_retrievalActions.ts`: retrieval settings and cache-maintenance use-cases for Webview commands.
+- `it_templateActions.ts`: template/secrets/tokens use-cases for Webview commands.
+- `it_workspaceActions.ts`: workspace and sessions directory selection use-cases.

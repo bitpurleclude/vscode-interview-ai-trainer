@@ -117,3 +117,10 @@
 - [x] `it_webviewRetrievalHandlers.ts` now dispatches commands only.
 - [x] Added infra cache helpers (`infra/storage/it_cache.ts`) and gateway exports for cache directory cleanup.
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-9 (2026-02-07) Template/Workspace Handler UseCase Progress
+- [x] Moved template/secrets/tokens orchestration into application use-case (`it_templateActions.ts`).
+- [x] Moved workspace/sessions directory selection orchestration into application use-case (`it_workspaceActions.ts`).
+- [x] `it_webviewTemplateHandlers.ts` and `it_webviewWorkspaceHandlers.ts` now dispatch commands only.
+- [x] Synced use-case docs and verified build/test/package.
