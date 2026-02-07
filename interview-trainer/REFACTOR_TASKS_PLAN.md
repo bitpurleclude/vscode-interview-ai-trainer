@@ -281,3 +281,11 @@
 - [x] `it_analysisSessionState.ts` and `it_analysisRunConfig.ts` now consume shared port types to keep boundaries aligned.
 - [x] Synced `application/services/README.md` and `application/useCases/README.md` for the new contract owner.
 - [ ] Follow-up: continue reducing large host contracts in `interface/handlers/it_webviewHandlers.ts` through capability-specific ports.
+
+## P6-11 (2026-02-07) Webview Handler Host Contract Decomposition Progress
+- [x] Added `interface/handlers/it_webviewHandlerPorts.ts` and split Webview Host contract into capability-specific ports (core/config/question/recording/retrieval/result/test).
+- [x] Updated all `it_webview*Handlers.ts` and helper files to consume dedicated port types instead of full `ItWebviewHandlersHost`.
+- [x] Simplified `it_webviewHandlers.ts` to registration-only role and type re-export from ports module.
+- [x] Synced `interface/handlers/README.md` with new handler-port constraint.
+- [ ] Follow-up: continue shrinking duplicated mutable state fields (`configBundle/configSnapshot`) via focused setter ports.
+

@@ -11,10 +11,10 @@ import {
   type ItTemplateConfigResult,
   type ItTemplateUseCaseContext,
 } from "../../application/useCases/it_templateActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItTemplateHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createTemplateUseCaseContext(
-  host: ItWebviewHandlersHost,
+  host: ItTemplateHandlersPort,
 ): ItTemplateUseCaseContext {
   return {
     extensionContext: host.context,
@@ -25,7 +25,7 @@ function it_createTemplateUseCaseContext(
 }
 
 async function it_runTemplateConfigUseCase<T>(
-  host: ItWebviewHandlersHost,
+  host: ItTemplateHandlersPort,
   useCase: (params: {
     context: ItTemplateUseCaseContext;
     payload: unknown;
@@ -42,7 +42,7 @@ async function it_runTemplateConfigUseCase<T>(
   return result.value;
 }
 
-export function it_registerTemplateHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerTemplateHandlers(host: ItTemplateHandlersPort): void {
   host.webviewProtocol.on("it/saveTemplate", async (msg) =>
     it_runTemplateConfigUseCase(host, it_saveTemplateFromWebview, msg.data),
   );

@@ -3,9 +3,9 @@ import {
   it_regenerateDemoAnswerFromWebview,
   type ItQuestionUseCaseContext,
 } from "../../application/useCases/it_questionActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItQuestionHandlersPort } from "./it_webviewHandlerPorts";
 
-function it_createQuestionUseCaseContext(host: ItWebviewHandlersHost): ItQuestionUseCaseContext {
+function it_createQuestionUseCaseContext(host: ItQuestionHandlersPort): ItQuestionUseCaseContext {
   return {
     extensionContext: host.context,
     configService: host.configService,
@@ -18,7 +18,7 @@ function it_createQuestionUseCaseContext(host: ItWebviewHandlersHost): ItQuestio
   };
 }
 
-export function it_registerQuestionHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerQuestionHandlers(host: ItQuestionHandlersPort): void {
   host.webviewProtocol.on("it/parseQuestions", async (msg) => {
     const result = await it_parseQuestionsFromWebview({
       context: it_createQuestionUseCaseContext(host),

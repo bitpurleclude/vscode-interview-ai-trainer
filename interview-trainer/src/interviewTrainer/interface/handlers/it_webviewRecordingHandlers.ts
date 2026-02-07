@@ -5,10 +5,10 @@ import {
   it_startNativeRecordingFromWebview,
   it_stopNativeRecordingFromWebview,
 } from "../../application/useCases/it_recordingActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItRecordingHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createRecordingUseCaseContext(
-  host: ItWebviewHandlersHost,
+  host: ItRecordingHandlersPort,
 ): ItRecordingUseCaseContext {
   return {
     findFfmpeg: host.it_findFfmpeg,
@@ -22,7 +22,7 @@ function it_createRecordingUseCaseContext(
   };
 }
 
-export function it_registerRecordingHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerRecordingHandlers(host: ItRecordingHandlersPort): void {
   host.webviewProtocol.on("it/startNativeRecording", async (msg) =>
     it_startNativeRecordingFromWebview({
       context: it_createRecordingUseCaseContext(host),

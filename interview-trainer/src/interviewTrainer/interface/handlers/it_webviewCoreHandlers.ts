@@ -10,9 +10,9 @@ import {
   it_openSettingsFromWebview,
   it_reloadWindowFromWebview,
 } from "../../application/useCases/it_coreActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItCoreHandlersPort } from "./it_webviewHandlerPorts";
 
-function it_createCoreUseCaseContext(host: ItWebviewHandlersHost): ItCoreUseCaseContext {
+function it_createCoreUseCaseContext(host: ItCoreHandlersPort): ItCoreUseCaseContext {
   return {
     extensionContext: host.context,
     state: host.state,
@@ -47,7 +47,7 @@ function it_createCoreUseCaseContext(host: ItWebviewHandlersHost): ItCoreUseCase
 }
 
 function it_applyCoreResult(
-  host: ItWebviewHandlersHost,
+  host: ItCoreHandlersPort,
   result: ItCoreResult<unknown>,
 ): void {
   if (result.configBundle) {
@@ -59,7 +59,7 @@ function it_applyCoreResult(
 }
 
 async function it_runCoreUseCase<T>(
-  host: ItWebviewHandlersHost,
+  host: ItCoreHandlersPort,
   useCase: (params: {
     context: ItCoreUseCaseContext;
     payload?: unknown;
@@ -74,7 +74,7 @@ async function it_runCoreUseCase<T>(
   return result.value;
 }
 
-export function it_registerCoreHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerCoreHandlers(host: ItCoreHandlersPort): void {
   host.webviewProtocol.on("it/getState", async () =>
     it_runCoreUseCase(host, ({ context }) => it_getStateFromWebview({ context })),
   );

@@ -1,8 +1,8 @@
 import { it_testLlm } from "../../application/useCases/it_testLlm";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItLlmTestHandlerPort } from "./it_webviewHandlerPorts";
 import { it_emitLlmTestRequest } from "./it_webviewTestHelpers";
 
-export function it_registerLlmTestHandler(host: ItWebviewHandlersHost): void {
+export function it_registerLlmTestHandler(host: ItLlmTestHandlerPort): void {
   host.webviewProtocol.on("it/testLlm", async (msg) => {
     return await it_testLlm({
       payload: msg.data,

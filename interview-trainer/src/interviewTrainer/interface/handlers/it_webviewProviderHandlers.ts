@@ -6,9 +6,9 @@ import {
   type ItProviderUseCaseContext,
   it_saveProviderConfigFromWebview,
 } from "../../application/useCases/it_providerActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItProviderHandlersPort } from "./it_webviewHandlerPorts";
 
-function it_createProviderUseCaseContext(host: ItWebviewHandlersHost): ItProviderUseCaseContext {
+function it_createProviderUseCaseContext(host: ItProviderHandlersPort): ItProviderUseCaseContext {
   return {
     extensionContext: host.context,
     configService: host.configService,
@@ -20,7 +20,7 @@ function it_createProviderUseCaseContext(host: ItWebviewHandlersHost): ItProvide
 }
 
 async function it_runProviderConfigUseCase<T>(
-  host: ItWebviewHandlersHost,
+  host: ItProviderHandlersPort,
   useCase: (params: {
     context: ItProviderUseCaseContext;
     payload: unknown;
@@ -37,7 +37,7 @@ async function it_runProviderConfigUseCase<T>(
   return result.value;
 }
 
-export function it_registerProviderHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerProviderHandlers(host: ItProviderHandlersPort): void {
   host.webviewProtocol.on("it/createProviderConfig", async (msg) =>
     it_runProviderConfigUseCase(host, it_createProviderConfigFromWebview, msg.data),
   );

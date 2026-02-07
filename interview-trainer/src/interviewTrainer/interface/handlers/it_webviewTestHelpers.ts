@@ -1,7 +1,7 @@
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItLlmTestHandlerPort } from "./it_webviewHandlerPorts";
 
 export function it_emitLlmTestRequest(
-  host: ItWebviewHandlersHost,
+  host: ItLlmTestHandlerPort,
   detail: Record<string, unknown>,
 ): void {
   const stamp = new Date().toISOString();

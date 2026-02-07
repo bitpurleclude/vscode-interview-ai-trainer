@@ -3,10 +3,10 @@ import {
   it_testTemplateLive,
   type ItTemplateTestUseCaseContext,
 } from "../../application/useCases/it_templateTestActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItTemplateTestHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createTemplateTestUseCaseContext(
-  host: ItWebviewHandlersHost,
+  host: ItTemplateTestHandlersPort,
 ): ItTemplateTestUseCaseContext {
   return {
     extensionContext: host.context,
@@ -22,7 +22,7 @@ function it_createTemplateTestUseCaseContext(
   };
 }
 
-export function it_registerTemplateTestHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerTemplateTestHandlers(host: ItTemplateTestHandlersPort): void {
   host.webviewProtocol.on("it/testTemplateDryRun", async (msg) =>
     it_testTemplateDryRun({
       context: it_createTemplateTestUseCaseContext(host),

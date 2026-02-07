@@ -5,10 +5,10 @@ import {
   type ItWorkspaceResult,
   type ItWorkspaceUseCaseContext,
 } from "../../application/useCases/it_workspaceActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItWorkspaceHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createWorkspaceUseCaseContext(
-  host: ItWebviewHandlersHost,
+  host: ItWorkspaceHandlersPort,
 ): ItWorkspaceUseCaseContext {
   return {
     configService: host.configService,
@@ -34,7 +34,7 @@ function it_createWorkspaceUseCaseContext(
 }
 
 function it_applyWorkspaceResult(
-  host: ItWebviewHandlersHost,
+  host: ItWorkspaceHandlersPort,
   result: ItWorkspaceResult<unknown>,
 ): void {
   host.configBundle = result.configBundle;
@@ -44,7 +44,7 @@ function it_applyWorkspaceResult(
   }
 }
 
-export function it_registerWorkspaceHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerWorkspaceHandlers(host: ItWorkspaceHandlersPort): void {
   host.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
     const result = await it_selectWorkspaceDirFromWebview({
       context: it_createWorkspaceUseCaseContext(host),

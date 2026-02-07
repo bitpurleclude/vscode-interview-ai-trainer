@@ -13,9 +13,9 @@ import {
   it_updateStreamingSettings,
   it_updateTopicSettings,
 } from "../../application/useCases/it_environmentConfig";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItEnvironmentHandlersPort } from "./it_webviewHandlerPorts";
 
-function it_createEnvironmentContext(host: ItWebviewHandlersHost): ItEnvironmentConfigContext {
+function it_createEnvironmentContext(host: ItEnvironmentHandlersPort): ItEnvironmentConfigContext {
   return {
     configBundle: host.configBundle,
     configService: host.configService,
@@ -25,7 +25,7 @@ function it_createEnvironmentContext(host: ItWebviewHandlersHost): ItEnvironment
 }
 
 async function it_runEnvironmentUseCase<T>(
-  host: ItWebviewHandlersHost,
+  host: ItEnvironmentHandlersPort,
   useCase: (
     context: ItEnvironmentConfigContext,
     payload: unknown,
@@ -39,7 +39,7 @@ async function it_runEnvironmentUseCase<T>(
   return result.value;
 }
 
-export function it_registerEnvironmentHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort): void {
   host.webviewProtocol.on("it/setActiveEnvironment", async (msg) =>
     it_runEnvironmentUseCase(host, it_setActiveEnvironment, msg.data),
   );

@@ -9,9 +9,9 @@ import {
   it_saveCurrentResult,
   type ItSaveCurrentResultPayload,
 } from "../../application/useCases/it_saveCurrentResult";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItResultHandlersPort } from "./it_webviewHandlerPorts";
 
-function it_createResultUseCaseContext(host: ItWebviewHandlersHost): ItResultUseCaseContext {
+function it_createResultUseCaseContext(host: ItResultHandlersPort): ItResultUseCaseContext {
   return {
     openFile: async (filePath) => {
       await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(filePath));
@@ -25,7 +25,7 @@ function it_createResultUseCaseContext(host: ItWebviewHandlersHost): ItResultUse
   };
 }
 
-export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerResultHandlers(host: ItResultHandlersPort): void {
   host.webviewProtocol.on("openFile", async (msg) =>
     it_openResultFileFromWebview({
       context: it_createResultUseCaseContext(host),

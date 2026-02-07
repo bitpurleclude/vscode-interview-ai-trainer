@@ -7,10 +7,10 @@ import {
   it_setRetrievalEnabledFromWebview,
   it_updateRetrievalSettingsFromWebview,
 } from "../../application/useCases/it_retrievalActions";
-import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
+import type { ItRetrievalHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createRetrievalUseCaseContext(
-  host: ItWebviewHandlersHost,
+  host: ItRetrievalHandlersPort,
 ): ItRetrievalUseCaseContext {
   return {
     extensionContext: host.context,
@@ -24,7 +24,7 @@ function it_createRetrievalUseCaseContext(
 }
 
 function it_applyRetrievalPatch(
-  host: ItWebviewHandlersHost,
+  host: ItRetrievalHandlersPort,
   patch: ItRetrievalResult<unknown>["patch"],
 ): void {
   if (patch?.corpusDirty !== undefined) {
@@ -33,7 +33,7 @@ function it_applyRetrievalPatch(
 }
 
 async function it_runRetrievalConfigUseCase<T>(
-  host: ItWebviewHandlersHost,
+  host: ItRetrievalHandlersPort,
   useCase: (params: {
     context: ItRetrievalUseCaseContext;
     payload: unknown;
@@ -52,7 +52,7 @@ async function it_runRetrievalConfigUseCase<T>(
 }
 
 async function it_runRetrievalUseCase<T>(
-  host: ItWebviewHandlersHost,
+  host: ItRetrievalHandlersPort,
   useCase: (params: {
     context: ItRetrievalUseCaseContext;
   }) => Promise<ItRetrievalResult<T>>,
@@ -65,7 +65,7 @@ async function it_runRetrievalUseCase<T>(
   return result.value;
 }
 
-export function it_registerRetrievalHandlers(host: ItWebviewHandlersHost): void {
+export function it_registerRetrievalHandlers(host: ItRetrievalHandlersPort): void {
   host.webviewProtocol.on("it/setRetrievalEnabled", async (msg) =>
     it_runRetrievalConfigUseCase(host, it_setRetrievalEnabledFromWebview, msg.data),
   );
