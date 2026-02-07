@@ -90,4 +90,8 @@
 - [x] Added focused gateways (`it_configGateway.ts`, `it_templateGateway.ts`, `it_storageGateway.ts`, `it_llmGateway.ts`, `it_embeddingGateway.ts`, `it_asrGateway.ts`, `it_notesGateway.ts`, `it_textGateway.ts`).
 - [x] Updated all interface handlers to import from focused application gateways.
 - [x] Build/test/package verified after gateway decomposition.
+## P5-4 (2026-02-07) Result Save UseCase Progress
+- [x] Moved `it/saveCurrentResult` orchestration out of interface handler to application use-case (`it_saveCurrentResult.ts`).
+- [x] `it_webviewResultHandlers.ts` now performs dispatch-only for save action.
+- [x] Synced use-case docs and verified build/test/package.
 
