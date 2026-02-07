@@ -31,6 +31,7 @@
 ## 注意事项
 - 所有 handler 必须保持消息格式一致（`status/content/error`）。
 - 对 long-running 请求设置合理超时，并在前端提示。
+- 工作区目录写入统一使用 `skill.workspace.<xxx_dir>`；禁止继续写入旧顶层 `skill.<xxx_dir>`。
 
 ## 常见问题
 - Webview 无响应：检查 `WebviewProtocol` 是否已绑定 webview。

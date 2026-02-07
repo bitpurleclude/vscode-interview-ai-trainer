@@ -1305,7 +1305,7 @@
 .it-template__param-item,
 .it-template__secret-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   padding: 4px 6px;
@@ -1331,6 +1331,21 @@
   flex-direction: column;
   gap: 2px;
   flex: 1;
+}
+
+.it-template__secret-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.it-template__secret-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .it-template__token-name {

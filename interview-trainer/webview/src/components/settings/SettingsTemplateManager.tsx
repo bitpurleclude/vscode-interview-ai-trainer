@@ -73,6 +73,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
   const [testRunId, setTestRunId] = useState<string>("");
   const [testTokenInfo, setTestTokenInfo] = useState<any | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [secretDeleteConfirm, setSecretDeleteConfirm] = useState<string | null>(null);
   const [showAllVars, setShowAllVars] = useState(false);
 
   const selectedTemplateName = selectedTemplate?.name || selectedTemplate?.id || "";
@@ -145,6 +146,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     setTestRunId("");
     setTestTokenInfo(null);
     setDeleteConfirmId(null);
+    setSecretDeleteConfirm(null);
     setShowAllVars(false);
   }, [selectedTemplateId, templateCategory]);
 
@@ -321,6 +323,8 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
           secretMessage={secretMessage}
           handleSaveSecret={handleSaveSecret}
           handleDeleteSecret={handleDeleteSecret}
+          secretDeleteConfirm={secretDeleteConfirm}
+          setSecretDeleteConfirm={setSecretDeleteConfirm}
           templateParamOptions={templateParamOptions}
           templateParamInput={templateParamInput}
           setTemplateParamInput={setTemplateParamInput}

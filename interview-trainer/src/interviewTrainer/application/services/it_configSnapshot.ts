@@ -119,6 +119,47 @@ export type ItConfigSnapshotHost = {
   tokenService?: { getSnapshot: (env: string) => ItTokenStoreSnapshot; sync: () => void };
 };
 
+const IT_LEGACY_WORKSPACE_KEYS = [
+  "notes_dir",
+  "prompts_dir",
+  "rubrics_dir",
+  "knowledge_dir",
+  "examples_dir",
+];
+
+type ItWorkspaceMigrationResult = {
+  skill: Record<string, any>;
+  changed: boolean;
+};
+
+function it_migrateLegacyWorkspaceDirs(skill: Record<string, any>): ItWorkspaceMigrationResult {
+  const nextSkill = { ...(skill || {}) };
+  const nextWorkspace = {
+    ...((nextSkill.workspace && typeof nextSkill.workspace === "object"
+      ? nextSkill.workspace
+      : {}) as Record<string, any>),
+  };
+  let changed = false;
+
+  IT_LEGACY_WORKSPACE_KEYS.forEach((key) => {
+    const legacyValue = nextSkill[key];
+    if (legacyValue !== undefined && legacyValue !== null && String(legacyValue).trim()) {
+      if (!String(nextWorkspace[key] ?? "").trim()) {
+        nextWorkspace[key] = legacyValue;
+        changed = true;
+      }
+      delete nextSkill[key];
+      changed = true;
+    }
+  });
+
+  if (!changed) {
+    return { skill: nextSkill, changed: false };
+  }
+  nextSkill.workspace = nextWorkspace;
+  return { skill: nextSkill, changed: true };
+}
+
 export function it_normalizeWorkspaceKey(root: string): string {
   const resolved = path.resolve(String(root || ""));
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
@@ -385,6 +426,12 @@ export async function it_refreshConfigSnapshot(
   host: ItConfigSnapshotHost,
 ): Promise<ItConfigSnapshot> {
   host.configBundle = host.configService.loadBundle();
+  const workspaceMigrated = it_migrateLegacyWorkspaceDirs(host.configBundle.skill || {});
+  if (workspaceMigrated.changed) {
+    host.configBundle.skill = workspaceMigrated.skill;
+    host.configService.saveSkillConfig(host.configBundle.skill);
+    host.configBundle = host.configService.loadBundle();
+  }
   host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
   host.tokenService?.sync();
   host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);

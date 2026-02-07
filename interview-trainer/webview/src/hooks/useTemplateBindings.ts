@@ -120,10 +120,6 @@ export function useTemplateBindings({
 
   const handleDeleteSecret = useCallback(
     async (name: string) => {
-      const confirmed = window.confirm(`确认删除密钥 ${name}？`);
-      if (!confirmed) {
-        return;
-      }
       setSavingSecret(true);
       setSecretMessage(null);
       try {
@@ -134,7 +130,7 @@ export function useTemplateBindings({
           }
           setSecretMessage("密钥已删除。");
         } else {
-          setSecretMessage("密钥删除失败，请重试。");
+          setSecretMessage(`密钥删除失败：${resp?.error || "请重试。"}`);
         }
       } catch (err) {
         setSecretMessage(`密钥删除失败：${err instanceof Error ? err.message : String(err)}`);

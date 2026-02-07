@@ -17,10 +17,11 @@ export function it_registerWorkspaceHandlers(host: ItWebviewHandlersHost): void 
       throw new Error("invalid workspace kind");
     }
     const workspaceRoot = host.requireWorkspaceRoot();
-    const current =
-      kind && host.configBundle.skill?.[targetKey]
-        ? String(host.configBundle.skill[targetKey])
-        : "";
+    const skillConfig = (host.configBundle.skill || {}) as Record<string, any>;
+    const workspaceConfig = (skillConfig.workspace || {}) as Record<string, any>;
+    const current = String(
+      workspaceConfig[targetKey] ?? skillConfig[targetKey] ?? "",
+    ).trim();
     const selection = await vscode.window.showOpenDialog({
       canSelectFiles: false,
       canSelectFolders: true,
@@ -41,9 +42,18 @@ export function it_registerWorkspaceHandlers(host: ItWebviewHandlersHost): void 
     }
     const normalized = relative ? relative.split(path.sep).join("/") : ".";
     host.configBundle = host.configService.loadBundle();
+    const nextSkill = {
+      ...(host.configBundle.skill || {}),
+      workspace: {
+        ...((host.configBundle.skill?.workspace || {}) as Record<string, any>),
+        [targetKey]: normalized || ".",
+      },
+    } as Record<string, any>;
+    if (Object.prototype.hasOwnProperty.call(nextSkill, targetKey)) {
+      delete nextSkill[targetKey];
+    }
     host.configBundle.skill = {
-      ...host.configBundle.skill,
-      [targetKey]: normalized || ".",
+      ...nextSkill,
     };
     host.configService.saveSkillConfig(host.configBundle.skill);
     host.configSnapshot = await host.refreshConfigSnapshot();

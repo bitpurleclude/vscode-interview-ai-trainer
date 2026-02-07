@@ -16,6 +16,8 @@ type TemplateSidebarProps = {
   secretMessage: string | null;
   handleSaveSecret: () => void;
   handleDeleteSecret: (name: string) => void;
+  secretDeleteConfirm: string | null;
+  setSecretDeleteConfirm: React.Dispatch<React.SetStateAction<string | null>>;
   templateParamOptions: string[];
   templateParamInput: string;
   setTemplateParamInput: React.Dispatch<React.SetStateAction<string>>;
@@ -41,6 +43,8 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
   secretMessage,
   handleSaveSecret,
   handleDeleteSecret,
+  secretDeleteConfirm,
+  setSecretDeleteConfirm,
   templateParamOptions,
   templateParamInput,
   setTemplateParamInput,
@@ -54,6 +58,19 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
 }) => {
   const tokenList = tokenStore?.tokens ?? [];
   const tokenAutoRefresh = tokenStore?.autoRefresh !== false;
+  const [copyTip, setCopyTip] = React.useState<string | null>(null);
+
+  const copyReference = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyTip(`已复制：${text}`);
+      setTimeout(() => {
+        setCopyTip((current) => (current === `已复制：${text}` ? null : current));
+      }, 1200);
+    } catch {
+      setCopyTip("复制失败，请手动复制。");
+    }
+  };
   const formatTokenTime = (value?: string) => {
     if (!value) return "";
     const date = new Date(value);
@@ -133,14 +150,45 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
           {templateSecrets.length ? (
             templateSecrets.map((name) => (
               <div key={name} className="it-template__secret-item">
-                <span>{name}</span>
-                <button
-                  className="it-button it-button--secondary it-button--compact"
-                  disabled={uiLocked || savingSecret}
-                  onClick={() => handleDeleteSecret(name)}
-                >
-                  删除
-                </button>
+                <div className="it-template__secret-main">
+                  <span className="it-template__token-name">{name}</span>
+                  <div className="it-template__token-meta">{`{{secrets.${name}}}`}</div>
+                </div>
+                <div className="it-template__secret-actions">
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked || savingSecret}
+                    onClick={() => copyReference(`{{secrets.${name}}}`)}
+                  >
+                    复制引用
+                  </button>
+                  {secretDeleteConfirm === name ? (
+                    <>
+                      <button
+                        className="it-button it-button--secondary it-button--compact"
+                        disabled={uiLocked || savingSecret}
+                        onClick={() => handleDeleteSecret(name)}
+                      >
+                        确认删除
+                      </button>
+                      <button
+                        className="it-button it-button--secondary it-button--compact"
+                        disabled={uiLocked || savingSecret}
+                        onClick={() => setSecretDeleteConfirm(null)}
+                      >
+                        取消
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="it-button it-button--secondary it-button--compact"
+                      disabled={uiLocked || savingSecret}
+                      onClick={() => setSecretDeleteConfirm(name)}
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           ) : (
@@ -174,6 +222,7 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
           </button>
         </div>
         {secretMessage && <div className="it-settings__hint">{secretMessage}</div>}
+        {copyTip && <div className="it-settings__hint">{copyTip}</div>}
       </div>
 
       <div className="it-template__panel">
@@ -203,10 +252,18 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
                     <div className="it-template__token-meta">
                       {statusLabel} · {expiresText}
                     </div>
+                    <div className="it-template__token-meta">{`{{tokens.${token.name}}}`}</div>
                     {token.lastError && (
                       <div className="it-template__token-error">{token.lastError}</div>
                     )}
                   </div>
+                  <button
+                    className="it-button it-button--secondary it-button--compact"
+                    disabled={uiLocked}
+                    onClick={() => copyReference(`{{tokens.${token.name}}}`)}
+                  >
+                    复制引用
+                  </button>
                   <button
                     className="it-button it-button--secondary it-button--compact"
                     disabled={uiLocked}

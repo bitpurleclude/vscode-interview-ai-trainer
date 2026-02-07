@@ -100,3 +100,29 @@
 - [x] `npm run build`
 - [x] `npm run package`
 - [x] Git 发布 beta
+
+## 增补缺陷修复（2026-02）
+
+### A) 检索目录选择写入路径修复 + 旧字段迁移
+- 问题：目录选择写入到了 `skill.<xxx_dir>` 顶层，读取使用 `skill.workspace.<xxx_dir>`，导致配置不生效。
+- 修复：统一写入 `skill.workspace.<xxx_dir>`；在刷新配置快照时自动迁移旧顶层字段并清理旧键。
+
+### B) 密钥删除确认稳定化 + 失败原因提示
+- 问题：删除依赖 `window.confirm`，在 Webview 中交互不稳定，容易表现为“无反应”。
+- 修复：改为页面内二次确认按钮（删除 -> 确认删除/取消），并将后端返回错误透传到提示文案。
+
+### C) 密钥/Token 快速引用提示 + 一键复制
+- 密钥项新增引用提示：`{{secrets.<name>}}`。
+- Token 项新增引用提示：`{{tokens.<name>}}`。
+- 两类项均提供“复制引用”按钮，方便在模板中直接粘贴使用。
+
+### 本次涉及文件
+- `src/interviewTrainer/interface/handlers/it_webviewWorkspaceHandlers.ts`
+- `src/interviewTrainer/application/services/it_configSnapshot.ts`
+- `webview/src/hooks/useTemplateBindings.ts`
+- `webview/src/components/settings/SettingsTemplateManager.tsx`
+- `webview/src/components/settings/template/TemplateSidebar.tsx`
+- `webview/src/styles.css`
+
+### 本次验证
+- [x] `npm run build`

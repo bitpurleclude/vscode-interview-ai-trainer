@@ -22,6 +22,8 @@
 ## 注意事项
 - 状态区布局依赖步骤顺序，修改步骤需同步 `StepsList.tsx`
 - 实时输出仅展示截断内容，完整内容需看日志/结果面板
+- 模板侧栏的密钥删除采用页内二次确认，不依赖 `window.confirm`。
+- 密钥/Token 列表提供快速引用字符串与复制入口（`{{secrets.xxx}}` / `{{tokens.xxx}}`）。
 
 ## 常见问题
 - 实时输出列数异常：检查 `StepsList.tsx` 的 stream index 合并逻辑
