@@ -136,3 +136,10 @@
 - [x] Moved core actions orchestration into application use-case (`it_coreActions.ts`).
 - [x] `it_webviewCoreHandlers.ts` now dispatches commands only.
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-12 (2026-02-07) Recording Handler UseCase Progress
+- [x] Moved recording orchestration into application use-case (`it_recordingActions.ts`).
+- [x] `it_webviewRecordingHandlers.ts` now dispatches commands only.
+- [x] Added recording gateway export and infra converter helper (`it_recordingGateway.ts`, `infra/recording/it_recording.ts`).
+- [x] Synced use-case/docs and verified build/test/package.

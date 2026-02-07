@@ -326,3 +326,78 @@ export async function it_stopNativeRecording(
     locked: locked.length ? locked : undefined,
   };
 }
+
+export async function it_convertAudioToPcmBase64(
+  ffmpeg: string,
+  base64: string,
+  extInput?: string,
+): Promise<{
+  base64: string;
+  byteLength: number;
+  durationSec: number;
+}> {
+  const ext = String(extInput || "m4a").replace(/[^a-z0-9]/gi, "");
+  if (!base64) {
+    throw new Error("missing audio bytes");
+  }
+
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "it-audio-"));
+  const inPath = path.join(tmpDir, `input.${ext || "m4a"}`);
+  const outPath = path.join(tmpDir, "output.pcm");
+
+  try {
+    await fs.promises.writeFile(inPath, Buffer.from(base64, "base64"));
+    await new Promise<void>((resolve, reject) => {
+      const args = [
+        "-y",
+        "-i",
+        inPath,
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-f",
+        "s16le",
+        outPath,
+      ];
+      const child = spawn(ffmpeg, args, { windowsHide: true });
+      let stderr = "";
+      child.stderr.on("data", (data: Buffer | string) => {
+        stderr += String(data);
+      });
+      child.on("error", (error: Error) => reject(error));
+      child.on("close", (code: number | null) => {
+        if (code !== 0) {
+          reject(new Error(`ffmpeg ????: ${stderr || `code=${code}`}`));
+          return;
+        }
+        fs.promises
+          .access(outPath)
+          .then(() => resolve())
+          .catch(() => reject(new Error("ffmpeg ????????????")));
+      });
+    });
+
+    const pcm = await fs.promises.readFile(outPath);
+    const byteLength = pcm.byteLength;
+    const durationSec = byteLength / (2 * 16000);
+
+    return {
+      base64: pcm.toString("base64"),
+      byteLength,
+      durationSec,
+    };
+  } finally {
+    try {
+      await fs.promises.rm(tmpDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 2,
+        retryDelay: 50,
+      });
+    } catch {
+      // ignore cleanup failure
+    }
+  }
+}
+
