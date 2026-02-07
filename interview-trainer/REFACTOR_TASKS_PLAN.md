@@ -245,3 +245,11 @@
 - [x] Synced services/useCases docs for new delegation boundary.
 - [ ] Follow-up: continue splitting analysis-flow config resolution/orchestration in next P6 tasks.
 
+
+## P6-6 (2026-02-07) Analysis Run Config Delegation Progress
+- [x] Added `application/services/it_analysisRunConfig.ts` to isolate analysis run dependency/config preparation.
+- [x] `application/useCases/it_analysisFlow.ts` now delegates config reload, env merge, and flow deps assembly to service helper.
+- [x] Added unit test for run-config service (`it_analysisRunConfig.test.ts`).
+- [x] Synced services/useCases docs for new delegation boundary.
+- [ ] Follow-up: continue replacing `application/useCases/it_analysisFlow.ts` host type imports with app-level gateway types.
+

@@ -28,3 +28,4 @@ Application service layer (cross-use-case reuse).
   - `it_extensionRuntime.ts`: runtime delegation facade for analyze/warmup/progress helpers with injectable deps.
   - `it_extensionRuntimeDeps.ts`: production dependency bindings for runtime facade.
   - `it_analysisSessionState.ts`: analysis-session state transitions (start/partial/success/cancel/error).
+  - `it_analysisRunConfig.ts`: analysis-run config/dependency builder (config reload + env merge + flow deps).

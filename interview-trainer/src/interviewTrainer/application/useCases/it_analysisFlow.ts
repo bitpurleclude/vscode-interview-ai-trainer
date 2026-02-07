@@ -8,6 +8,7 @@ import {
   it_markAnalysisCorpusClean,
   it_startAnalysisSession,
 } from "../services/it_analysisSessionState";
+import { it_prepareAnalysisRunDeps } from "../services/it_analysisRunConfig";
 
 export type ItAnalysisHost = {
   context: import("vscode").ExtensionContext;
@@ -53,40 +54,10 @@ export async function it_handleAnalyze(
     const runId = request.runId || new Date().toISOString();
     it_startAnalysisSession(host, runId);
 
-    host.configBundle = host.configService.loadBundle();
-    host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
-    host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
-
-    const workspaceRoot = host.requireWorkspaceRoot();
-    const activeEnv = host.configBundle.api.active?.environment || "prod";
-    const envConfig = host.configBundle.api.environments?.[activeEnv] || {};
-    const envAsr = envConfig.asr || {};
-
-    const response = await it_runAnalysis(
-      {
-        context: host.context,
-        apiConfig: host.configBundle.api,
-        templatesConfig: host.configBundle.templates,
-        skillConfig: {
-          ...host.configBundle.skill,
-          asr: {
-            ...envAsr,
-            ...(host.configBundle.skill.asr || {}),
-          },
-          providers: host.configBundle.providers,
-        },
-        workspaceRoot,
-        onProgress: (update) => host.updateProgress(update),
-        onPartial: (partial) => it_applyAnalysisPartial(host, partial),
-        corpusDirty: host.corpusDirty,
-        corpusDirtyFiles: Array.from(host.corpusDirtyFiles),
-        onCorpusTrace: (message, detail) => host.logCorpusTrace(message, detail),
-        onStream: (update) => host.emitStreamUpdate(update),
-        onEvalStream: (update) => host.emitEvaluationStreamUpdate(update),
-        abortSignal: host.analysisAbort ?? undefined,
-      },
-      request,
+    const deps = await it_prepareAnalysisRunDeps(host, (partial) =>
+      it_applyAnalysisPartial(host, partial),
     );
+    const response = await it_runAnalysis(deps, request);
 
     it_markAnalysisCorpusClean(host);
     it_finishAnalysisSessionSuccess(host, "分析完成，可保存与复盘");
