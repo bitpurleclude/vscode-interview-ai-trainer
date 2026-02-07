@@ -1,5 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { request } from "../messenger";
+import {
+  it_buildAnalyzePayload,
+  it_resolveAnalyzeQuestionsFromResponse,
+  it_shouldIgnoreAnalyzeResponse,
+} from "./useAnalysisFlow.contract";
 import type { ItAnalyzeRequest, ItAnalyzeResponse, ItHistoryItem, ItState } from "../types";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
@@ -83,37 +88,32 @@ export function useAnalysisFlow({
       ...prev,
       statusMessage: `已发起分析请求（批次：${runId}）`,
     }));
-    const finalQuestionText = questionText.trim();
-    const finalQuestionList = parsedQuestionList;
-    const normalizedPerQuestionSystem = perQuestionSystemPrompts
-      .slice(0, 3)
-      .map((item) => item.trim());
-    const normalizedPerQuestionDemo = perQuestionDemoPrompts
-      .slice(0, 3)
-      .map((item) => item.trim());
-    const hasPerQuestionSystem = normalizedPerQuestionSystem.some(Boolean);
-    const hasPerQuestionDemo = normalizedPerQuestionDemo.some(Boolean);
-    const payload: ItAnalyzeRequest = {
+    const payload: ItAnalyzeRequest = it_buildAnalyzePayload({
       audio: audioPayload,
-      questionText: finalQuestionText || undefined,
-      questionList: finalQuestionList,
-      systemPrompt: customPrompt?.trim() || undefined,
-      demoPrompt: demoPrompt?.trim() || undefined,
-      perQuestionSystemPrompts: hasPerQuestionSystem ? normalizedPerQuestionSystem : undefined,
-      perQuestionDemoPrompts: hasPerQuestionDemo ? normalizedPerQuestionDemo : undefined,
+      questionText,
+      questionList: parsedQuestionList,
+      customPrompt,
+      demoPrompt,
+      perQuestionSystemPrompts,
+      perQuestionDemoPrompts,
       runId,
-    };
+    });
     try {
       const response = await request("it/analyzeAudio", payload, { timeoutMs: 5 * 60 * 1000 });
-      if (analysisCancelledRef.current || currentRun !== analysisRunRef.current) {
+      if (
+        it_shouldIgnoreAnalyzeResponse({
+          cancelled: analysisCancelledRef.current,
+          runId: currentRun,
+          activeRunId: analysisRunRef.current,
+        })
+      ) {
         return;
       }
       if (response?.status === "success") {
         setAnalysisResult(response.content);
-        const resolvedText = String(response.content?.questionText || "").trim();
-        const resolvedList = Array.isArray(response.content?.questionList)
-          ? response.content.questionList.map((item: any) => String(item)).filter(Boolean)
-          : [];
+        const resolved = it_resolveAnalyzeQuestionsFromResponse(response.content);
+        const resolvedText = resolved.questionText;
+        const resolvedList = resolved.questionList;
         if (resolvedText && resolvedText !== questionText.trim()) {
           setQuestionText(resolvedText);
         }

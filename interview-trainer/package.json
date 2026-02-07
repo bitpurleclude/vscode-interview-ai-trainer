@@ -104,7 +104,8 @@
     "build:extension": "tsc -p tsconfig.json --noEmit && node scripts/build-extension.js",
     "build": "npm run build:webview && npm run build:extension",
     "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "test:e2e:smoke": "node scripts/run-e2e-smoke.js"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
@@ -112,6 +113,7 @@
     "@types/react-dom": "^18.2.25",
     "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^2.22.0",
     "esbuild": "^0.21.5",
     "react": "^18.2.0",

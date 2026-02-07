@@ -1,16 +1,21 @@
-# 构建脚本（scripts）
+# Build and Test Scripts (scripts)
 
-## 模块定位与职责
-构建 Webview 与 Extension 的打包流程。
+## Scope
+- Central entry points for build, test, packaging, and host-level smoke checks.
+- Provides stable npm commands for local development and CI pipelines.
 
-## 关键文件
-- `scripts/build-webview.js`：构建前端（Vite/打包）
-- `scripts/build-extension.js`：构建扩展端产物
+## Key Files
+- `scripts/build-webview.js`: builds Webview frontend assets.
+- `scripts/build-extension.js`: builds Extension runtime output under `out/`.
+- `scripts/run-e2e-smoke.js`: runs VS Code host smoke test via `@vscode/test-electron`.
 
-## 关键调用链
-- `npm run build` → `build-webview.js` → `build-extension.js`
-- `npm run package` → `npx @vscode/vsce package`
+## npm Command Mapping
+- `npm run build`: build webview + extension.
+- `npm run test`: run Vitest unit/contract/security suites.
+- `npm run test:e2e:smoke`: run VS Code host smoke test skeleton.
+- `npm run package`: build and package VSIX to `build/interview-trainer.vsix`.
 
-## 注意事项
-- 打包需包含 `node_modules/ffmpeg-static`
-- Release 前需确保文本文件 UTF-8
+## Maintenance Notes
+- Keep `node_modules/ffmpeg-static/**` in VSIX package; audio flow depends on it.
+- Keep test artifacts out of VSIX via `.vscodeignore` (for example `coverage/**`, `test/**`).
+- When adding or changing scripts, update this document and `SECURITY_TEST_PLAN.md` together.

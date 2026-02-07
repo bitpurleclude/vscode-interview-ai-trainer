@@ -31,6 +31,9 @@
 - [x] P2-10 Analyze flow full-path fault matrix tests (`application/flows/analyze/flow.fault-matrix.test.ts`).
 - [x] P2-11 Mixed single-fault / pairwise-fault resilience regression tests.
 - [x] P2-12 UI E2E phased plan + contract-first implementation guide.
+- [x] P2-13 Messenger request/listener contract tests (`webview/src/messenger.contract.test.ts`).
+- [x] P2-14 useAnalysisFlow payload/response contract tests (`webview/src/hooks/useAnalysisFlow.contract.test.ts`).
+- [x] P2-15 VS Code Host smoke skeleton (`test/e2e/smoke/index.js`, `npm run test:e2e:smoke`).
 - [ ] P2 suites pending (stream interruption, cross-platform path edge cases, large-payload pressure).
 
 ## Analyze Full-Flow Fault Matrix (new)
@@ -83,15 +86,16 @@
 ## UI E2E Phased Plan (new)
 
 ### L1 - Protocol/Hook Contract Tests (short term, must-have)
-- Validate `webview/src/messenger.ts` request/response integrity.
-- Validate `useAnalysisFlow` reacts correctly to:
+- Validate `webview/src/messenger.ts` request/response integrity. (Done)
+- Validate `useAnalysisFlow` payload/run-guard contracts and downstream state updates. (Core contract done)
+- Continue validating end-to-end behavior for:
   - progress updates
   - partial payload updates
   - stream updates
   - terminal error/cancel events
 
 ### L2 - VS Code Host Smoke E2E (medium term)
-- Use `@vscode/test-electron` to run extension host tests.
+- Use `@vscode/test-electron` to run extension host tests. (Smoke skeleton done)
 - Minimum cases:
   1. Open plugin view.
   2. Trigger analyze with fixture payload.
@@ -255,6 +259,9 @@ Planned update:
 
 ## Output Artifacts
 - Security test files (P0 -> P2).
+- `webview/src/messenger.contract.test.ts`
+- `webview/src/hooks/useAnalysisFlow.contract.test.ts`
+- `test/e2e/smoke/index.js` + `scripts/run-e2e-smoke.js`
 - `SECURITY_TEST_PLAN.md` progress updates.
 - Final risk report listing:
   - fixed attack vectors
