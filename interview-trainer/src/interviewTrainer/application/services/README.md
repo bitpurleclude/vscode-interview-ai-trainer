@@ -13,3 +13,4 @@ Application service layer (cross-use-case reuse).
   - `it_storageGateway.ts`: report/session/history/cache storage gateway.
   - `it_llmGateway.ts` / `it_embeddingGateway.ts` / `it_asrGateway.ts`: provider API gateways.
   - `it_notesGateway.ts` / `it_textGateway.ts`: notes cache and utility gateways.
+  - `it_tokens.ts` / `it_topicTitle.ts`: now consume application gateways instead of direct infra imports.

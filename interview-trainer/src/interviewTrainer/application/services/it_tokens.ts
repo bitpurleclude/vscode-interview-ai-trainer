@@ -5,8 +5,8 @@ import type {
   ItTokenState,
   ItTokenStoreSnapshot,
 } from "../../../protocol/interviewTrainer";
-import type { ItApiConfig, ItConfigBundle } from "../../infra/api/it_apiConfig";
-import { it_executeTemplate, it_readPath } from "../../infra/api/it_templateExecutor";
+import type { ItApiConfig, ItConfigBundle } from "./it_configGateway";
+import { it_executeTemplate, it_readPath } from "./it_templateGateway";
 import type { ItWebviewPort } from "./it_webviewPort";
 
 type ItTokenServiceHost = {

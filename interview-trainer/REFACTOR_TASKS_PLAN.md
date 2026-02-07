@@ -156,3 +156,9 @@
 - [x] Moved result handler orchestration into application use-case (`it_resultActions.ts`).
 - [x] `it_webviewResultHandlers.ts` now dispatches commands only.
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-15 (2026-02-07) Service Gateway Alignment Progress
+- [x] `it_tokens.ts` switched from direct infra imports to application gateways (`it_configGateway`, `it_templateGateway`).
+- [x] `it_topicTitle.ts` switched from infra client/type imports to `it_llmGateway`.
+- [x] Synced service docs and verified build/test/package.

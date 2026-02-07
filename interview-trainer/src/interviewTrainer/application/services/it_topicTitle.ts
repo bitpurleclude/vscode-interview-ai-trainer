@@ -1,5 +1,4 @@
-import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
-import { it_requestLlmChat } from "../../infra/clients/llmClient";
+import { it_callLlmChat, type ItLlmConfig } from "./it_llmGateway";
 import { it_extractJson } from "../../domain/analyze/shared";
 import {
   it_deriveTopicTitle,
@@ -39,7 +38,7 @@ export async function it_generateTopicTitleWithLlm(
     .join("\n\n");
 
   try {
-    const content = await it_requestLlmChat(
+    const content = await it_callLlmChat(
       {
         ...llmConfig,
         maxRetries: Math.max(0, Number(llmConfig.maxRetries ?? 1)),
