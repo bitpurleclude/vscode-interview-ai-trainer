@@ -1,10 +1,11 @@
 // Application-level gateway for LLM API and request builders.
 
-export { it_callLlmChat } from "../../infra/api/it_llm";
+export { it_callLlmChat, it_callLlmChatStreaming } from "../../infra/api/it_llm";
 export type {
   ItLlmConfig,
   ItLlmMessage,
   ItLlmReasoningEffort,
+  ItLlmProvider,
 } from "../../infra/api/it_llmTypes";
 export {
   it_buildDoubaoChatRequest,

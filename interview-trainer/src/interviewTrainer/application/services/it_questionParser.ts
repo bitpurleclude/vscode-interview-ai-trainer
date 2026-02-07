@@ -1,6 +1,8 @@
-import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
-import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
-import { ItLlmConfig } from "../../infra/api/it_llmTypes";
+import {
+  it_callLlmChatStreaming,
+  type ItLlmConfig,
+} from "./it_llmGateway";
+import { it_createTraceLogger } from "./it_traceGateway";
 
 export interface ItParsedQuestions {
   material: string;
@@ -153,7 +155,7 @@ export async function it_parseQuestions(
       { role: "user", content: userPrompt },
     ], parseConfig.stream);
     onStream?.({ text: "", reset: true });
-    const content = await it_requestLlmChatStreaming(
+    const content = await it_callLlmChatStreaming(
       parseConfig,
       [
         { role: "system", content: systemPrompt },

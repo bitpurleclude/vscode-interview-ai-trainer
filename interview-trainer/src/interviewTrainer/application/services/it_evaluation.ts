@@ -3,8 +3,8 @@ import {
   ItEvaluation,
   ItNoteHit,
 } from "../../../protocol/interviewTrainer";
-import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
-import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
+import { it_callLlmChatStreaming } from "./it_llmGateway";
+import { it_createTraceLogger } from "./it_traceGateway";
 import type { ItEvaluationConfig } from "./it_evaluationTypes";
 import { it_canUseLlm } from "./it_evaluationLlm";
 import { it_splitTranscriptByQuestions } from "../../domain/evaluation/prompt";
@@ -145,7 +145,7 @@ export async function it_evaluateAnswer(
         ],
         callConfig.stream,
       );
-      content = await it_requestLlmChatStreaming(
+      content = await it_callLlmChatStreaming(
         callConfig,
         [
           { role: "system", content: systemPrompt },

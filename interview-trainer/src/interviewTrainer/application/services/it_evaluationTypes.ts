@@ -1,4 +1,4 @@
-import type { ItLlmConfig, ItLlmProvider } from "../../infra/api/it_llmTypes";
+import type { ItLlmConfig, ItLlmProvider } from "./it_llmGateway";
 
 export interface ItEvaluationConfig extends ItLlmConfig {
   provider: ItLlmProvider | "heuristic";

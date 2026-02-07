@@ -14,3 +14,4 @@ Application service layer (cross-use-case reuse).
   - `it_llmGateway.ts` / `it_embeddingGateway.ts` / `it_asrGateway.ts`: provider API gateways.
   - `it_notesGateway.ts` / `it_textGateway.ts`: notes cache and utility gateways.
   - `it_tokens.ts` / `it_topicTitle.ts`: now consume application gateways instead of direct infra imports.
+  - `it_traceGateway.ts`: trace logging gateway shared by question/evaluation/asr orchestrators.

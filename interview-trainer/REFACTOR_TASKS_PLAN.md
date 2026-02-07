@@ -162,3 +162,10 @@
 - [x] `it_tokens.ts` switched from direct infra imports to application gateways (`it_configGateway`, `it_templateGateway`).
 - [x] `it_topicTitle.ts` switched from infra client/type imports to `it_llmGateway`.
 - [x] Synced service docs and verified build/test/package.
+
+
+## P5-16 (2026-02-07) LLM/Trace Gateway Alignment Progress
+- [x] Added `it_traceGateway.ts` to avoid direct `application/services -> infra/logging` imports.
+- [x] Updated `it_questionParser.ts`, `it_questionsLlm.ts`, `it_evaluation.ts`, `it_evaluationLlm.ts`, `it_evaluationTypes.ts` to consume application gateways.
+- [x] Extended `it_llmGateway.ts` and `it_textGateway.ts` exports for streaming and formatting reuse.
+- [x] Synced service docs and verified build/test/package.

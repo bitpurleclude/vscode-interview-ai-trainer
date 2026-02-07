@@ -1,6 +1,8 @@
 import type { ItNoteHit } from "../../../protocol/interviewTrainer";
-import { it_requestLlmChatStreaming } from "../../infra/clients/llmClient";
-import type { ItLlmConfig } from "../../infra/api/it_llmTypes";
+import {
+  it_callLlmChatStreaming,
+  type ItLlmConfig,
+} from "./it_llmGateway";
 import type { ItEvaluationConfig } from "./it_evaluationTypes";
 import {
   it_extractJsonPayload,
@@ -117,7 +119,7 @@ async function it_generateRevisedByOutline(
       ],
     });
     onStream?.({ text: "", reset: true });
-    const content = await it_requestLlmChatStreaming(
+    const content = await it_callLlmChatStreaming(
       callConfig,
       [
         { role: "system", content: systemPrompt },
@@ -217,7 +219,7 @@ async function it_generateOutlines(
       ],
     });
     onStream?.({ text: "", reset: true });
-    const content = await it_requestLlmChatStreaming(
+    const content = await it_callLlmChatStreaming(
       callConfig,
       [
         { role: "system", content: systemPrompt },
