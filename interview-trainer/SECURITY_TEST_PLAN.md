@@ -41,7 +41,9 @@
 - [x] P2-20 SSE stream interruption and malformed-frame resilience tests (`it_templateHttp.security.test.ts`).
 - [x] P2-21 Cross-platform sessions path edge-case tests (`it_workspaceActions.security.test.ts`).
 - [x] P2-22 Guardrails range-normalization and poison-number clamp tests (`it_guardrails.security.test.ts`).
-- [ ] P2 suites pending (large-payload pressure and host-fixture end-to-end assertions).
+- [x] P2-23 Large payload pressure tests for retrieval query/body sizing (`search.payload-pressure.test.ts`).
+- [x] P2-24 Host smoke fixture availability assertions for markdown/audio corpus (`test/e2e/smoke/index.js`).
+- [ ] P2 suites pending (host-fixture full analysis/evaluation roundtrip assertions).
 
 ## Analyze Full-Flow Fault Matrix (new)
 
