@@ -10,3 +10,4 @@
 - `it_testAsr.ts`: ASR connectivity test use-case.
 - `it_testEmbedding.ts`: embedding connectivity test use-case.
 - `it_environmentConfig.ts`: environment/config update use-cases for Webview setting events.
+- `it_questionActions.ts`: question parse and demo-regeneration use-cases for Webview commands.
