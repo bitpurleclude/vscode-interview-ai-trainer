@@ -289,3 +289,10 @@
 - [x] Synced `interface/handlers/README.md` with new handler-port constraint.
 - [ ] Follow-up: continue shrinking duplicated mutable state fields (`configBundle/configSnapshot`) via focused setter ports.
 
+## P6-12 (2026-02-07) Architecture Compliance Remediation Progress
+- [x] Removed root-level constants dependency from application use-case by relocating sample-audio fixture to `application/useCases/it_templateTestSampleAudio.ts`.
+- [x] Narrowed template token-service contract (`ItTemplateTokenService`) to avoid exposing concrete `ItTokenService` class type in interface host ports.
+- [x] Rewrote garbled module docs (`interface/handlers/README.md`, `docs/modules/backend-handlers.md`, `docs/modules/backend-recording.md`) in UTF-8.
+- [x] Re-ran layer scan and confirmed no hard-rule dependency violations.
+- [ ] Follow-up: keep docs/modules synchronized with future handler-port refinements.
+

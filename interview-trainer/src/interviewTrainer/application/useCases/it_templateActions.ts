@@ -8,13 +8,18 @@ import type {
   ItConfigBundle,
   ItConfigService,
 } from "../services/it_configGateway";
-import type { ItTokenService } from "../services/it_tokens";
+
+
+export type ItTemplateTokenService = {
+  refreshTokenByName: (name: string) => Promise<void>;
+  refreshAll: () => Promise<void>;
+};
 
 export type ItTemplateUseCaseContext = {
   extensionContext: vscode.ExtensionContext;
   configService: ItConfigService;
   refreshConfigSnapshot: () => Promise<ItConfigSnapshot>;
-  tokenService: ItTokenService;
+  tokenService: ItTemplateTokenService;
 };
 
 export type ItTemplateConfigResult<T> = {

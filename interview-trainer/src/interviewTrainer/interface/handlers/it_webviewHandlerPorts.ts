@@ -11,7 +11,7 @@ import type {
   ItConfigBundle,
   ItConfigService,
 } from "../../application/services/it_configGateway";
-import type { ItTokenService } from "../../application/services/it_tokens";
+import type { ItTemplateTokenService } from "../../application/useCases/it_templateActions";
 import type { WebviewProtocol } from "../../../webview/WebviewProtocol";
 
 export type ItWebviewProtocolPort = {
@@ -108,7 +108,7 @@ export type ItTemplateHandlersPort =
   & ItConfigStatePort
   & {
     context: vscode.ExtensionContext;
-    tokenService: ItTokenService;
+    tokenService: ItTemplateTokenService;
   };
 
 export type ItTemplateTestHandlersPort =

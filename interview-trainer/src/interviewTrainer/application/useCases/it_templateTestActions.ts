@@ -6,7 +6,7 @@ import {
   IT_SAMPLE_AUDIO_CHANNEL,
   IT_SAMPLE_AUDIO_FORMAT,
   IT_SAMPLE_AUDIO_SAMPLE_RATE,
-} from "../../constants/it_sampleAudio";
+} from "./it_templateTestSampleAudio";
 import type { ItConfigService } from "../services/it_configGateway";
 import { it_extractTokenInfo } from "../services/it_tokens";
 import {
