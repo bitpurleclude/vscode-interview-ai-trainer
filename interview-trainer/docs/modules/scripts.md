@@ -18,4 +18,5 @@
 ## Maintenance Notes
 - Keep `node_modules/ffmpeg-static/**` in VSIX package; audio flow depends on it.
 - Keep test artifacts out of VSIX via `.vscodeignore` (for example `coverage/**`, `test/**`).
+- `test:e2e:smoke` clears `ELECTRON_RUN_AS_NODE` before launch to avoid Electron/VS Code arg parsing failure.
 - When adding or changing scripts, update this document and `SECURITY_TEST_PLAN.md` together.
