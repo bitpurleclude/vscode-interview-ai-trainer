@@ -1,13 +1,36 @@
 import type { ItAnalyzeRequest } from "../../../protocol/interviewTrainer";
-import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
-import { it_requestAsrTemplate } from "../../infra/clients/asrClient";
-import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
-import { it_splitPcmBase64 } from "../../infra/recording/it_recordingStore";
+import {
+  it_executeTemplate,
+  type ItTemplateRuntime,
+} from "./it_templateGateway";
+import { it_createTraceLogger } from "./it_traceGateway";
+import { it_splitPcmBase64 } from "./it_recordingGateway";
 import {
   it_buildAsrTemplateVars,
   it_transcribePcmWithChunks,
   type ItAsrProgressReporter,
 } from "../../domain/analyze/asr";
+
+async function it_requestAsrTemplate(
+  runtime: ItTemplateRuntime,
+  variables: Record<string, unknown>,
+  options: { maxRetries: number; timeoutSec: number },
+): Promise<string> {
+  const result = await it_executeTemplate({
+    runtime,
+    variables,
+    maxRetries: options.maxRetries,
+    timeoutSec: options.timeoutSec,
+    stream: false,
+  });
+  if (typeof result.text === "string") {
+    return result.text;
+  }
+  if (typeof result.value === "string") {
+    return result.value;
+  }
+  return "";
+}
 
 export async function it_transcribeAudio(
   request: ItAnalyzeRequest,

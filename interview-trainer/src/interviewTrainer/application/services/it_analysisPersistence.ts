@@ -5,15 +5,13 @@ import type {
 } from "../../../protocol/interviewTrainer";
 import {
   it_appendAttemptDataAsync,
+  it_appendReportAsync,
   it_buildQuestionFingerprint,
   it_readTopicMetaAsync,
-  it_writeTopicMetaAsync,
-} from "../../infra/storage/it_sessions";
-import {
-  it_appendReportAsync,
   it_updateReferenceNotesFileAsync,
-} from "../../infra/storage/it_report";
-import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
+  it_writeTopicMetaAsync,
+} from "./it_storageGateway";
+import { it_hashText, it_normalizeText } from "./it_textGateway";
 
 export async function it_persistAnalysis(params: {
   questionText: string;

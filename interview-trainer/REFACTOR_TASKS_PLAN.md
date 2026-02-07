@@ -169,3 +169,10 @@
 - [x] Updated `it_questionParser.ts`, `it_questionsLlm.ts`, `it_evaluation.ts`, `it_evaluationLlm.ts`, `it_evaluationTypes.ts` to consume application gateways.
 - [x] Extended `it_llmGateway.ts` and `it_textGateway.ts` exports for streaming and formatting reuse.
 - [x] Synced service docs and verified build/test/package.
+
+
+## P5-17 (2026-02-07) ASR/Persistence Gateway Alignment Progress
+- [x] `it_asrTranscription.ts` no longer imports infra client/logger/template/store directly; now uses `it_templateGateway`, `it_traceGateway`, `it_recordingGateway`.
+- [x] `it_analysisPersistence.ts` switched to `it_storageGateway` + `it_textGateway`.
+- [x] Extended `it_recordingGateway.ts` to expose PCM chunk splitter for ASR chunked transcription.
+- [x] Synced service docs and verified build/test/package.
