@@ -196,3 +196,11 @@
 - [x] Warmup host type references switched to `it_configGateway` types.
 - [x] Expanded `it_notesGateway.ts` with `it_prepareEmbeddingCache` export for precompute workflow reuse.
 - [x] Synced service docs and verified build/test/package.
+
+
+## P5-21 (2026-02-07) Full Architecture Compliance Sweep Progress
+- [x] Completed full-layer dependency sweep for `interface/application/domain/infra`.
+- [x] Hard-rule violations found: `0`.
+- [x] Application non-gateway direct infra imports found: `0`.
+- [x] Wrote compliance report with residual structural risks: `ARCH_COMPLIANCE_REPORT.md`.
+- [x] Verified build/test/package after sweep.

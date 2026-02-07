@@ -28,3 +28,4 @@
 - `ARCH_REFACTOR_PLAN.md`
 - `docs/architecture/ARCHITECTURE_OVERVIEW.md`
 - `docs/architecture/DIRECTORY_MAP.md`
+- `ARCH_COMPLIANCE_REPORT.md`
