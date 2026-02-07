@@ -260,3 +260,11 @@
 - [x] Synced use-case docs for updated host type boundary.
 - [ ] Follow-up: continue replacing legacy cancellation placeholder strings (`"?????"`) with explicit cancellation semantics in a dedicated cleanup task.
 
+
+## P6-8 (2026-02-07) Analysis Cancel/Error Semantics Cleanup Progress
+- [x] Added `application/services/it_analysisErrors.ts` to centralize analysis cancellation/error message constants and user-error builder.
+- [x] `application/useCases/it_analysisFlow.ts` no longer uses placeholder cancellation string checks (`"?????"`), now uses explicit helper `it_isAnalysisCanceledError`.
+- [x] Added unit test for analysis error helpers (`it_analysisErrors.test.ts`).
+- [x] Synced services/useCases docs for cancel/error semantics ownership.
+- [ ] Follow-up: perform targeted cleanup pass for other legacy placeholder strings outside analysis flow modules.
+

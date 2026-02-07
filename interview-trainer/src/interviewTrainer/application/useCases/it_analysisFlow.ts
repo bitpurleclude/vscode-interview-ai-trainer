@@ -16,6 +16,12 @@ import {
   it_startAnalysisSession,
 } from "../services/it_analysisSessionState";
 import { it_prepareAnalysisRunDeps } from "../services/it_analysisRunConfig";
+import {
+  IT_ANALYSIS_CANCELED_MESSAGE,
+  IT_ANALYSIS_FAILED_MESSAGE,
+  it_buildAnalysisFailedUserError,
+  it_isAnalysisCanceledError,
+} from "../services/it_analysisErrors";
 import type {
   ItApiConfig,
   ItConfigBundle,
@@ -75,16 +81,16 @@ export async function it_handleAnalyze(
     it_finishAnalysisSessionSuccess(host, "分析完成，可保存与复盘");
     return response;
   } catch (error) {
-    if (error instanceof Error && error.message && error.message.includes("?????")) {
-      it_finishAnalysisSessionCanceled(host, "?????");
+    if (it_isAnalysisCanceledError(error)) {
+      it_finishAnalysisSessionCanceled(host, IT_ANALYSIS_CANCELED_MESSAGE);
       throw error;
     }
 
-    it_finishAnalysisSessionError(host, "分析失败，请检查API配置与音频格式", {
-      type: "analysis",
-      reason: error instanceof Error ? error.message : "未知错误",
-      solution: "请检查API Key/Secret、网络连接，以及音频格式。",
-    });
+    it_finishAnalysisSessionError(
+      host,
+      IT_ANALYSIS_FAILED_MESSAGE,
+      it_buildAnalysisFailedUserError(error),
+    );
     throw error;
   }
 }
