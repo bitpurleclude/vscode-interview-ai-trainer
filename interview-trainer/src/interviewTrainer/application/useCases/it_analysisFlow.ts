@@ -1,5 +1,13 @@
 import { ItAnalyzeRequest, ItAnalyzeResponse, ItStepStatus } from "../../../protocol/interviewTrainer";
 import { it_runAnalysis } from "../flows/analyze/flow";
+import {
+  it_applyAnalysisPartial,
+  it_finishAnalysisSessionCanceled,
+  it_finishAnalysisSessionError,
+  it_finishAnalysisSessionSuccess,
+  it_markAnalysisCorpusClean,
+  it_startAnalysisSession,
+} from "../services/it_analysisSessionState";
 
 export type ItAnalysisHost = {
   context: import("vscode").ExtensionContext;
@@ -42,41 +50,18 @@ export async function it_handleAnalyze(
   request: ItAnalyzeRequest,
 ): Promise<ItAnalyzeResponse> {
   try {
-    if (host.embeddingWarmupAbort) {
-      host.embeddingWarmupAbort.aborted = true;
-    }
-    host.analysisAbort = { aborted: false };
     const runId = request.runId || new Date().toISOString();
-    const steps = host.buildRunSteps().map((step) => {
-      if (step.id === "recording") {
-        return { ...step, status: "success" as ItStepStatus, progress: 100 };
-      }
-      if (step.id === "asr") {
-        return { ...step, status: "running" as ItStepStatus, progress: 0 };
-      }
-      return step;
-    });
-    host.updateState({
-      statusMessage: `Analysis started (runId: ${runId})`,
-      steps,
-      overallProgress: host.computeOverallProgress(steps),
-      lastError: undefined,
-      draftTranscript: undefined,
-      draftDetailedTranscript: undefined,
-      draftAcoustic: undefined,
-      draftNotes: undefined,
-      draftQuestionTimings: undefined,
-      draftQuestionTimingNote: undefined,
-      draftEvaluation: undefined,
-    });
+    it_startAnalysisSession(host, runId);
 
     host.configBundle = host.configService.loadBundle();
     host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
     host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
+
     const workspaceRoot = host.requireWorkspaceRoot();
     const activeEnv = host.configBundle.api.active?.environment || "prod";
     const envConfig = host.configBundle.api.environments?.[activeEnv] || {};
     const envAsr = envConfig.asr || {};
+
     const response = await it_runAnalysis(
       {
         context: host.context,
@@ -92,20 +77,7 @@ export async function it_handleAnalyze(
         },
         workspaceRoot,
         onProgress: (update) => host.updateProgress(update),
-        onPartial: (partial) => {
-          host.updateState({
-            draftTranscript: partial.transcript ?? host.state.draftTranscript ?? undefined,
-            draftDetailedTranscript:
-              partial.detailedTranscript ?? host.state.draftDetailedTranscript ?? undefined,
-            draftAcoustic: partial.acoustic ?? host.state.draftAcoustic ?? undefined,
-            draftNotes: partial.notes ?? host.state.draftNotes ?? undefined,
-            draftQuestionTimings:
-              partial.questionTimings ?? host.state.draftQuestionTimings ?? undefined,
-            draftQuestionTimingNote:
-              partial.questionTimingNote ?? host.state.draftQuestionTimingNote ?? undefined,
-            draftEvaluation: partial.evaluation ?? host.state.draftEvaluation ?? undefined,
-          });
-        },
+        onPartial: (partial) => it_applyAnalysisPartial(host, partial),
         corpusDirty: host.corpusDirty,
         corpusDirtyFiles: Array.from(host.corpusDirtyFiles),
         onCorpusTrace: (message, detail) => host.logCorpusTrace(message, detail),
@@ -116,63 +88,20 @@ export async function it_handleAnalyze(
       request,
     );
 
-    host.corpusDirty = false;
-    host.corpusDirtyFiles.clear();
-
-    host.updateState({
-      statusMessage: "分析完成，可保存与复盘",
-      steps: host.state.steps.map((step) =>
-        [
-          "acoustic",
-          "asr",
-          "segment",
-          "notes",
-          "evaluation",
-          "report",
-          "write",
-        ].includes(step.id)
-          ? { ...step, status: "success", progress: 100 }
-          : step,
-      ),
-      overallProgress: 100,
-      lastError: undefined,
-    });
-
-    host.scheduleEmbeddingWarmup("after-analysis", 3000);
-    host.analysisAbort = null;
+    it_markAnalysisCorpusClean(host);
+    it_finishAnalysisSessionSuccess(host, "分析完成，可保存与复盘");
     return response;
   } catch (error) {
     if (error instanceof Error && error.message && error.message.includes("?????")) {
-      host.updateState({
-        statusMessage: "?????",
-        overallProgress: 0,
-        lastError: undefined,
-        steps: host.state.steps.map((step) =>
-          step.status === "running"
-            ? { ...step, status: "error", progress: step.progress }
-            : step,
-        ),
-      });
-      host.scheduleEmbeddingWarmup("after-analysis", 3000);
-      host.analysisAbort = null;
+      it_finishAnalysisSessionCanceled(host, "?????");
       throw error;
     }
-    host.updateState({
-      statusMessage: "分析失败，请检查API配置与音频格式",
-      overallProgress: 0,
-      lastError: {
-        type: "analysis",
-        reason: error instanceof Error ? error.message : "未知错误",
-        solution: "请检查API Key/Secret、网络连接，以及音频格式。",
-      },
-      steps: host.state.steps.map((step) =>
-        step.status === "running"
-          ? { ...step, status: "error", progress: step.progress }
-          : step,
-      ),
+
+    it_finishAnalysisSessionError(host, "分析失败，请检查API配置与音频格式", {
+      type: "analysis",
+      reason: error instanceof Error ? error.message : "未知错误",
+      solution: "请检查API Key/Secret、网络连接，以及音频格式。",
     });
-    host.scheduleEmbeddingWarmup("after-analysis", 3000);
-    host.analysisAbort = null;
     throw error;
   }
 }

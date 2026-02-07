@@ -237,3 +237,11 @@
 - [x] Kept extension host external method signatures unchanged for handler/use-case compatibility.
 - [ ] Follow-up: continue splitting extension run-session state orchestration in next P6 tasks.
 
+
+## P6-5 (2026-02-07) Analysis Session State Delegation Progress
+- [x] Added `application/services/it_analysisSessionState.ts` to centralize analysis session state transitions.
+- [x] `application/useCases/it_analysisFlow.ts` now delegates start/partial/success/cancel/error state writes to service helpers.
+- [x] Added unit tests for session-state helpers (`it_analysisSessionState.test.ts`).
+- [x] Synced services/useCases docs for new delegation boundary.
+- [ ] Follow-up: continue splitting analysis-flow config resolution/orchestration in next P6 tasks.
+

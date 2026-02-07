@@ -27,3 +27,4 @@ Application service layer (cross-use-case reuse).
   - `it_extensionBootstrap.ts`: extension constructor bootstrap flow (output channel/config/token/watcher/handler/warmup startup).
   - `it_extensionRuntime.ts`: runtime delegation facade for analyze/warmup/progress helpers with injectable deps.
   - `it_extensionRuntimeDeps.ts`: production dependency bindings for runtime facade.
+  - `it_analysisSessionState.ts`: analysis-session state transitions (start/partial/success/cancel/error).

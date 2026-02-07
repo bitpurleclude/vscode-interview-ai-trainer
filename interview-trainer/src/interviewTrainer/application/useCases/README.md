@@ -19,3 +19,4 @@
 - `it_recordingActions.ts`: recording controls and audio-to-PCM conversion use-cases.
 - `it_templateTestActions.ts`: template dry-run/live test orchestration use-cases for Webview commands.
 - `it_resultActions.ts`: result-view actions (open file/analyze/cancel) use-cases for Webview commands.
+- `it_analysisFlow.ts`: end-to-end analysis run use-case; session state transitions are delegated to `application/services/it_analysisSessionState.ts`.
