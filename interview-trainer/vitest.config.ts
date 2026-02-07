@@ -10,6 +10,7 @@ export default defineConfig({
       "src/interviewTrainer/infra/api/**/*.test.ts",
       "src/interviewTrainer/application/services/**/*.test.ts",
       "src/interviewTrainer/application/useCases/**/*.test.ts",
+      "src/webview/**/*.test.ts",
     ],
     coverage: {
       provider: "v8",
