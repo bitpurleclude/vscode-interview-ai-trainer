@@ -11,6 +11,7 @@ export default defineConfig({
       "src/interviewTrainer/infra/notes/**/*.test.ts",
       "src/interviewTrainer/application/services/**/*.test.ts",
       "src/interviewTrainer/application/useCases/**/*.test.ts",
+      "src/interviewTrainer/application/flows/**/*.test.ts",
       "src/webview/**/*.test.ts",
     ],
     coverage: {

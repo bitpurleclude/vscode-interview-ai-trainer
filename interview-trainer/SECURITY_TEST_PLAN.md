@@ -28,7 +28,84 @@
 - [x] P1-7 Save-consistency failure-path tests (`it_saveCurrentResult.security.test.ts`).
 - [x] P1-8 Protocol flood and broadcast-isolation tests (`src/webview/WebviewProtocol.security.test.ts`).
 - [x] P1-9 Secret/token masking integrity tests (`it_templateVars.security.test.ts`).
+- [x] P2-10 Analyze flow full-path fault matrix tests (`application/flows/analyze/flow.fault-matrix.test.ts`).
+- [x] P2-11 Mixed single-fault / pairwise-fault resilience regression tests.
+- [x] P2-12 UI E2E phased plan + contract-first implementation guide.
 - [ ] P2 suites pending (stream interruption, cross-platform path edge cases, large-payload pressure).
+
+## Analyze Full-Flow Fault Matrix (new)
+
+### Goal
+- Simulate the complete path from imported recording + question payload to final persistence.
+- Ensure "one component fails" and "multiple components fail" still produce predictable behavior:
+  - no crash loop
+  - no stuck running state
+  - progress / partial / stream callbacks remain coherent
+
+### Scope Under Test
+- Orchestrator: `src/interviewTrainer/application/flows/analyze/flow.ts`
+- Stage adapters:
+  - `flow_audioStage.ts`
+  - `flow_questionStage.ts`
+  - `flow_segmentStage.ts`
+  - `flow_retrievalStage.ts`
+- Persistence + naming path:
+  - `it_analysisPersistence.ts`
+  - `it_storageGateway.ts`
+
+### Fault Matrix
+
+#### Single-fault baseline
+1. ASR stage throws -> flow exits with readable error.
+2. Question parse cache hit but malformed payload -> parse fallback still keeps run stable.
+3. Segment stage fails for multi-question -> fallback answer/timing behavior is deterministic.
+4. Retrieval stage throws -> flow continues to evaluation with empty notes when allowed.
+5. Evaluation of one question fails -> merged evaluation keeps array index stability.
+6. Persistence write fails (`report` or `write`) -> run exits with explicit failure and no silent success.
+
+#### Pairwise-fault combinations
+1. Retrieval failure + one-question evaluation failure.
+2. Segment fallback path + retrieval partial empty corpus.
+3. Progress callback throws + stream callback still active.
+4. Late abort signal + in-flight evaluation promise completion.
+
+### Assertions
+- Step progress lifecycle remains valid: pending -> running -> success/error.
+- `onPartial` snapshots never contain structurally invalid objects.
+- `onStream` / `onEvalStream` updates preserve question index mapping.
+- When failure occurs, error text is user-readable and does not leak secret/token values.
+
+### Test Delivery
+- Add `flow.fault-matrix.test.ts` under `application/flows/analyze/`.
+- Use deterministic `vi.mock` for stage-level dependencies to avoid external I/O.
+- Keep tests architecture-compliant: no direct Infra side effects.
+
+## UI E2E Phased Plan (new)
+
+### L1 - Protocol/Hook Contract Tests (short term, must-have)
+- Validate `webview/src/messenger.ts` request/response integrity.
+- Validate `useAnalysisFlow` reacts correctly to:
+  - progress updates
+  - partial payload updates
+  - stream updates
+  - terminal error/cancel events
+
+### L2 - VS Code Host Smoke E2E (medium term)
+- Use `@vscode/test-electron` to run extension host tests.
+- Minimum cases:
+  1. Open plugin view.
+  2. Trigger analyze with fixture payload.
+  3. Observe output state reaches completion/failure deterministically.
+  4. Verify report artifact path exists for success case.
+
+### L3 - Optional UI DOM E2E (long term)
+- Add Playwright-based webview DOM assertions if needed.
+- Focus only on critical visible states (step progress, result card, error banner), not pixel-perfect snapshots.
+
+### E2E Readiness Gates
+- Gate A: all L1 contract tests green.
+- Gate B: host smoke tests pass on Windows CI.
+- Gate C: docs updated for fixtures, launch profile, and debugging workflow.
 ## Test Strategy
 
 ### Layer 1: Input Boundary Tests (highest priority)
@@ -93,6 +170,7 @@ Primary targets:
 - `src/interviewTrainer/application/useCases/it_embeddingWarmup.security.test.ts`
 - `src/interviewTrainer/application/useCases/it_workspaceActions.security.test.ts`
 - `src/interviewTrainer/application/useCases/it_saveCurrentResult.security.test.ts`
+- `src/interviewTrainer/application/flows/analyze/flow.fault-matrix.test.ts`
 - `src/webview/WebviewProtocol.security.test.ts`
 - `src/interviewTrainer/infra/api/it_templateExecutor.security.test.ts`
 
