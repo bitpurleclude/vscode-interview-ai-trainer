@@ -1,31 +1,37 @@
 # Architecture
 
-该目录记录 interview-trainer 的分层架构与重构进度。
+This directory tracks the layered architecture, call chains, and refactor status of interview-trainer.
 
-## 分层说明
-- Interface：VS Code 命令、Webview 桥接与事件处理（接 I/O）。
-- Application：用例编排与跨域协调（调 domain + infra）。
-- Domain：核心业务规则与流程（不做 I/O）。
-- Infra：外部依赖实现（API/存储/录音/日志/工具）。
-- Protocol：跨层/前后端共享的协议类型。
+## Layer Model
+- Interface: VS Code commands, Webview bridge, and message handlers (I/O boundary).
+- Application: use-case orchestration and cross-domain coordination (domain + gateway).
+- Domain: core business rules and algorithms (pure logic, no I/O).
+- Infra: external integrations (API, storage, recording, logging, utilities).
+- Protocol: shared contracts across backend/frontend/layers.
 
-## Protocol 位置
-- 后端协议：`src/protocol/interviewTrainer.ts`
-- Webview 端类型：`webview/src/types.ts`（重导出/对齐协议）
+## Protocol Location
+- Backend protocol: `src/protocol/interviewTrainer.ts`
+- Webview type mirror: `webview/src/types.ts`
 
-## 重构进度
-| Phase | 范围 | 状态 |
+## Refactor Progress
+| Phase | Scope | Status |
 | --- | --- | --- |
-| Phase 0 | 目录扫描与计划 | 完成 |
-| Phase 1 | Protocol 调整 | 完成 |
-| Phase 2 | Infra 迁移 | 完成 |
-| Phase 3 | Domain 迁移 | 完成 |
-| Phase 4 | Application 迁移 | 完成 |
-| Phase 5 | Interface 接线 | 进行中 |
-| Phase 6 | Webview 适配 | 未开始 |
+| Phase 0 | Repository scan and planning | Done |
+| Phase 1 | Protocol constraints and baseline | Done |
+| Phase 2 | Infra migration and gatewayization | Done |
+| Phase 3 | Domain I/O cleanup | Done |
+| Phase 4 | Application split (useCases/services/flows) | Done |
+| Phase 5 | Interface handler capability ports | Done |
+| Phase 6 | Ongoing hardening (docs sync, host shrink) | In progress |
 
-## 参考文档
+## Current Focus
+- Analysis pipeline is stable under `application/useCases` + `application/flows`.
+- Interface now uses capability ports in `it_webviewHandlerPorts.ts`.
+- Next iteration continues to reduce responsibilities in `InterviewTrainerExtension`.
+
+## References
 - `ARCH_REFACTOR_PLAN.md`
+- `REFACTOR_TASKS_PLAN.md`
 - `docs/architecture/ARCHITECTURE_OVERVIEW.md`
 - `docs/architecture/DIRECTORY_MAP.md`
 - `ARCH_COMPLIANCE_REPORT.md`
