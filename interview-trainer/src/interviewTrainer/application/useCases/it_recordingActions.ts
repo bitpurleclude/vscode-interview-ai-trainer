@@ -44,7 +44,7 @@ export async function it_listNativeInputsFromWebview(params: {
 
   const ffmpeg = await params.context.findFfmpeg();
   if (!ffmpeg) {
-    throw new Error("??? ffmpeg?????????");
+    throw new Error("未检测到 ffmpeg，请先安装或配置 ffmpeg。");
   }
   const inputs = await params.context.listInputs(ffmpeg);
   return { inputs };
@@ -64,7 +64,7 @@ export async function it_convertAudioToPcmFromWebview(params: {
   const ffmpeg = await params.context.findFfmpeg();
   if (!ffmpeg) {
     throw new Error(
-      "???? ffmpeg???? ffmpeg ??????? WAV(16kHz ???) ?????",
+      "未检测到 ffmpeg。请先安装 ffmpeg，或手动上传 WAV(16kHz 单声道) 后再分析",
     );
   }
 

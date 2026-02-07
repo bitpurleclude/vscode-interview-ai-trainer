@@ -368,13 +368,13 @@ export async function it_convertAudioToPcmBase64(
       child.on("error", (error: Error) => reject(error));
       child.on("close", (code: number | null) => {
         if (code !== 0) {
-          reject(new Error(`ffmpeg ????: ${stderr || `code=${code}`}`));
+          reject(new Error(`ffmpeg 转码失败: ${stderr || `code=${code}`}`));
           return;
         }
         fs.promises
           .access(outPath)
           .then(() => resolve())
-          .catch(() => reject(new Error("ffmpeg ????????????")));
+          .catch(() => reject(new Error("ffmpeg 转码输出文件不存在")));
       });
     });
 

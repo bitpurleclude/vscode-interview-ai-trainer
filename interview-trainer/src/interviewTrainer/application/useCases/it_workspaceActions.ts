@@ -68,7 +68,7 @@ export async function it_selectWorkspaceDirFromWebview(params: {
   const workspaceConfig = (skillConfig.workspace || {}) as Record<string, unknown>;
   const current = String(workspaceConfig[targetKey] ?? skillConfig[targetKey] ?? "").trim();
   const selectedPath = await params.context.selectDirectory({
-    openLabel: "????",
+    openLabel: "选择目录",
     defaultPath: current ? path.join(workspaceRoot, current) : workspaceRoot,
   });
   if (!selectedPath) {
@@ -77,7 +77,7 @@ export async function it_selectWorkspaceDirFromWebview(params: {
 
   const normalized = it_normalizeRelativePath(workspaceRoot, selectedPath);
   if (!normalized) {
-    params.context.showWarning("?????????????");
+    params.context.showWarning("所选目录必须位于当前工作区内");
     return { configBundle, value: { canceled: true } };
   }
 
@@ -110,7 +110,7 @@ export async function it_selectSessionsDirFromWebview(params: {
   const configBundle = params.context.configService.loadBundle();
   const workspaceRoot = params.context.requireWorkspaceRoot();
   const selectedPath = await params.context.selectDirectory({
-    openLabel: "??????",
+    openLabel: "选择会话目录",
     defaultPath: workspaceRoot,
   });
   if (!selectedPath) {
@@ -119,7 +119,7 @@ export async function it_selectSessionsDirFromWebview(params: {
 
   const normalized = it_normalizeRelativePath(workspaceRoot, selectedPath);
   if (!normalized) {
-    params.context.showWarning("?????????????");
+    params.context.showWarning("所选目录必须位于当前工作区内");
     return { configBundle, value: { canceled: true } };
   }
 

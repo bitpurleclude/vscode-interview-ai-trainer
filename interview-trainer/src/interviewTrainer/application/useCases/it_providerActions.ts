@@ -26,7 +26,7 @@ function it_asRecord(value: unknown): Record<string, unknown> {
 
 function it_validateProviderId(providerId: string): void {
   if (!providerId || !/^[a-zA-Z0-9_-]+$/.test(providerId)) {
-    throw new Error("providerId ??????????_?-");
+    throw new Error("providerId 只能包含字母、数字、_、-");
   }
 }
 
@@ -87,7 +87,7 @@ export async function it_createProviderConfigFromWebview(params: {
 
   const configBundle = params.context.configService.loadBundle();
   if (configBundle.providers?.[providerId]) {
-    throw new Error("Provider ???");
+    throw new Error("Provider 已存在");
   }
   const displayName = String(payload.displayName || "").trim();
   const profile = it_buildDefaultProviderProfile(providerId, displayName);

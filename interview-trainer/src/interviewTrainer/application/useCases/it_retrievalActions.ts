@@ -137,7 +137,7 @@ export async function it_clearEmbeddingCacheFromWebview(params: {
   const workspaceRoot = params.context.requireWorkspaceRoot();
   const cacheRoot = params.context.extensionContext.globalStorageUri?.fsPath;
   if (!cacheRoot) {
-    throw new Error("????????");
+    throw new Error("缓存目录不可用");
   }
   const workspaceHash = it_hashText(
     params.context.normalizeWorkspaceKey(workspaceRoot),
@@ -148,7 +148,7 @@ export async function it_clearEmbeddingCacheFromWebview(params: {
     result = await it_removeEmbeddingCacheDirAsync(cacheRoot, workspaceHash);
   } catch (error) {
     throw new Error(
-      `???????${error instanceof Error ? error.message : String(error)}`,
+      `清理向量缓存失败：${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -162,7 +162,7 @@ export async function it_clearEmbeddingCacheFromWebview(params: {
     progress: 0,
     total: 0,
     done: 0,
-    message: "????????",
+    message: "向量缓存已清理，准备重新预热",
   });
   params.context.scheduleEmbeddingWarmup("clear-cache", 1000);
   return { configBundle, value: result };

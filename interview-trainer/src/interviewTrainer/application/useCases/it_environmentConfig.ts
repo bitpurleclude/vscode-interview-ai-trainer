@@ -321,7 +321,7 @@ export async function it_saveLlmProfile(
   const data = it_asRecord(payload);
   const profileId = String(data.profileId || "").trim();
   if (!profileId || !/^[a-zA-Z0-9_-]+$/.test(profileId)) {
-    throw new Error("profileId ??????????_?-");
+    throw new Error("profileId 只能包含字母、数字、_、-");
   }
 
   const configBundle = context.configService.loadBundle();

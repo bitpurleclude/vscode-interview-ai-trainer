@@ -268,3 +268,10 @@
 - [x] Synced services/useCases docs for cancel/error semantics ownership.
 - [ ] Follow-up: perform targeted cleanup pass for other legacy placeholder strings outside analysis flow modules.
 
+## P6-9 (2026-02-07) Placeholder Message Cleanup Progress
+- [x] Replaced corrupted placeholder user messages in use-cases/services/infra (workspace, recording, question, retrieval, provider, environment, core, analysis errors).
+- [x] Unified question-parser trace stage name to `题目解析` for request/response/error logs.
+- [x] Repaired `src/interviewTrainer/domain/notes/README.md` garbled text.
+- [x] Verified no `"?{3,}"` placeholder string literals remain under `src/interviewTrainer/*`.
+- [ ] Follow-up: continue cleaning remaining garbled docs under `docs/modules/*` in a separate docs pass.
+

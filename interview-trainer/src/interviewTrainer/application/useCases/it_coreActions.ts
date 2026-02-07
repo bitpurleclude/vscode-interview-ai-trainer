@@ -62,7 +62,7 @@ export function it_enableTraceLogsFromWebview(params: {
   params.context.setTraceLogsEnabled(true);
   params.context.showOutput();
   params.context.appendOutputLine(
-    `[${params.context.nowIso()}] ???????????`,
+    `[${params.context.nowIso()}] 已开启日志输出（Interview Trainer）`,
   );
   return {
     value: { enabled: true },
@@ -144,7 +144,7 @@ export async function it_openMicSettingsFromWebview(params: {
     };
   }
 
-  params.context.showInfo("??????????????????");
+  params.context.showInfo("请在系统设置中手动授予麦克风权限后重试");
   return {
     value: {
       opened: false,

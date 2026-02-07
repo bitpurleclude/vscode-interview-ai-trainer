@@ -93,7 +93,7 @@ export async function it_parseQuestions(
   const trace = it_createTraceLogger(onTrace);
   if (!llmConfig || !text.trim()) {
     if (onTrace && !llmConfig && text.trim()) {
-      onTrace("???? LLM ???", {});
+      onTrace("题目解析 LLM 开始", {});
     }
     return {
       ...fallback,
@@ -150,7 +150,7 @@ export async function it_parseQuestions(
   let parseError: string | undefined;
   let responseText: string | undefined;
   try {
-    await trace.logLlmTemplateRequest("????", parseConfig, [
+    await trace.logLlmTemplateRequest("题目解析", parseConfig, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ], parseConfig.stream);
@@ -168,7 +168,7 @@ export async function it_parseQuestions(
     );
     onStream?.({ text: content, done: true });
     responseText = content;
-    trace.logLlmTemplateResponse("????", parseConfig, content);
+    trace.logLlmTemplateResponse("题目解析", parseConfig, content);
     const parsed = it_extractJson(content);
     if (parsed && Array.isArray(parsed.questions)) {
       const questions = parsed.questions
@@ -189,7 +189,7 @@ export async function it_parseQuestions(
       }
     }
   } catch (err) {
-    trace.logLlmTemplateError("????", parseConfig, err);
+    trace.logLlmTemplateError("题目解析", parseConfig, err);
     if (err instanceof Error) {
       parseError = err.message;
     } else {

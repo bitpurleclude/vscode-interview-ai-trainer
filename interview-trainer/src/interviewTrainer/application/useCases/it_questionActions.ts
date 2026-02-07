@@ -172,7 +172,7 @@ export async function it_parseQuestionsFromWebview(params: {
     "questionParse",
   );
   if (!parseTemplate) {
-    throw new Error("LLM ????????????????????");
+    throw new Error("LLM 题目解析模板未绑定或未启用，请先在模板设置中绑定。");
   }
 
   const llmConfig = it_buildTemplateLlmConfig({
@@ -205,7 +205,7 @@ export async function it_regenerateDemoAnswerFromWebview(params: {
   const payload = it_asRecord(params.payload);
   const question = String(payload.question || "").trim();
   if (!question) {
-    throw new Error("????????????????");
+    throw new Error("缺少题目内容，无法生成示例回答");
   }
 
   const questionIndex = it_toQuestionIndex(payload.questionIndex);
@@ -224,7 +224,7 @@ export async function it_regenerateDemoAnswerFromWebview(params: {
     "evaluation",
   );
   if (!evaluationTemplate) {
-    throw new Error("LLM ??????????????????");
+    throw new Error("LLM 面试评价模板未绑定或未启用，请先在模板设置中绑定。");
   }
 
   const evalLlmConfig = it_buildTemplateLlmConfig({
@@ -288,7 +288,7 @@ export async function it_regenerateDemoAnswerFromWebview(params: {
 
   const revised = evaluation.revisedAnswers?.[0];
   if (!revised) {
-    throw new Error("??????????");
+    throw new Error("未生成可用的改写答案");
   }
 
   return { configBundle, revised };
