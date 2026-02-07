@@ -19,3 +19,8 @@ export {
   it_writeTopicMetaAsync,
 } from "../../infra/storage/it_sessions";
 export { it_listHistoryItems } from "../../infra/storage/it_history";
+export {
+  it_removeCorpusCacheDirAsync,
+  it_removeEmbeddingCacheDirAsync,
+} from "../../infra/storage/it_cache";
+

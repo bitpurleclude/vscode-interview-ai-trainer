@@ -110,3 +110,10 @@
 - [x] Moved parse/regenerate question orchestration into application use-case (`it_questionActions.ts`).
 - [x] `it_webviewQuestionHandlers.ts` now dispatches commands only.
 - [x] Synced use-case docs and verified build/test/package.
+
+
+## P5-8 (2026-02-07) Retrieval Handler UseCase Progress
+- [x] Moved retrieval settings/cache orchestration into application use-case (`it_retrievalActions.ts`).
+- [x] `it_webviewRetrievalHandlers.ts` now dispatches commands only.
+- [x] Added infra cache helpers (`infra/storage/it_cache.ts`) and gateway exports for cache directory cleanup.
+- [x] Synced use-case docs and verified build/test/package.
