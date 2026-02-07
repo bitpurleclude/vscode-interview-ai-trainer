@@ -17,3 +17,5 @@ Application service layer (cross-use-case reuse).
   - `it_traceGateway.ts`: trace logging gateway shared by question/evaluation/asr orchestrators.
   - `it_asrTranscription.ts` / `it_analysisPersistence.ts`: switched to application gateways for template/trace/storage/text helpers.
   - `it_configSnapshot.ts`: now consumes config/text gateways instead of direct infra imports.
+  - `it_audioGateway.ts`: audio metrics and detailed-transcript helper gateway.
+  - `it_notesGateway.ts` / `it_recordingGateway.ts`: expanded for analyze-flow corpus/retrieval/recording operations.

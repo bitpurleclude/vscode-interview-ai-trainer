@@ -7,5 +7,6 @@ export {
 export type {
   ItApiConfig,
   ItConfigBundle,
+  ItTemplatesConfig,
 } from "../../infra/api/it_apiConfig";
 export { ItConfigService } from "../../infra/api/it_configService";

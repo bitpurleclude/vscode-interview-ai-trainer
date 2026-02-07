@@ -6,7 +6,7 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import type { ItApiConfig, ItTemplatesConfig } from "../../../infra/api/it_apiConfig";
+import type { ItApiConfig, ItTemplatesConfig } from "../../services/it_configGateway";
 
 export type ItAnalyzeContext = {
   globalStorageUri?: { fsPath: string };

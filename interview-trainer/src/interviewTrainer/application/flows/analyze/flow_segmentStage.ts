@@ -4,7 +4,7 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import type { ItLlmConfig } from "../../../infra/api/it_llmTypes";
+import type { ItLlmConfig } from "../../services/it_llmGateway";
 import type { ItAnalyzeDeps } from "./flow_types";
 import { it_assignSegmentsWithLlm, it_splitAnswersWithLlm } from "../../services/it_questionsLlm";
 import { it_alignAnswerToSegments } from "../../../domain/analyze/questionsSegments";

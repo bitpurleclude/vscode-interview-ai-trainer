@@ -2,13 +2,13 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import type { ItLlmConfig } from "../../../infra/api/it_llmTypes";
-import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
+import type { ItLlmConfig } from "../../services/it_llmGateway";
+import type { ItTemplateRuntime } from "../../services/it_templateGateway";
 import { it_parseQuestions } from "../../services/it_questionParser";
 import {
   it_readQuestionParseCache,
   it_writeQuestionParseCache,
-} from "../../../infra/storage/it_questionCache";
+} from "../../services/it_storageGateway";
 import type { ItAnalyzeDeps, ItQuestionState } from "./flow_types";
 
 type QuestionParseStageInput = {

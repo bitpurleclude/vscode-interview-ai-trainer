@@ -5,11 +5,11 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
+import type { ItTemplateRuntime } from "../../services/it_templateGateway";
 import {
-  it_summarizeAudioMetrics,
   it_buildDetailedTranscript,
-} from "../../../infra/utils/it_audio";
+  it_summarizeAudioMetrics,
+} from "../../services/it_audioGateway";
 import { it_transcribeAudio } from "../../services/it_asrTranscription";
 import type { ItAnalyzeDeps } from "./flow_types";
 

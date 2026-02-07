@@ -7,10 +7,10 @@ import type {
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
-import { it_hashText } from "../../../infra/utils/it_text";
+import type { ItTemplateRuntime } from "../../services/it_templateGateway";
+import { it_hashText } from "../../services/it_textGateway";
 import type { ItCorpusItem } from "../../../domain/notes";
-import { it_createRetrievalMetrics, it_retrieveNotesMulti } from "../../../infra/notes";
+import { it_createRetrievalMetrics, it_retrieveNotesMulti } from "../../services/it_notesGateway";
 import { it_buildRetrievalQueries, it_mergeNoteHitsAll } from "../../../domain/analyze/result";
 import { it_collectAnswersFromSegments } from "../../../domain/analyze/questionsSegments";
 import { it_normalizeWorkspaceKey } from "./flow_helpers";

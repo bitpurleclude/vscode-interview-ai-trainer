@@ -1,6 +1,6 @@
 import path from "path";
-import type { ItTemplateRuntime } from "../../../infra/api/it_templateExecutor";
-import type { ItLlmConfig } from "../../../infra/api/it_llmTypes";
+import type { ItLlmConfig } from "../../services/it_llmGateway";
+import type { ItTemplateRuntime } from "../../services/it_templateGateway";
 import type { ItAnalyzeDeps } from "./flow_types";
 
 export function it_splitFallbackQuestions(text: string): string[] {

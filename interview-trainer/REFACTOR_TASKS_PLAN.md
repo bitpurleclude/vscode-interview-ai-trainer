@@ -182,3 +182,10 @@
 - [x] `it_configSnapshot.ts` switched from direct infra config/text imports to `it_configGateway` and `it_textGateway`.
 - [x] No runtime behavior change; snapshot/migration/watcher logic kept intact.
 - [x] Synced service docs and verified build/test/package.
+
+
+## P5-19 (2026-02-07) Analyze Flow Gateway Alignment Progress
+- [x] `application/flows/analyze/*` switched from direct infra imports to application gateways (`it_templateGateway`, `it_storageGateway`, `it_notesGateway`, `it_recordingGateway`, `it_textGateway`, `it_llmGateway`, `it_configGateway`).
+- [x] Added `it_audioGateway.ts` and expanded notes/recording/config gateways for flow-stage usage.
+- [x] Kept flow behavior intact (question parse, ASR, retrieval, segment, evaluation pipeline).
+- [x] Synced service docs and verified build/test/package.

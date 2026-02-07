@@ -8,15 +8,15 @@ import {
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
 import { it_evaluateAnswer } from "../../services/it_evaluation";
-import { it_resolveBindingTemplate } from "../../../infra/api/it_templateExecutor";
+import { it_resolveBindingTemplate } from "../../services/it_templateGateway";
 import {
   it_nextAttemptIndexAsync,
   it_reportPathForTopicAsync,
   it_resolveTopicDirAsync,
-} from "../../../infra/storage/it_sessions";
+} from "../../services/it_storageGateway";
 import type { ItCorpusItem } from "../../../domain/notes";
-import { it_buildCorpusAsync } from "../../../infra/notes";
-import { it_storeRecordingAsync } from "../../../infra/recording/it_recordingStore";
+import { it_buildCorpusAsync } from "../../services/it_notesGateway";
+import { it_storeRecordingAsync } from "../../services/it_recordingGateway";
 import { it_buildAcousticForTiming, it_mergeEvaluations } from "../../../domain/analyze/evaluation";
 import { it_deriveTopicTitle } from "../../../domain/analyze/result";
 import { it_generateTopicTitleWithLlm } from "../../services/it_topicTitle";
