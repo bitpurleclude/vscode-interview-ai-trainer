@@ -1,14 +1,45 @@
-import type {
-  ItAnalyzeRequest,
-  ItStepStatus,
-  ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
-import type { ItTemplateRuntime } from "../../infra/api/it_templateExecutor";
-import { it_requestAsrTemplate } from "../../infra/clients/asrClient";
-import { it_createTraceLogger } from "../../infra/logging/it_traceLogger";
-import { it_splitPcmBase64 } from "../../infra/recording/it_recordingStore";
+import type { ItAnalyzeRequest, ItStepStatus, ItWorkflowStep } from "../../../protocol/interviewTrainer";
 
-function it_isBaiduContentTooLong(error: unknown): boolean {
+export type ItAsrTemplateRequestVars = {
+  audioFile: string;
+  audio: {
+    format: string;
+    rate: number;
+    sampleRate: number;
+    channel: number;
+    byteLength: number;
+    durationSec?: number;
+    url?: string;
+  };
+  asr: {
+    lang: string;
+    dev_pid: number;
+    language: string;
+    devPid: number;
+  };
+  audioUrl?: string;
+};
+
+export type ItAsrRuntimeConfig = {
+  devPid: number;
+  language: string;
+  timeoutSec: number;
+  maxRetries: number;
+};
+
+export type ItPcmChunk = {
+  speech: string;
+  len: number;
+};
+
+export type ItAsrProgressReporter = (
+  step: ItWorkflowStep,
+  progress: number,
+  message?: string,
+  status?: ItStepStatus,
+) => void;
+
+export function it_isBaiduContentTooLong(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
   return (
@@ -18,25 +49,83 @@ function it_isBaiduContentTooLong(error: unknown): boolean {
   );
 }
 
-async function it_transcribePcmWithChunks(
-  runtime: ItTemplateRuntime,
-  asrConfig: {
-    devPid: number;
-    language: string;
-    timeoutSec: number;
-    maxRetries: number;
-  },
-  base64: string,
-  sampleRate: number,
-  maxChunkSec: number,
-  maxConcurrency: number,
-  onProgress?: (processed: number, total: number) => void,
-): Promise<string> {
+export function it_buildAsrTemplateVars(
+  request: ItAnalyzeRequest,
+  asrCfg: Record<string, unknown>,
+): {
+  vars: ItAsrTemplateRequestVars;
+  runtimeConfig: ItAsrRuntimeConfig;
+  maxChunkSec: number;
+  maxConcurrency: number;
+  audioUrl: string;
+} {
+  const language = String(asrCfg.language || "zh");
+  const devPid = Number(asrCfg.dev_pid ?? 1537);
+  const timeoutSec = Number(asrCfg.timeout_sec ?? 120);
+  const maxRetries = Number(asrCfg.max_retries ?? 1);
+  const maxChunkSec = Number(asrCfg.max_chunk_sec ?? 50);
+  const maxConcurrency = Number(asrCfg.max_concurrency ?? asrCfg.maxConcurrency ?? 1);
+  const audioUrl = String(asrCfg.audio_url || asrCfg.audioUrl || "");
+
+  const vars: ItAsrTemplateRequestVars = {
+    audioFile: request.audio.base64,
+    audio: {
+      format: request.audio.format,
+      rate: request.audio.sampleRate,
+      sampleRate: request.audio.sampleRate,
+      channel: 1,
+      byteLength: request.audio.byteLength,
+      durationSec: request.audio.durationSec,
+      url: audioUrl || undefined,
+    },
+    asr: {
+      lang: language,
+      dev_pid: devPid,
+      language,
+      devPid,
+    },
+  };
+
+  return {
+    vars,
+    runtimeConfig: {
+      devPid,
+      language,
+      timeoutSec,
+      maxRetries,
+    },
+    maxChunkSec,
+    maxConcurrency,
+    audioUrl,
+  };
+}
+
+export async function it_transcribePcmWithChunks(params: {
+  runtimeConfig: ItAsrRuntimeConfig;
+  base64: string;
+  sampleRate: number;
+  maxChunkSec: number;
+  maxConcurrency: number;
+  splitChunks: (base64: string, sampleRate: number, chunkSec: number) => ItPcmChunk[];
+  requestChunk: (vars: ItAsrTemplateRequestVars) => Promise<string>;
+  onProgress?: (processed: number, total: number) => void;
+}): Promise<string> {
+  const {
+    runtimeConfig,
+    base64,
+    sampleRate,
+    maxChunkSec,
+    maxConcurrency,
+    splitChunks,
+    requestChunk,
+    onProgress,
+  } = params;
+
   let chunkSec = Math.max(5, Math.floor(maxChunkSec || 50));
-  let lastError: unknown = undefined;
   const resolvedConcurrency = Number.isFinite(maxConcurrency)
     ? Math.max(1, Math.floor(maxConcurrency))
     : 1;
+
   const runWithLimit = async <T, R>(
     list: T[],
     limit: number,
@@ -54,35 +143,31 @@ async function it_transcribePcmWithChunks(
     await Promise.all(workers);
     return results;
   };
+
   for (;;) {
-    const chunks = it_splitPcmBase64(base64, sampleRate, chunkSec);
+    const chunks = splitChunks(base64, sampleRate, chunkSec);
     const parts: string[] = new Array(chunks.length);
     let done = 0;
+
     try {
       await runWithLimit(chunks, resolvedConcurrency, async (chunk, idx) => {
-        const part = await it_requestAsrTemplate(
-          runtime,
-          {
-            audioFile: chunk.speech,
-            audio: {
-              format: "pcm",
-              rate: sampleRate,
-              sampleRate,
-              channel: 1,
-              byteLength: chunk.len,
-            },
-            asr: {
-              lang: asrConfig.language,
-              dev_pid: asrConfig.devPid,
-              language: asrConfig.language,
-              devPid: asrConfig.devPid,
-            },
+        const part = await requestChunk({
+          audioFile: chunk.speech,
+          audio: {
+            format: "pcm",
+            rate: sampleRate,
+            sampleRate,
+            channel: 1,
+            byteLength: chunk.len,
           },
-          {
-            maxRetries: asrConfig.maxRetries,
-            timeoutSec: asrConfig.timeoutSec,
+          asr: {
+            lang: runtimeConfig.language,
+            dev_pid: runtimeConfig.devPid,
+            language: runtimeConfig.language,
+            devPid: runtimeConfig.devPid,
           },
-        );
+        });
+
         parts[idx] = part;
         done += 1;
         onProgress?.(done, chunks.length);
@@ -90,7 +175,6 @@ async function it_transcribePcmWithChunks(
       });
       return parts.join(" ").replace(/\s+/g, " ").trim();
     } catch (err) {
-      lastError = err;
       if (it_isBaiduContentTooLong(err) && chunkSec > 5) {
         chunkSec = Math.max(5, Math.floor(chunkSec / 2));
         continue;
@@ -98,140 +182,4 @@ async function it_transcribePcmWithChunks(
       throw err;
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("ASR failed.");
-}
-
-export async function it_transcribeAudio(
-  request: ItAnalyzeRequest,
-  asrCfg: any,
-  templateRuntime: ItTemplateRuntime | null,
-  reportProgress: (
-    step: ItWorkflowStep,
-    progress: number,
-    message?: string,
-    status?: ItStepStatus,
-  ) => void,
-  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
-): Promise<string> {
-  const trace = it_createTraceLogger(onTrace);
-  const asrProvider = asrCfg.provider || "baidu_vop";
-  const asrLabel = asrProvider === "mock" ? "模拟" : "API";
-  reportProgress("asr", 0, `语音转写 0% · ${asrLabel}`, "running");
-
-  if (asrProvider === "mock") {
-    const mockText = String(asrCfg.mock_text || "");
-    reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
-    return mockText;
-  }
-
-  if (!templateRuntime) {
-    throw new Error("ASR 模板未绑定，无法转写。");
-  }
-
-  const language = asrCfg.language || "zh";
-  const devPid = Number(asrCfg.dev_pid ?? 1537);
-  const timeoutSec = Number(asrCfg.timeout_sec ?? 120);
-  const maxRetries = Number(asrCfg.max_retries ?? 1);
-  const maxChunkSec = Number(asrCfg.max_chunk_sec ?? 50);
-  const maxConcurrency = Number(asrCfg.max_concurrency ?? asrCfg.maxConcurrency ?? 1);
-  const audioUrl = asrCfg.audio_url || asrCfg.audioUrl || "";
-
-  const audioMeta = {
-    format: request.audio.format,
-    rate: request.audio.sampleRate,
-    sampleRate: request.audio.sampleRate,
-    channel: 1,
-    byteLength: request.audio.byteLength,
-    durationSec: request.audio.durationSec,
-    url: audioUrl || undefined,
-  };
-  const asrVarsBase = {
-    audioFile: request.audio.base64,
-    audio: audioMeta,
-    asr: {
-      lang: language,
-      dev_pid: devPid,
-      language,
-      devPid,
-    },
-  };
-
-  let transcript = "";
-  if (audioUrl) {
-    reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    await trace.logTemplateRequest(
-      "语音转写",
-      templateRuntime,
-      { ...asrVarsBase, audioUrl },
-      { stream: false, timeoutSec },
-    );
-    try {
-      transcript = await it_requestAsrTemplate(
-        templateRuntime,
-        { ...asrVarsBase, audioUrl },
-        {
-          maxRetries,
-          timeoutSec,
-        },
-      );
-    } catch (err) {
-      trace.logTemplateError("语音转写", templateRuntime, err);
-      throw err;
-    }
-  } else if (request.audio.format === "pcm" && request.audio.byteLength > 0) {
-    await trace.logTemplateRequest("语音转写", templateRuntime, asrVarsBase, {
-      stream: false,
-      timeoutSec,
-    });
-    try {
-      transcript = await it_transcribePcmWithChunks(
-        templateRuntime,
-        {
-          devPid,
-          language,
-          timeoutSec,
-          maxRetries,
-        },
-        request.audio.base64,
-        request.audio.sampleRate,
-        maxChunkSec,
-        maxConcurrency,
-        (done, total) => {
-          const percent = total ? Math.round((done / total) * 100) : 0;
-          reportProgress(
-            "asr",
-            percent,
-            `语音转写 ${percent}% · ${asrLabel}`,
-            "running",
-          );
-        },
-      );
-    } catch (err) {
-      trace.logTemplateError("语音转写", templateRuntime, err);
-      throw err;
-    }
-  } else {
-    reportProgress("asr", 25, `语音转写 25% · ${asrLabel}`, "running");
-    await trace.logTemplateRequest("语音转写", templateRuntime, asrVarsBase, {
-      stream: false,
-      timeoutSec,
-    });
-    try {
-      transcript = await it_requestAsrTemplate(
-        templateRuntime,
-        asrVarsBase,
-        {
-          maxRetries,
-          timeoutSec,
-        },
-      );
-    } catch (err) {
-      trace.logTemplateError("语音转写", templateRuntime, err);
-      throw err;
-    }
-  }
-
-  trace.logTemplateResponse("语音转写", templateRuntime, { text: transcript });
-  reportProgress("asr", 100, `语音转写 100% · ${asrLabel}`, "success");
-  return transcript;
 }

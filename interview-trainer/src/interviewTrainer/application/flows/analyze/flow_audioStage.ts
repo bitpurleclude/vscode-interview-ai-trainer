@@ -10,7 +10,7 @@ import {
   it_summarizeAudioMetrics,
   it_buildDetailedTranscript,
 } from "../../../infra/utils/it_audio";
-import { it_transcribeAudio } from "../../../domain/analyze/asr";
+import { it_transcribeAudio } from "../../services/it_asrTranscription";
 import type { ItAnalyzeDeps } from "./flow_types";
 
 type AudioStageInput = {

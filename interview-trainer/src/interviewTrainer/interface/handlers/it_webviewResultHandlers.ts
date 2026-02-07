@@ -12,7 +12,7 @@ import {
   it_writeTopicMetaAsync,
 } from "../../infra/storage/it_sessions";
 import { it_hashText, it_normalizeText } from "../../infra/utils/it_text";
-import { it_deriveTopicTitle, it_sanitizeTopicTitle } from "../../domain/analyze/result";
+import { it_deriveTopicTitle, it_sanitizeTopicTitle } from "../../application/services/it_topicTitle";
 import type { ItWebviewHandlersHost } from "./it_webviewHandlers";
 
 export function it_registerResultHandlers(host: ItWebviewHandlersHost): void {

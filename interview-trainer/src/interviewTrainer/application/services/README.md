@@ -1,5 +1,9 @@
 # application/services
 
-应用服务层（跨用例复用）。
-- 聚合配置、日志、进度、Token、评价等能力。
-- 避免耦合 UI，仅提供业务级接口。
+Application service layer (cross-use-case reuse).
+- Aggregates config, logging, progress, token, evaluation, and other capabilities.
+- Avoids direct coupling to UI and exposes business-level APIs.
+- Added:
+  - `it_asrTranscription.ts`: ASR request orchestration and template tracing.
+  - `it_topicTitle.ts`: LLM topic-title generation and title sanitizing bridge.
+  - `it_analysisPersistence.ts`: persistence for analysis result/report/session metadata.

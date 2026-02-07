@@ -18,11 +18,9 @@ import type { ItCorpusItem } from "../../../domain/notes";
 import { it_buildCorpusAsync } from "../../../infra/notes";
 import { it_storeRecordingAsync } from "../../../infra/recording/it_recordingStore";
 import { it_buildAcousticForTiming, it_mergeEvaluations } from "../../../domain/analyze/evaluation";
-import {
-  it_deriveTopicTitle,
-  it_generateTopicTitleWithLlm,
-  it_persistAnalysis,
-} from "../../../domain/analyze/result";
+import { it_deriveTopicTitle } from "../../../domain/analyze/result";
+import { it_generateTopicTitleWithLlm } from "../../services/it_topicTitle";
+import { it_persistAnalysis } from "../../services/it_analysisPersistence";
 import { it_buildTemplateLlmConfig, it_buildTemplateRuntime, it_splitFallbackQuestions } from "./flow_helpers";
 import { it_runAudioStage } from "./flow_audioStage";
 import { it_prepareQuestionParseStage } from "./flow_questionStage";

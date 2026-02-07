@@ -68,3 +68,11 @@
 - [x] 更新 `docs/architecture/*` 与 `docs/modules/*` 对应模块说明。
 - [x] 补充目录图与依赖方向说明（标注 Domain 不含 I/O）。
 - [x] 构建验证：`npm run build`。
+
+## P4-5 (2026-02-07) Architecture Compliance Progress
+- [x] Domain no longer imports Infra in analyze modules (`domain/analyze/asr.ts`, `domain/analyze/result.ts`, `domain/analyze/questionsSegments.ts`).
+- [x] Moved ASR orchestration to `application/services/it_asrTranscription.ts`, domain keeps pure chunking logic.
+- [x] Moved title generation and persistence I/O to application services (`it_topicTitle.ts`, `it_analysisPersistence.ts`).
+- [x] Removed Interface -> Domain direct import by switching `it_webviewResultHandlers.ts` to application service API.
+- [x] Build and test passed after migration.
+

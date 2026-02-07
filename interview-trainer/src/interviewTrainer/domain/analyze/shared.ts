@@ -10,3 +10,7 @@ export function it_extractJson(text: string): any | null {
     return null;
   }
 }
+
+export function it_normalizeText(text: string): string {
+  return (text || "").replace(/\s+/g, "").trim();
+}

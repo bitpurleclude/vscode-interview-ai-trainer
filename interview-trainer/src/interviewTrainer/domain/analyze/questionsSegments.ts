@@ -1,5 +1,5 @@
 import type { ItAudioSegment, ItQuestionTiming } from "../../../protocol/interviewTrainer";
-import { it_normalizeText } from "../../infra/utils/it_text";
+import { it_normalizeText } from "./shared";
 
 export function it_alignAnswerToSegments(
   answer: string,
