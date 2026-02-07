@@ -2,46 +2,9 @@ import type {
   ItAnalyzeProgress,
   ItAnalyzeDeps,
 } from "../flows/analyze/flow_types";
-import type {
-  ItApiConfig,
-  ItConfigBundle,
-  ItConfigService,
-} from "./it_configGateway";
-import type {
-  ItState,
-  ItStepStatus,
-  ItWorkflowStep,
-} from "../../../protocol/interviewTrainer";
+import type { ItAnalysisRunConfigPort } from "./it_analysisHostPorts";
 
-export type ItAnalysisRunConfigHost = {
-  context: import("vscode").ExtensionContext;
-  configService: ItConfigService;
-  configBundle: ItConfigBundle;
-  corpusDirty: boolean;
-  corpusDirtyFiles: Set<string>;
-  analysisAbort: { aborted: boolean } | null;
-  updateProgress: (update: {
-    step: ItWorkflowStep;
-    progress: number;
-    message?: string;
-    status?: ItStepStatus;
-  }) => void;
-  emitStreamUpdate: (update: {
-    step: ItWorkflowStep;
-    text: string;
-    done?: boolean;
-    reset?: boolean;
-  }) => void;
-  emitEvaluationStreamUpdate: (update: {
-    questionIndex: number;
-    text: string;
-    done?: boolean;
-    reset?: boolean;
-  }) => void;
-  logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
-  requireWorkspaceRoot: () => string;
-  resolveApiConfigWithProviders: (apiConfig: ItApiConfig) => ItApiConfig;
-};
+export type ItAnalysisRunConfigHost = ItAnalysisRunConfigPort;
 
 export async function it_prepareAnalysisRunDeps(
   host: ItAnalysisRunConfigHost,

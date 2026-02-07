@@ -5,6 +5,7 @@ import type {
   ItUserError,
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
+import type { ItAnalysisSessionPort } from "./it_analysisHostPorts";
 
 const IT_ANALYSIS_SUCCESS_STEPS: ItWorkflowStep[] = [
   "acoustic",
@@ -16,17 +17,7 @@ const IT_ANALYSIS_SUCCESS_STEPS: ItWorkflowStep[] = [
   "write",
 ];
 
-export type ItAnalysisSessionHost = {
-  state: ItState;
-  analysisAbort: { aborted: boolean } | null;
-  embeddingWarmupAbort: { aborted: boolean } | null;
-  corpusDirty: boolean;
-  corpusDirtyFiles: Set<string>;
-  buildRunSteps: () => ItStepState[];
-  computeOverallProgress: (steps: ItStepState[]) => number;
-  updateState: (next: Partial<ItState>) => void;
-  scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
-};
+export type ItAnalysisSessionHost = ItAnalysisSessionPort;
 
 export type ItAnalysisPartial = {
   transcript?: ItState["draftTranscript"];

@@ -30,3 +30,4 @@ Application service layer (cross-use-case reuse).
   - `it_analysisSessionState.ts`: analysis-session state transitions (start/partial/success/cancel/error).
   - `it_analysisRunConfig.ts`: analysis-run config/dependency builder (config reload + env merge + flow deps).
   - `it_analysisErrors.ts`: analysis cancel/error semantics constants and user-error builder.
+  - `it_analysisHostPorts.ts`: shared host port contracts for analysis use-case/session/run-config delegation boundaries.

@@ -275,3 +275,9 @@
 - [x] Verified no `"?{3,}"` placeholder string literals remain under `src/interviewTrainer/*`.
 - [ ] Follow-up: continue cleaning remaining garbled docs under `docs/modules/*` in a separate docs pass.
 
+## P6-10 (2026-02-07) Analysis Host Port Contract Refinement Progress
+- [x] Added `application/services/it_analysisHostPorts.ts` and centralized analysis host contract by responsibility (session/run-config/progress/stream/runtime/config/abort state).
+- [x] `it_analysisFlow.ts` now reuses unified `ItAnalysisUseCasePort` instead of duplicating a fat host type.
+- [x] `it_analysisSessionState.ts` and `it_analysisRunConfig.ts` now consume shared port types to keep boundaries aligned.
+- [x] Synced `application/services/README.md` and `application/useCases/README.md` for the new contract owner.
+- [ ] Follow-up: continue reducing large host contracts in `interface/handlers/it_webviewHandlers.ts` through capability-specific ports.

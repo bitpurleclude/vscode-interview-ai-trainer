@@ -1,10 +1,6 @@
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
-  ItState,
-  ItStepState,
-  ItStepStatus,
-  ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
 import { it_runAnalysis } from "../flows/analyze/flow";
 import {
@@ -22,47 +18,9 @@ import {
   it_buildAnalysisFailedUserError,
   it_isAnalysisCanceledError,
 } from "../services/it_analysisErrors";
-import type {
-  ItApiConfig,
-  ItConfigBundle,
-  ItConfigService,
-} from "../services/it_configGateway";
+import type { ItAnalysisUseCasePort } from "../services/it_analysisHostPorts";
 
-export type ItAnalysisHost = {
-  context: import("vscode").ExtensionContext;
-  configService: ItConfigService;
-  configBundle: ItConfigBundle;
-  state: ItState;
-  analysisAbort: { aborted: boolean } | null;
-  embeddingWarmupAbort: { aborted: boolean } | null;
-  corpusDirty: boolean;
-  corpusDirtyFiles: Set<string>;
-  buildRunSteps: () => ItStepState[];
-  computeOverallProgress: (steps: ItStepState[]) => number;
-  updateState: (next: Partial<ItState>) => void;
-  updateProgress: (update: {
-    step: ItWorkflowStep;
-    progress: number;
-    message?: string;
-    status?: ItStepStatus;
-  }) => void;
-  emitStreamUpdate: (update: {
-    step: ItWorkflowStep;
-    text: string;
-    done?: boolean;
-    reset?: boolean;
-  }) => void;
-  emitEvaluationStreamUpdate: (update: {
-    questionIndex: number;
-    text: string;
-    done?: boolean;
-    reset?: boolean;
-  }) => void;
-  logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
-  requireWorkspaceRoot: () => string;
-  resolveApiConfigWithProviders: (apiConfig: ItApiConfig) => ItApiConfig;
-  scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
-};
+export type ItAnalysisHost = ItAnalysisUseCasePort;
 
 export async function it_handleAnalyze(
   host: ItAnalysisHost,
