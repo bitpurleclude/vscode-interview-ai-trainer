@@ -1,11 +1,15 @@
 import * as vscode from "vscode";
-import { ItConfigSnapshot, ItWorkflowStep } from "../../../protocol/interviewTrainer";
-import { WebviewProtocol } from "../../../webview/WebviewProtocol";
+import type { ItConfigSnapshot } from "../../../protocol/interviewTrainer";
+import type {
+  ItEvaluationStreamUpdate,
+  ItStepStreamUpdate,
+  ItWebviewPort,
+} from "./it_webviewPort";
 
 export type ItLogHost = {
   outputChannel: vscode.OutputChannel;
   traceLogsEnabled: boolean;
-  webviewProtocol: WebviewProtocol;
+  webviewProtocol: ItWebviewPort;
   configSnapshot: ItConfigSnapshot;
 };
 
@@ -97,12 +101,7 @@ export function it_logCorpusTrace(
 
 export function it_emitStreamUpdate(
   host: ItLogHost,
-  update: {
-    step: ItWorkflowStep;
-    text: string;
-    done?: boolean;
-    reset?: boolean;
-  },
+  update: ItStepStreamUpdate,
 ): void {
   if (host.configSnapshot?.streaming?.enabled === false) {
     return;
@@ -112,12 +111,7 @@ export function it_emitStreamUpdate(
 
 export function it_emitEvaluationStreamUpdate(
   host: ItLogHost,
-  update: {
-    questionIndex: number;
-    text: string;
-    done?: boolean;
-    reset?: boolean;
-  },
+  update: ItEvaluationStreamUpdate,
 ): void {
   if (host.configSnapshot?.streaming?.enabled === false) {
     return;

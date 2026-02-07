@@ -7,11 +7,11 @@ import type {
 } from "../../../protocol/interviewTrainer";
 import type { ItApiConfig, ItConfigBundle } from "../../infra/api/it_apiConfig";
 import { it_executeTemplate, it_readPath } from "../../infra/api/it_templateExecutor";
-import type { WebviewProtocol } from "../../../webview/WebviewProtocol";
+import type { ItWebviewPort } from "./it_webviewPort";
 
 type ItTokenServiceHost = {
   context: vscode.ExtensionContext;
-  webviewProtocol: WebviewProtocol;
+  webviewProtocol: ItWebviewPort;
   configBundle: ItConfigBundle;
   configSnapshot: ItConfigSnapshot;
   buildConfigSnapshot: (apiConfig: ItApiConfig) => ItConfigSnapshot;

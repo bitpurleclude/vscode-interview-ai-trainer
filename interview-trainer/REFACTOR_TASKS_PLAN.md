@@ -80,4 +80,9 @@
 - [x] Added `application/services/it_infraBridge.ts` as a temporary migration bridge.
 - [x] Kept runtime behavior unchanged; handlers still work through same APIs.
 - [x] Build/test/package verified after migration.
+## P5-2 (2026-02-07) Application Decoupling Progress
+- [x] Removed `application -> webview/WebviewProtocol` direct type dependency.
+- [x] Added `application/services/it_webviewPort.ts` as app-level port contract.
+- [x] Updated `it_logging.ts` and `it_tokens.ts` to consume `ItWebviewPort`.
+- [x] Build/test/package verified after decoupling.
 
