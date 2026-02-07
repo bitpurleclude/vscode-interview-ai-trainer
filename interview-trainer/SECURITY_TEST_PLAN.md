@@ -43,7 +43,8 @@
 - [x] P2-22 Guardrails range-normalization and poison-number clamp tests (`it_guardrails.security.test.ts`).
 - [x] P2-23 Large payload pressure tests for retrieval query/body sizing (`search.payload-pressure.test.ts`).
 - [x] P2-24 Host smoke fixture availability assertions for markdown/audio corpus (`test/e2e/smoke/index.js`).
-- [ ] P2 suites pending (host-fixture full analysis/evaluation roundtrip assertions).
+- [x] P2-25 Fixture-driven analyze request roundtrip assertions at use-case boundary (`it_analysisFlow.integration.test.ts`).
+- [ ] P2 suites pending (host-side full analysis/evaluation roundtrip in extension-host runtime).
 
 ## Analyze Full-Flow Fault Matrix (new)
 

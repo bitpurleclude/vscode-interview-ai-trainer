@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ItAnalyzeRequest,
@@ -95,6 +97,70 @@ function createRequest(): ItAnalyzeRequest {
   };
 }
 
+function findRepoRoot(startDir: string): string {
+  let current = startDir;
+  for (let i = 0; i < 12; i += 1) {
+    if (fs.existsSync(path.join(current, "testdata"))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  throw new Error("unable to locate repository root");
+}
+
+function resolveFixtureFiles(fixtureDir: string): {
+  markdownPath: string;
+  audioPath: string;
+} {
+  const entries = fs.readdirSync(fixtureDir, { withFileTypes: true });
+  const markdownFile = entries.find(
+    (entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"),
+  );
+  const audioFile = entries.find(
+    (entry) => entry.isFile() && /\.(m4a|wav|mp3|aac)$/i.test(entry.name),
+  );
+  if (!markdownFile || !audioFile) {
+    throw new Error(`fixture files missing in ${fixtureDir}`);
+  }
+  return {
+    markdownPath: path.join(fixtureDir, markdownFile.name),
+    audioPath: path.join(fixtureDir, audioFile.name),
+  };
+}
+
+function buildFixtureRequest(): ItAnalyzeRequest {
+  const repoRoot = findRepoRoot(__dirname);
+  const { markdownPath, audioPath } = resolveFixtureFiles(path.join(repoRoot, "testdata"));
+
+  const markdownText = fs.readFileSync(markdownPath, "utf-8").trim();
+  const lines = markdownText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const audioBuffer = fs.readFileSync(audioPath);
+  const cappedAudio = audioBuffer.subarray(0, Math.min(audioBuffer.length, 256 * 1024));
+  const questionText = lines[0] || "fixture question";
+  const questionList = lines.filter((line) => line.length >= 8).slice(0, 3);
+
+  return {
+    audio: {
+      format: "m4a",
+      sampleRate: 16000,
+      byteLength: cappedAudio.byteLength,
+      durationSec: Math.max(1, Math.round(cappedAudio.byteLength / 16000)),
+      base64: cappedAudio.toString("base64"),
+    },
+    questionText,
+    questionList: questionList.length ? questionList : [questionText],
+    runId: "analysis-fixture-run",
+  };
+}
+
 function createHost() {
   const state: ItState = {
     statusMessage: "idle",
@@ -183,6 +249,37 @@ describe("it_handleAnalyze integration", () => {
     const writeStep = host.state.steps.find((step: ItStepState) => step.id === "write");
     expect(asrStep).toMatchObject({ status: "success", progress: 100 });
     expect(writeStep).toMatchObject({ status: "success", progress: 100 });
+  });
+
+  it("accepts fixture-driven request payloads and keeps lifecycle stable", async () => {
+    const host = createHost();
+    const request = buildFixtureRequest();
+    const response = createResponse();
+
+    mocks.runAnalysis.mockImplementation(async (deps: any, req: ItAnalyzeRequest) => {
+      expect(req.runId).toBe("analysis-fixture-run");
+      expect(req.audio.base64.length).toBeGreaterThan(1024);
+      expect(req.audio.byteLength).toBeGreaterThan(1024);
+      expect(req.questionText?.length || 0).toBeGreaterThan(0);
+      expect(req.questionList?.length || 0).toBeGreaterThan(0);
+
+      deps.onPartial?.({ transcript: "fixture partial transcript" });
+      return {
+        ...response,
+        questionText: req.questionText || response.questionText,
+        questionList: req.questionList || response.questionList,
+      };
+    });
+
+    const result = await it_handleAnalyze(host, request);
+
+    expect(result.questionText).toBe(request.questionText);
+    expect(result.questionList).toEqual(request.questionList);
+    expect(host.state.draftTranscript).toBe("fixture partial transcript");
+    expect(host.state.lastError).toBeUndefined();
+    expect(host.corpusDirty).toBe(false);
+    expect(host.analysisAbort).toBeNull();
+    expect(host.scheduleEmbeddingWarmup).toHaveBeenCalledWith("after-analysis", 3000);
   });
 
   it("handles canceled analysis without writing user error", async () => {
