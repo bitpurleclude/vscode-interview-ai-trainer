@@ -3,6 +3,7 @@ import {
   it_testTemplateLive,
   type ItTemplateTestUseCaseContext,
 } from "../../application/useCases/it_templateTestActions";
+import { it_runLoggedHandler } from "./it_webviewHandlerLogging";
 import type { ItTemplateTestHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createTemplateTestUseCaseContext(
@@ -24,16 +25,34 @@ function it_createTemplateTestUseCaseContext(
 
 export function it_registerTemplateTestHandlers(host: ItTemplateTestHandlersPort): void {
   host.webviewProtocol.on("it/testTemplateDryRun", async (msg) =>
-    it_testTemplateDryRun({
-      context: it_createTemplateTestUseCaseContext(host),
-      payload: msg.data,
-    }),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/testTemplateDryRun",
+        event: "interface.template_test.dry_run",
+        payload: msg.data,
+      },
+      () =>
+        it_testTemplateDryRun({
+          context: it_createTemplateTestUseCaseContext(host),
+          payload: msg.data,
+        }),
+    ),
   );
 
   host.webviewProtocol.on("it/testTemplateLive", async (msg) =>
-    it_testTemplateLive({
-      context: it_createTemplateTestUseCaseContext(host),
-      payload: msg.data,
-    }),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/testTemplateLive",
+        event: "interface.template_test.live",
+        payload: msg.data,
+      },
+      () =>
+        it_testTemplateLive({
+          context: it_createTemplateTestUseCaseContext(host),
+          payload: msg.data,
+        }),
+    ),
   );
 }

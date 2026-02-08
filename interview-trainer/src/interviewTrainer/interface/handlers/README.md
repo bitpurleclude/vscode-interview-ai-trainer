@@ -11,3 +11,8 @@ Webview 消息处理器集合（Interface 层）。
 - 各 handler 通过 `it_webviewHandlerPorts.ts` 按能力声明 Host 依赖，避免依赖全量 Host。
 - `it_webviewHandlers.ts` 仅负责注册路由，不写业务逻辑。
 - Interface 不直接依赖 `infra/*`；需要外部能力时通过 use-case/gateway 转接。
+
+## 日志规范
+- 路由回调统一使用 `it_webviewHandlerLogging.ts` 的 `it_runLoggedHandler` 包装，输出 request/success/error 三段事件。
+- 事件名建议使用 `interface.<domain>.<action>`，状态通过 `status` 字段区分。
+- Handler 侧仅上传 payload 摘要，不直接打印原始敏感数据。

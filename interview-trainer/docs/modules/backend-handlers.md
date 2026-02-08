@@ -8,6 +8,7 @@
 ## 文件组成
 - `src/interviewTrainer/interface/handlers/it_webviewHandlers.ts`：统一注册入口。
 - `src/interviewTrainer/interface/handlers/it_webviewHandlerPorts.ts`：按能力拆分的 Host 端口契约。
+- `src/interviewTrainer/interface/handlers/it_webviewHandlerLogging.ts`：统一 request/success/error 结构化日志包装器。
 - `src/interviewTrainer/interface/handlers/it_webviewCoreHandlers.ts`：核心状态/配置/历史记录操作。
 - `src/interviewTrainer/interface/handlers/it_webviewConfigHandlers.ts`：配置大类分派（环境/模板/Provider/目录）。
 - `src/interviewTrainer/interface/handlers/it_webviewQuestionHandlers.ts`：题目解析与示例回答生成。
@@ -22,5 +23,7 @@
 
 ## 开发注意
 - 新增 Webview 消息时，先在对应 handler 声明端口依赖，再落地 use-case。
+- 新增 handler 路由时优先使用 `it_runLoggedHandler`，保持 request/success/error 事件格式一致。
 - 不要在 handler 内直接操作 `infra/*`，避免跨层耦合。
 - 大对象 Host 请继续按能力细化为 port，保持可维护性。
+- 统一日志入口通过 `ItWebviewProtocolPort.logCorpusTrace` 暴露，避免各 handler 私有实现漂移。

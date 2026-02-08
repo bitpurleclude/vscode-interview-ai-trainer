@@ -5,6 +5,7 @@ import {
   type ItWorkspaceResult,
   type ItWorkspaceUseCaseContext,
 } from "../../application/useCases/it_workspaceActions";
+import { it_runLoggedHandler } from "./it_webviewHandlerLogging";
 import type { ItWorkspaceHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createWorkspaceUseCaseContext(
@@ -45,20 +46,39 @@ function it_applyWorkspaceResult(
 }
 
 export function it_registerWorkspaceHandlers(host: ItWorkspaceHandlersPort): void {
-  host.webviewProtocol.on("it/selectWorkspaceDir", async (msg) => {
-    const result = await it_selectWorkspaceDirFromWebview({
-      context: it_createWorkspaceUseCaseContext(host),
-      payload: msg.data,
-    });
-    it_applyWorkspaceResult(host, result);
-    return result.value;
-  });
+  host.webviewProtocol.on("it/selectWorkspaceDir", async (msg) =>
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/selectWorkspaceDir",
+        event: "interface.workspace.select_dir",
+        payload: msg.data,
+      },
+      async () => {
+        const result = await it_selectWorkspaceDirFromWebview({
+          context: it_createWorkspaceUseCaseContext(host),
+          payload: msg.data,
+        });
+        it_applyWorkspaceResult(host, result);
+        return result.value;
+      },
+    ),
+  );
 
-  host.webviewProtocol.on("it/selectSessionsDir", async () => {
-    const result = await it_selectSessionsDirFromWebview({
-      context: it_createWorkspaceUseCaseContext(host),
-    });
-    it_applyWorkspaceResult(host, result);
-    return result.value;
-  });
+  host.webviewProtocol.on("it/selectSessionsDir", async () =>
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/selectSessionsDir",
+        event: "interface.workspace.select_sessions_dir",
+      },
+      async () => {
+        const result = await it_selectSessionsDirFromWebview({
+          context: it_createWorkspaceUseCaseContext(host),
+        });
+        it_applyWorkspaceResult(host, result);
+        return result.value;
+      },
+    ),
+  );
 }

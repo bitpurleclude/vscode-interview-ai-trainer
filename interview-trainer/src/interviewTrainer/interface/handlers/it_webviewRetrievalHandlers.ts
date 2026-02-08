@@ -7,6 +7,7 @@ import {
   it_setRetrievalEnabledFromWebview,
   it_updateRetrievalSettingsFromWebview,
 } from "../../application/useCases/it_retrievalActions";
+import { it_runLoggedHandler } from "./it_webviewHandlerLogging";
 import type { ItRetrievalHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createRetrievalUseCaseContext(
@@ -67,18 +68,48 @@ async function it_runRetrievalUseCase<T>(
 
 export function it_registerRetrievalHandlers(host: ItRetrievalHandlersPort): void {
   host.webviewProtocol.on("it/setRetrievalEnabled", async (msg) =>
-    it_runRetrievalConfigUseCase(host, it_setRetrievalEnabledFromWebview, msg.data),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/setRetrievalEnabled",
+        event: "interface.retrieval.set_enabled",
+        payload: msg.data,
+      },
+      () => it_runRetrievalConfigUseCase(host, it_setRetrievalEnabledFromWebview, msg.data),
+    ),
   );
 
   host.webviewProtocol.on("it/updateRetrievalSettings", async (msg) =>
-    it_runRetrievalConfigUseCase(host, it_updateRetrievalSettingsFromWebview, msg.data),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/updateRetrievalSettings",
+        event: "interface.retrieval.update_settings",
+        payload: msg.data,
+      },
+      () => it_runRetrievalConfigUseCase(host, it_updateRetrievalSettingsFromWebview, msg.data),
+    ),
   );
 
   host.webviewProtocol.on("it/clearEmbeddingCache", async () =>
-    it_runRetrievalUseCase(host, it_clearEmbeddingCacheFromWebview),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/clearEmbeddingCache",
+        event: "interface.retrieval.clear_embedding_cache",
+      },
+      () => it_runRetrievalUseCase(host, it_clearEmbeddingCacheFromWebview),
+    ),
   );
 
   host.webviewProtocol.on("it/clearCorpusCache", async () =>
-    it_runRetrievalUseCase(host, it_clearCorpusCacheFromWebview),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/clearCorpusCache",
+        event: "interface.retrieval.clear_corpus_cache",
+      },
+      () => it_runRetrievalUseCase(host, it_clearCorpusCacheFromWebview),
+    ),
   );
 }

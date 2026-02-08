@@ -6,6 +6,7 @@ import {
   type ItProviderUseCaseContext,
   it_saveProviderConfigFromWebview,
 } from "../../application/useCases/it_providerActions";
+import { it_runLoggedHandler } from "./it_webviewHandlerLogging";
 import type { ItProviderHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createProviderUseCaseContext(host: ItProviderHandlersPort): ItProviderUseCaseContext {
@@ -39,17 +40,42 @@ async function it_runProviderConfigUseCase<T>(
 
 export function it_registerProviderHandlers(host: ItProviderHandlersPort): void {
   host.webviewProtocol.on("it/createProviderConfig", async (msg) =>
-    it_runProviderConfigUseCase(host, it_createProviderConfigFromWebview, msg.data),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/createProviderConfig",
+        event: "interface.provider.create_config",
+        payload: msg.data,
+      },
+      () => it_runProviderConfigUseCase(host, it_createProviderConfigFromWebview, msg.data),
+    ),
   );
 
   host.webviewProtocol.on("it/saveProviderConfig", async (msg) =>
-    it_runProviderConfigUseCase(host, it_saveProviderConfigFromWebview, msg.data),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/saveProviderConfig",
+        event: "interface.provider.save_config",
+        payload: msg.data,
+      },
+      () => it_runProviderConfigUseCase(host, it_saveProviderConfigFromWebview, msg.data),
+    ),
   );
 
   host.webviewProtocol.on("it/openProviderConfig", async (msg) =>
-    it_openProviderConfigFromWebview({
-      context: it_createProviderUseCaseContext(host),
-      payload: msg.data,
-    }),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/openProviderConfig",
+        event: "interface.provider.open_config",
+        payload: msg.data,
+      },
+      () =>
+        it_openProviderConfigFromWebview({
+          context: it_createProviderUseCaseContext(host),
+          payload: msg.data,
+        }),
+    ),
   );
 }

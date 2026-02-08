@@ -12,6 +12,7 @@
 - [x] P2 key adoption in host logging (`it_logging.ts`, trace logger event normalization)
 - [x] P3 interface-path adoption and tests (`it_webviewTestHelpers.ts`, logger tests)
 - [x] P4 docs sync and delivery checks (`build/test/e2e smoke/package`)
+- [x] P5 handler-wide boundary logging (`it_runLoggedHandler` applied to all Webview route handlers)
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -87,6 +88,11 @@
 - Update architecture docs and backend logging docs.
 - Update AGENTS logging constraints.
 - Run build, test, e2e smoke, and package before each delivery commit.
+
+### P5 - Handler Boundary Coverage
+- Introduce shared handler wrapper to emit request/success/error logs on every Webview route.
+- Move interface event naming to stable `interface.<domain>.<action>` codes.
+- Extend ports so all handlers use the same `logCorpusTrace` contract.
 
 ## 5. Impact
 - Positive:

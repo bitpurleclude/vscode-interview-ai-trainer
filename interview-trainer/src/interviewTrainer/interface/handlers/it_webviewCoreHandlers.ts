@@ -10,6 +10,7 @@ import {
   it_openSettingsFromWebview,
   it_reloadWindowFromWebview,
 } from "../../application/useCases/it_coreActions";
+import { it_runLoggedHandler } from "./it_webviewHandlerLogging";
 import type { ItCoreHandlersPort } from "./it_webviewHandlerPorts";
 
 function it_createCoreUseCaseContext(host: ItCoreHandlersPort): ItCoreUseCaseContext {
@@ -75,34 +76,85 @@ async function it_runCoreUseCase<T>(
 
 export function it_registerCoreHandlers(host: ItCoreHandlersPort): void {
   host.webviewProtocol.on("it/getState", async () =>
-    it_runCoreUseCase(host, ({ context }) => it_getStateFromWebview({ context })),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/getState",
+        event: "interface.core.get_state",
+      },
+      () => it_runCoreUseCase(host, ({ context }) => it_getStateFromWebview({ context })),
+    ),
   );
 
   host.webviewProtocol.on("it/getConfig", async () =>
-    it_runCoreUseCase(host, ({ context }) => it_getConfigFromWebview({ context })),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/getConfig",
+        event: "interface.core.get_config",
+      },
+      () => it_runCoreUseCase(host, ({ context }) => it_getConfigFromWebview({ context })),
+    ),
   );
 
   host.webviewProtocol.on("it/enableTraceLogs", async () =>
-    it_runCoreUseCase(host, ({ context }) => it_enableTraceLogsFromWebview({ context })),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/enableTraceLogs",
+        event: "interface.core.enable_trace_logs",
+      },
+      () => it_runCoreUseCase(host, ({ context }) => it_enableTraceLogsFromWebview({ context })),
+    ),
   );
 
   host.webviewProtocol.on("it/listHistory", async (msg) =>
-    it_runCoreUseCase(
+    it_runLoggedHandler(
       host,
-      ({ context, payload }) => it_listHistoryFromWebview({ context, payload }),
-      msg.data,
+      {
+        request: "it/listHistory",
+        event: "interface.core.list_history",
+        payload: msg.data,
+      },
+      () =>
+        it_runCoreUseCase(
+          host,
+          ({ context, payload }) => it_listHistoryFromWebview({ context, payload }),
+          msg.data,
+        ),
     ),
   );
 
   host.webviewProtocol.on("it/openSettings", async () =>
-    it_runCoreUseCase(host, ({ context }) => it_openSettingsFromWebview({ context })),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/openSettings",
+        event: "interface.core.open_settings",
+      },
+      () => it_runCoreUseCase(host, ({ context }) => it_openSettingsFromWebview({ context })),
+    ),
   );
 
   host.webviewProtocol.on("it/openMicSettings", async () =>
-    it_runCoreUseCase(host, ({ context }) => it_openMicSettingsFromWebview({ context })),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/openMicSettings",
+        event: "interface.core.open_mic_settings",
+      },
+      () => it_runCoreUseCase(host, ({ context }) => it_openMicSettingsFromWebview({ context })),
+    ),
   );
 
   host.webviewProtocol.on("it/reloadWindow", async () =>
-    it_runCoreUseCase(host, ({ context }) => it_reloadWindowFromWebview({ context })),
+    it_runLoggedHandler(
+      host,
+      {
+        request: "it/reloadWindow",
+        event: "interface.core.reload_window",
+      },
+      () => it_runCoreUseCase(host, ({ context }) => it_reloadWindowFromWebview({ context })),
+    ),
   );
 }

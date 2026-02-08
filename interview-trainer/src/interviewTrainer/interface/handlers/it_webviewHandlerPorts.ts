@@ -16,6 +16,7 @@ import type { WebviewProtocol } from "../../../webview/WebviewProtocol";
 
 export type ItWebviewProtocolPort = {
   webviewProtocol: WebviewProtocol;
+  logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 export type ItConfigStatePort = {
@@ -43,7 +44,6 @@ export type ItCoreHandlersPort =
     traceLogsEnabled: boolean;
     state: ItState;
     scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
-    logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
   };
 
 export type ItEnvironmentHandlersPort =
@@ -64,7 +64,6 @@ export type ItQuestionHandlersPort =
   & ItConfigStatePort
   & {
     context: vscode.ExtensionContext;
-    logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
     resolveApiConfigWithProviders: (apiConfig: ItApiConfig) => ItApiConfig;
   };
 

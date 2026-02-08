@@ -10,6 +10,7 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/application/services/it_logSinkGateway.ts`
 - `src/interviewTrainer/infra/logging/it_outputChannelLogSink.ts`
 - `src/interviewTrainer/infra/logging/it_traceLogger.ts`
+- `src/interviewTrainer/interface/handlers/it_webviewHandlerLogging.ts`
 
 ## Structured Log Contract
 Each line emitted to the output channel is a JSON object with stable fields:
@@ -48,6 +49,7 @@ Current logging guardrails:
 ## Notes for Contributors
 - Do not call `outputChannel.appendLine` directly for business logs.
 - Emit logs through application-level structured logger utilities.
+- Interface handlers should wrap routes with `it_runLoggedHandler` to keep request/success/error boundaries consistent.
 - When adding a new event family, keep `event` names stable for test assertions.
 - Any logging-limit change must update:
   - `config/guardrails.yaml`
