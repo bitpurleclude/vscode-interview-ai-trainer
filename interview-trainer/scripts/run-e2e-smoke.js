@@ -2,11 +2,106 @@ const fs = require("fs");
 const path = require("path");
 const { runTests } = require("@vscode/test-electron");
 
+const E2E_DEFAULT_MAX_ATTEMPTS = 3;
+const E2E_DEFAULT_RETRY_DELAY_MS = 1200;
+const RETRYABLE_HOST_ERROR_PATTERNS = [
+  /ProcessSingleton/i,
+  /already in use/i,
+  /EADDRINUSE/i,
+  /mutex/i,
+  /lockfile/i,
+  /another instance/i,
+  /socket hang up/i,
+  /ECONNRESET/i,
+  /ECONNREFUSED/i,
+];
+
 async function removeDirQuiet(target) {
   try {
     await fs.promises.rm(target, { recursive: true, force: true });
   } catch {
     // best effort cleanup
+  }
+}
+
+function readPositiveIntEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function getErrorText(error) {
+  if (error instanceof Error) {
+    return error.stack || error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function summarizeError(error) {
+  const text = getErrorText(error).replace(/\s+/g, " ").trim();
+  if (text.length <= 500) {
+    return text;
+  }
+  return `${text.slice(0, 500)}...`;
+}
+
+function isRetryableHostError(error) {
+  const text = getErrorText(error);
+  return RETRYABLE_HOST_ERROR_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+async function runSmokeAttempt({
+  extensionDevelopmentPath,
+  extensionTestsPath,
+  attempt,
+  maxAttempts,
+}) {
+  const runKey = `${Date.now()}-${Math.random().toString(16).slice(2)}-a${attempt}`;
+  const profileRoot = path.resolve(
+    extensionDevelopmentPath,
+    ".vscode-test",
+    "profiles",
+    runKey,
+  );
+  const userDataDir = path.join(profileRoot, "user-data");
+  const extensionsDir = path.join(profileRoot, "extensions");
+
+  await fs.promises.mkdir(userDataDir, { recursive: true });
+  await fs.promises.mkdir(extensionsDir, { recursive: true });
+
+  console.log(`[e2e-smoke] attempt ${attempt}/${maxAttempts}: launching VS Code host`);
+
+  try {
+    await runTests({
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs: [
+        `--user-data-dir=${userDataDir}`,
+        `--extensions-dir=${extensionsDir}`,
+        "--disable-extensions",
+      ],
+    });
+  } finally {
+    await removeDirQuiet(profileRoot);
   }
 }
 
@@ -24,39 +119,52 @@ async function main() {
     "smoke",
     "index.js",
   );
-  const runKey = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const profileRoot = path.resolve(
-    extensionDevelopmentPath,
-    ".vscode-test",
-    "profiles",
-    runKey,
-  );
-  const userDataDir = path.join(profileRoot, "user-data");
-  const extensionsDir = path.join(profileRoot, "extensions");
 
-  await fs.promises.mkdir(userDataDir, { recursive: true });
-  await fs.promises.mkdir(extensionsDir, { recursive: true });
+  const maxAttempts = readPositiveIntEnv(
+    "IT_E2E_SMOKE_MAX_ATTEMPTS",
+    E2E_DEFAULT_MAX_ATTEMPTS,
+  );
+  const retryDelayMs = readPositiveIntEnv(
+    "IT_E2E_SMOKE_RETRY_DELAY_MS",
+    E2E_DEFAULT_RETRY_DELAY_MS,
+  );
 
   const previousE2EFlag = process.env.IT_E2E_ENABLE_TEST_COMMANDS;
   process.env.IT_E2E_ENABLE_TEST_COMMANDS = "1";
 
   try {
-    await runTests({
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      launchArgs: [
-        `--user-data-dir=${userDataDir}`,
-        `--extensions-dir=${extensionsDir}`,
-        "--disable-extensions",
-      ],
-    });
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await runSmokeAttempt({
+          extensionDevelopmentPath,
+          extensionTestsPath,
+          attempt,
+          maxAttempts,
+        });
+        console.log(`[e2e-smoke] attempt ${attempt}/${maxAttempts}: passed`);
+        return;
+      } catch (error) {
+        lastError = error;
+        const retryable = isRetryableHostError(error);
+        if (!retryable || attempt >= maxAttempts) {
+          throw error;
+        }
+
+        console.warn(
+          `[e2e-smoke] transient host failure on attempt ${attempt}/${maxAttempts}, retry in ${retryDelayMs}ms: ${summarizeError(error)}`,
+        );
+        await delay(retryDelayMs);
+      }
+    }
+
+    throw lastError || new Error("Unknown smoke failure");
   } finally {
     if (previousE2EFlag === undefined) {
       delete process.env.IT_E2E_ENABLE_TEST_COMMANDS;
     } else {
       process.env.IT_E2E_ENABLE_TEST_COMMANDS = previousE2EFlag;
     }
-    await removeDirQuiet(profileRoot);
   }
 }
 
