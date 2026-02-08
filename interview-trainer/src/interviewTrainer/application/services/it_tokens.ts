@@ -15,6 +15,7 @@ type ItTokenServiceHost = {
   configBundle: ItConfigBundle;
   configSnapshot: ItConfigSnapshot;
   buildConfigSnapshot: (apiConfig: ItApiConfig) => ItConfigSnapshot;
+  logCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 type ItTokenTemplateMeta = {
@@ -124,6 +125,18 @@ export class ItTokenService {
     this.host = host;
   }
 
+  private logTokenEvent(
+    action: string,
+    status: string,
+    detail?: Record<string, unknown>,
+  ): void {
+    this.host.logCorpusTrace?.(`token ${action} ${status}`, {
+      event: `application.tokens.${action}`,
+      status,
+      ...(detail || {}),
+    });
+  }
+
   public getSnapshot(env: string): ItTokenStoreSnapshot {
     const tokenTemplates = this.getTokenTemplates(env);
     const tokens = tokenTemplates.map((item) => {
@@ -150,9 +163,16 @@ export class ItTokenService {
     const autoRefresh = templateEnv.token_options?.auto_refresh !== false;
     this.autoRefreshByEnv.set(env, autoRefresh);
     const tokenTemplates = this.getTokenTemplates(env);
+    this.logTokenEvent("sync", "start", {
+      env,
+      autoRefresh,
+      templateCount: tokenTemplates.length,
+    });
     const activeKeys = new Set(tokenTemplates.map((item) => this.buildKey(env, item.name)));
+    let removedCount = 0;
     Array.from(this.states.keys()).forEach((key) => {
       if (!activeKeys.has(key)) {
+        removedCount += 1;
         this.states.delete(key);
         this.clearTimer(key);
       }
@@ -177,27 +197,51 @@ export class ItTokenService {
         this.clearTimer(key);
       }
     });
+    this.logTokenEvent("sync", "success", {
+      env,
+      autoRefresh,
+      templateCount: tokenTemplates.length,
+      removedCount,
+      stateCount: this.states.size,
+    });
   }
 
   public async refreshAll(env?: string): Promise<void> {
     const targetEnv = env || this.host.configBundle.api?.active?.environment || "prod";
     const tokenTemplates = this.getTokenTemplates(targetEnv);
+    this.logTokenEvent("refresh_all", "start", {
+      env: targetEnv,
+      tokenCount: tokenTemplates.length,
+    });
     for (const item of tokenTemplates) {
       await this.refreshToken(targetEnv, item);
     }
+    this.logTokenEvent("refresh_all", "success", {
+      env: targetEnv,
+      tokenCount: tokenTemplates.length,
+    });
   }
 
   public async refreshTokenByName(name: string, env?: string): Promise<void> {
     const targetEnv = env || this.host.configBundle.api?.active?.environment || "prod";
     const tokenName = it_normalizeTokenName(name);
     if (!tokenName) {
+      this.logTokenEvent("refresh_single", "ignored", {
+        env: targetEnv,
+        reason: "empty_name",
+      });
       return;
     }
     const tokenTemplates = this.getTokenTemplates(targetEnv);
     const target = tokenTemplates.find((item) => item.name === tokenName);
     if (target) {
       await this.refreshToken(targetEnv, target);
+      return;
     }
+    this.logTokenEvent("refresh_single", "not_found", {
+      env: targetEnv,
+      tokenName,
+    });
   }
 
   private getTokenTemplates(env: string): ItTokenTemplateMeta[] {
@@ -236,6 +280,11 @@ export class ItTokenService {
     let delayMs = 5000;
     if (!state?.expiresAt) {
       if (state?.status === TOKEN_STATUS_OK) {
+        this.logTokenEvent("schedule", "skipped", {
+          env,
+          tokenName: item.name,
+          reason: "no_expiry",
+        });
         return;
       }
       delayMs =
@@ -261,23 +310,44 @@ export class ItTokenService {
       }
     }
     const shouldRecalculate = delayMs > MAX_TIMER_DELAY_MS;
+    const scheduledDelayMs = Math.min(delayMs, MAX_TIMER_DELAY_MS);
+    this.logTokenEvent("schedule", shouldRecalculate ? "scheduled_recalculate" : "scheduled", {
+      env,
+      tokenName: item.name,
+      delayMs: scheduledDelayMs,
+    });
     const timer = setTimeout(() => {
       if (shouldRecalculate) {
+        this.logTokenEvent("schedule", "recalculate", {
+          env,
+          tokenName: item.name,
+          delayMs,
+        });
         this.scheduleRefresh(env, item);
       } else {
         void this.refreshToken(env, item);
       }
-    }, Math.min(delayMs, MAX_TIMER_DELAY_MS));
+    }, scheduledDelayMs);
     this.timers.set(key, timer);
   }
 
   private async refreshToken(env: string, item: ItTokenTemplateMeta): Promise<void> {
     const key = this.buildKey(env, item.name);
     if (this.inFlight.has(key)) {
+      this.logTokenEvent("refresh_single", "skipped_inflight", {
+        env,
+        tokenName: item.name,
+      });
       return;
     }
     this.inFlight.add(key);
     const tokenCfg = (item.template.token || {}) as NonNullable<ItApiTemplate["token"]>;
+    this.logTokenEvent("refresh_single", "start", {
+      env,
+      tokenName: item.name,
+      templateId: item.template.id,
+      maxRetries: Number(tokenCfg.maxRetries ?? 0),
+    });
     const nextState: ItTokenState = {
       name: item.name,
       templateId: item.template.id,
@@ -314,10 +384,22 @@ export class ItTokenService {
       };
       this.states.set(key, okState);
       this.notifyUpdate();
+      this.logTokenEvent("refresh_single", "success", {
+        env,
+        tokenName: item.name,
+        templateId: item.template.id,
+        hasExpiresAt: Boolean(parsed.expiresAt),
+      });
       if (this.autoRefreshByEnv.get(env) !== false && tokenCfg.enabled !== false) {
         this.scheduleRefresh(env, item);
       } else {
         this.clearTimer(key);
+        this.logTokenEvent("schedule", "disabled", {
+          env,
+          tokenName: item.name,
+          autoRefresh: this.autoRefreshByEnv.get(env) !== false,
+          templateEnabled: tokenCfg.enabled !== false,
+        });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -330,6 +412,12 @@ export class ItTokenService {
       };
       this.states.set(key, errorState);
       this.notifyUpdate();
+      this.logTokenEvent("refresh_single", "error", {
+        env,
+        tokenName: item.name,
+        templateId: item.template.id,
+        error: errorMessage,
+      });
       if (this.autoRefreshByEnv.get(env) !== false && tokenCfg.enabled !== false) {
         this.scheduleRefresh(env, item);
       }
@@ -340,7 +428,12 @@ export class ItTokenService {
 
   private notifyUpdate(): void {
     const apiConfig = this.host.configBundle.api;
+    const env = apiConfig?.active?.environment || "prod";
     this.host.configSnapshot = this.host.buildConfigSnapshot(apiConfig);
     this.host.webviewProtocol.send("it/configUpdate", this.host.configSnapshot);
+    this.logTokenEvent("snapshot_push", "success", {
+      env,
+      stateCount: this.states.size,
+    });
   }
 }

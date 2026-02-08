@@ -67,3 +67,25 @@ When protocol-level guardrails are hit, logs emit stable error/warn events:
 - `protocol.webview.send_without_webview`
 
 Unknown request messages with `messageId` now return a structured error payload (`errorCode=handler_not_found`) instead of hanging the pending request promise.
+
+
+## Additional event families (P8)
+- Command entry events:
+  - `extension.command.open`
+  - `extension.command.analyze_audio_file`
+  - `extension.command.open_settings`
+  - `extension.command.open_history`
+- Token lifecycle events:
+  - `application.tokens.sync`
+  - `application.tokens.refresh_all`
+  - `application.tokens.refresh_single`
+  - `application.tokens.schedule`
+  - `application.tokens.snapshot_push`
+- Webview messenger telemetry events (reported via `it/clientTrace`):
+  - `webview.messenger.request_sent`
+  - `webview.messenger.response_received`
+  - `webview.messenger.request_timeout`
+  - `webview.messenger.orphan_response`
+  - `webview.messenger.listener_error`
+  - `webview.messenger.invalid_message`
+

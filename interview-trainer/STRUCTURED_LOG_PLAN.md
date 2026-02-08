@@ -15,6 +15,7 @@
 - [x] P5 handler-wide boundary logging (`it_runLoggedHandler` applied to all Webview route handlers)
 - [x] P6 protocol anomaly logging (`WebviewProtocol` observer + `handler_not_found` request response)
 - [x] P7 e2e protocol guard assertions (real Webview request -> missing handler -> structured error)
+- [x] P8 command/token/messenger observability (extension command boundary, token lifecycle, webview messenger telemetry)
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -105,6 +106,11 @@
 - Add hidden command to trigger a real Webview request to a missing handler in smoke mode.
 - Assert structured error payload (`status=error`, `errorCode=handler_not_found`) end to end.
 - Keep protocol guard verification in both workspace and no-workspace smoke runs.
+
+### P8 - Command and Client Telemetry Coverage
+- Add command boundary logs for extension command entry points (`open/openSettings/openHistory/analyzeAudioFile`).
+- Add token lifecycle logs for sync/refresh/schedule/snapshot push paths.
+- Add webview messenger telemetry route (`it/clientTrace`) and structured messenger events for timeout/orphan/listener failures.
 
 ## 5. Impact
 - Positive:

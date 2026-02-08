@@ -14,5 +14,6 @@ Webview 消息处理器集合（Interface 层）。
 
 ## 日志规范
 - 路由回调统一使用 `it_webviewHandlerLogging.ts` 的 `it_runLoggedHandler` 包装，输出 request/success/error 三段事件。
+- `it/clientTrace` 遥测路由例外：直接透传结构化 detail，避免二次包装导致日志噪声倍增。
 - 事件名建议使用 `interface.<domain>.<action>`，状态通过 `status` 字段区分。
 - Handler 侧仅上传 payload 摘要，不直接打印原始敏感数据。
