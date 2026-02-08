@@ -44,7 +44,8 @@
 - [x] P2-23 Large payload pressure tests for retrieval query/body sizing (`search.payload-pressure.test.ts`).
 - [x] P2-24 Host smoke fixture availability assertions for markdown/audio corpus (`test/e2e/smoke/index.js`).
 - [x] P2-25 Fixture-driven analyze request roundtrip assertions at use-case boundary (`it_analysisFlow.integration.test.ts`).
-- [ ] P2 suites pending (host-side full analysis/evaluation roundtrip in extension-host runtime).
+- [x] P2-26 Interface handler + protocol + host use-case fixture roundtrip tests (`it_webviewResultHandlers.integration.test.ts`).
+- [ ] P2 suites pending (real extension activation with end-to-end analyze UI automation).
 
 ## Analyze Full-Flow Fault Matrix (new)
 
