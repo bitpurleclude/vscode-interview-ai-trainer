@@ -26,7 +26,16 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/interface/handlers/it_webviewHandlerLogging.ts`
 - `src/webview/WebviewProtocol.ts`
 - `webview/src/main.tsx`
-
+- `src/interviewTrainer/application/useCases/it_coreActions.ts`
+- `src/interviewTrainer/application/useCases/it_templateTestActions.ts`
+- `src/interviewTrainer/application/useCases/it_testAsr.ts`
+- `src/interviewTrainer/application/useCases/it_testEmbedding.ts`
+- `src/interviewTrainer/application/useCases/it_testLlm.ts`
+- `src/interviewTrainer/application/useCases/it_embeddingWarmup.ts`
+- `src/interviewTrainer/interface/handlers/it_webviewTemplateTestHandlers.ts`
+- `src/interviewTrainer/interface/handlers/it_webviewTestAsrHandlers.ts`
+- `src/interviewTrainer/interface/handlers/it_webviewTestEmbeddingHandlers.ts`
+- `src/interviewTrainer/interface/handlers/it_webviewTestLlmHandlers.ts`
 ## Structured Log Contract
 Each line emitted to the output channel is a JSON object with stable fields:
 - `ts`
@@ -219,3 +228,24 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `application.analysis_flow.retrieval_stage`
   - `application.analysis_flow.evaluation_stage`
   - `application.analysis_flow.persist_stage`
+
+## Additional event families (P15)
+- Core use-case lifecycle events:
+  - `application.core.get_state`
+  - `application.core.get_config`
+  - `application.core.enable_trace_logs`
+  - `application.core.list_history`
+  - `application.core.open_settings`
+  - `application.core.open_mic_settings`
+  - `application.core.reload_window`
+- Template test inner lifecycle events:
+  - `application.template_test.dry_run`
+  - `application.template_test.live`
+- Connectivity test inner lifecycle events:
+  - `application.test_asr.run`
+  - `application.test_embedding.run`
+  - `application.test_llm.run`
+  - `application.test_llm.request_preview`
+- Guardrail clamp diagnostics:
+  - `application.retrieval.guardrail_clamp`
+  - `application.embedding_warmup.guardrail_clamp`

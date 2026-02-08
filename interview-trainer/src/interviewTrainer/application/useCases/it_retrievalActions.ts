@@ -69,6 +69,28 @@ function it_errorMessage(error: unknown): string {
   return String(error);
 }
 
+function it_traceClampChange(
+  context: ItRetrievalUseCaseContext,
+  field: string,
+  rawValue: unknown,
+  clampedValue: number,
+): boolean {
+  if (rawValue === undefined) {
+    return false;
+  }
+  const normalized = typeof rawValue === "number" ? rawValue : Number(rawValue);
+  const comparable = Number.isFinite(normalized) ? normalized : rawValue;
+  if (comparable === clampedValue) {
+    return false;
+  }
+  it_traceRetrieval(context, "guardrail_clamp", "warn", {
+    field,
+    rawValue: comparable,
+    clampedValue,
+  });
+  return true;
+}
+
 export async function it_setRetrievalEnabledFromWebview(params: {
   context: ItRetrievalUseCaseContext;
   payload: unknown;
@@ -117,71 +139,170 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
   const modeCandidate = String(incoming.mode || current.mode || "vector");
   const mode = modeCandidate === "keyword" ? "keyword" : "vector";
 
+  const topK = it_clampInteger(incoming.topK, Number(current.top_k ?? 5), guardrails.topK);
+  const topKNotes = it_clampInteger(
+    incoming.topKNotes,
+    Number(current.top_k_notes ?? current.top_k ?? 5),
+    guardrails.topK,
+  );
+  const topKKnowledge = it_clampInteger(
+    incoming.topKKnowledge,
+    Number(current.top_k_knowledge ?? current.top_k ?? 5),
+    guardrails.topK,
+  );
+  const topKRubrics = it_clampInteger(
+    incoming.topKRubrics,
+    Number(current.top_k_rubrics ?? current.top_k ?? 5),
+    guardrails.topK,
+  );
+  const topKExamples = it_clampInteger(
+    incoming.topKExamples,
+    Number(current.top_k_examples ?? current.top_k ?? 5),
+    guardrails.topK,
+  );
+  const maxConcurrency = it_clampInteger(
+    incoming.maxConcurrency,
+    Number(current.max_concurrency ?? 3),
+    guardrails.maxConcurrency,
+  );
+  const embeddingMaxConcurrency = it_clampInteger(
+    incoming.embeddingMaxConcurrency,
+    Number(current.embedding_max_concurrency ?? 2),
+    guardrails.embeddingMaxConcurrency,
+  );
+  const minScore = it_clampFloat(
+    incoming.minScore,
+    Number(current.min_score ?? 0.2),
+    guardrails.minScore,
+  );
+  const queryWindowSize = it_clampInteger(
+    incoming.queryWindowSize,
+    Number(current.query_window_size ?? guardrails.defaults.queryWindowSize),
+    guardrails.queryWindowSize,
+  );
+  const questionMaxConcurrency = it_clampInteger(
+    incoming.questionMaxConcurrency,
+    Number(current.question_max_concurrency ?? guardrails.defaults.questionMaxConcurrency),
+    guardrails.questionMaxConcurrency,
+  );
+  const kindMaxConcurrency = it_clampInteger(
+    incoming.kindMaxConcurrency,
+    Number(current.kind_max_concurrency ?? guardrails.defaults.kindMaxConcurrency),
+    guardrails.kindMaxConcurrency,
+  );
+  const vectorBatchSize = it_clampInteger(
+    incomingVector.batchSize,
+    Number(currentVector.batch_size ?? 16),
+    guardrails.vectorBatchSize,
+  );
+  const vectorQueryMaxChars = it_clampInteger(
+    incomingVector.queryMaxChars,
+    Number(currentVector.query_max_chars ?? 1500),
+    guardrails.vectorQueryMaxChars,
+  );
+
+  let clampCount = 0;
+  clampCount += Number(
+    it_traceClampChange(params.context, "top_k", incoming.topK, topK),
+  );
+  clampCount += Number(
+    it_traceClampChange(params.context, "top_k_notes", incoming.topKNotes, topKNotes),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "top_k_knowledge",
+      incoming.topKKnowledge,
+      topKKnowledge,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(params.context, "top_k_rubrics", incoming.topKRubrics, topKRubrics),
+  );
+  clampCount += Number(
+    it_traceClampChange(params.context, "top_k_examples", incoming.topKExamples, topKExamples),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "max_concurrency",
+      incoming.maxConcurrency,
+      maxConcurrency,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "embedding_max_concurrency",
+      incoming.embeddingMaxConcurrency,
+      embeddingMaxConcurrency,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(params.context, "min_score", incoming.minScore, minScore),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "query_window_size",
+      incoming.queryWindowSize,
+      queryWindowSize,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "question_max_concurrency",
+      incoming.questionMaxConcurrency,
+      questionMaxConcurrency,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "kind_max_concurrency",
+      incoming.kindMaxConcurrency,
+      kindMaxConcurrency,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "vector.batch_size",
+      incomingVector.batchSize,
+      vectorBatchSize,
+    ),
+  );
+  clampCount += Number(
+    it_traceClampChange(
+      params.context,
+      "vector.query_max_chars",
+      incomingVector.queryMaxChars,
+      vectorQueryMaxChars,
+    ),
+  );
+
   configBundle.skill = {
     ...configBundle.skill,
     retrieval: {
       ...current,
       enabled: incoming.enabled ?? current.enabled,
       mode,
-      top_k: it_clampInteger(incoming.topK, Number(current.top_k ?? 5), guardrails.topK),
-      top_k_notes: it_clampInteger(
-        incoming.topKNotes,
-        Number(current.top_k_notes ?? current.top_k ?? 5),
-        guardrails.topK,
-      ),
-      top_k_knowledge: it_clampInteger(
-        incoming.topKKnowledge,
-        Number(current.top_k_knowledge ?? current.top_k ?? 5),
-        guardrails.topK,
-      ),
-      top_k_rubrics: it_clampInteger(
-        incoming.topKRubrics,
-        Number(current.top_k_rubrics ?? current.top_k ?? 5),
-        guardrails.topK,
-      ),
-      top_k_examples: it_clampInteger(
-        incoming.topKExamples,
-        Number(current.top_k_examples ?? current.top_k ?? 5),
-        guardrails.topK,
-      ),
-      max_concurrency: it_clampInteger(
-        incoming.maxConcurrency,
-        Number(current.max_concurrency ?? 3),
-        guardrails.maxConcurrency,
-      ),
-      embedding_max_concurrency: it_clampInteger(
-        incoming.embeddingMaxConcurrency,
-        Number(current.embedding_max_concurrency ?? 1),
-        guardrails.embeddingMaxConcurrency,
-      ),
-      min_score: it_clampFloat(incoming.minScore, Number(current.min_score ?? 0.2), guardrails.minScore),
-      query_window_size: it_clampInteger(
-        incoming.queryWindowSize,
-        Number(current.query_window_size ?? guardrails.defaults.queryWindowSize),
-        guardrails.queryWindowSize,
-      ),
-      question_max_concurrency: it_clampInteger(
-        incoming.questionMaxConcurrency,
-        Number(current.question_max_concurrency ?? guardrails.defaults.questionMaxConcurrency),
-        guardrails.questionMaxConcurrency,
-      ),
-      kind_max_concurrency: it_clampInteger(
-        incoming.kindMaxConcurrency,
-        Number(current.kind_max_concurrency ?? guardrails.defaults.kindMaxConcurrency),
-        guardrails.kindMaxConcurrency,
-      ),
+      top_k: topK,
+      top_k_notes: topKNotes,
+      top_k_knowledge: topKKnowledge,
+      top_k_rubrics: topKRubrics,
+      top_k_examples: topKExamples,
+      max_concurrency: maxConcurrency,
+      embedding_max_concurrency: embeddingMaxConcurrency,
+      min_score: minScore,
+      query_window_size: queryWindowSize,
+      question_max_concurrency: questionMaxConcurrency,
+      kind_max_concurrency: kindMaxConcurrency,
       vector: {
         ...currentVector,
-        batch_size: it_clampInteger(
-          incomingVector.batchSize,
-          Number(currentVector.batch_size ?? 16),
-          guardrails.vectorBatchSize,
-        ),
-        query_max_chars: it_clampInteger(
-          incomingVector.queryMaxChars,
-          Number(currentVector.query_max_chars ?? 1500),
-          guardrails.vectorQueryMaxChars,
-        ),
+        batch_size: vectorBatchSize,
+        query_max_chars: vectorQueryMaxChars,
       },
     },
   };
@@ -192,6 +313,7 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
   it_traceRetrieval(params.context, "update_settings", "success", {
     mode,
     topK: configBundle.skill.retrieval?.top_k,
+    clampCount,
   });
   return {
     configBundle,

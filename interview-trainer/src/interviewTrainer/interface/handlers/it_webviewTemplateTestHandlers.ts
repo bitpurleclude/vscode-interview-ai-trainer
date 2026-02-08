@@ -20,6 +20,7 @@ function it_createTemplateTestUseCaseContext(
         full,
       });
     },
+    logTrace: host.logCorpusTrace,
   };
 }
 

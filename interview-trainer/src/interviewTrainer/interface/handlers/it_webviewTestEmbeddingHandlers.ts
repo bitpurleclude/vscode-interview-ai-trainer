@@ -17,6 +17,7 @@ export function it_registerEmbeddingTestHandler(host: ItEmbeddingTestHandlerPort
           onFailure: (error) => {
             host.logEmbeddingTestFailure(error);
           },
+          onTrace: host.logCorpusTrace,
         }),
     );
   });

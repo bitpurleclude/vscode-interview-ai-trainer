@@ -21,6 +21,7 @@ export function it_registerLlmTestHandler(host: ItLlmTestHandlerPort): void {
           onFailure: (error, detail) => {
             host.logLlmTestFailure(error, detail);
           },
+          onTrace: host.logCorpusTrace,
         }),
     );
   });

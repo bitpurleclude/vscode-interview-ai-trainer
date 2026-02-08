@@ -22,6 +22,7 @@
 - [x] P12 watcher/stream-drop/webview-runtime coverage
 - [x] P13 webview bridge handshake and workspace selection trace coverage
 - [x] P14 template/result/provider/recording and analysis-stage coverage
+- [x] P15 core/test/guardrail clamp observability coverage
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -155,6 +156,12 @@
 - Add provider config create/save/open action logs without leaking secret profile values.
 - Add recording action logs for start/stop/list/convert flows and ffmpeg-missing failures.
 - Add analysis run/stage diagnostics for run/deps/audio/segment/retrieval/evaluation/persist durations and outcomes.
+
+### P15 - Core/Test/Clamp Coverage
+- Add fine-grained core use-case logs (`get_config`, `list_history`, `open_settings`, `open_mic_settings`, `reload_window`) with start/success/error lifecycle.
+- Add template test inner logs for dry-run/live (`missingCount`, template category, duration, token extraction outcome).
+- Add ASR/Embedding/LLM connectivity test inner logs with provider/mode and duration in success/error paths.
+- Add retrieval and embedding warmup guardrail clamp warning events to record `rawValue -> clampedValue` for diagnosis.
 
 ## 5. Impact
 - Positive:

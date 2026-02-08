@@ -20,6 +20,7 @@ export type ItTemplateTestUseCaseContext = {
   configService: ItConfigService;
   configSnapshot: ItConfigSnapshot;
   emitTemplateTestDelta?: (payload: { runId: string; delta: string; full: string }) => void;
+  logTrace?: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 type ItTemplateTestRuntime = {
@@ -59,6 +60,26 @@ function it_mergeDeep(
     next[key] = value;
   });
   return next;
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function it_traceTemplateTest(
+  context: ItTemplateTestUseCaseContext,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  context.logTrace?.(`template_test ${action} ${status}`, {
+    event: `application.template_test.${action}`,
+    status,
+    ...(detail || {}),
+  });
 }
 
 function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
@@ -194,23 +215,46 @@ export async function it_testTemplateDryRun(params: {
   missing: string[];
 }> {
   const payload = it_asRecord(params.payload);
-  const resolved = it_resolveTemplateTestRuntime(params.context, payload);
-  const defaults = it_buildTemplateTestDefaults(params.context.configSnapshot, resolved.template);
-  const variables = it_buildTemplateTestVariables(payload, defaults);
-
-  const requestPreview = await it_renderTemplateRequest({
-    runtime: resolved.runtime,
-    variables,
-    maskSecrets: true,
+  const runId = String(payload.runId || "");
+  it_traceTemplateTest(params.context, "dry_run", "start", {
+    runId,
+    hasTemplateId: Boolean(String(payload.templateId || "").trim()),
   });
 
-  return {
-    request: {
-      ...requestPreview,
-      headers: it_maskHeaders(requestPreview.headers),
-    },
-    missing: requestPreview.missing,
-  };
+  try {
+    const resolved = it_resolveTemplateTestRuntime(params.context, payload);
+    const defaults = it_buildTemplateTestDefaults(params.context.configSnapshot, resolved.template);
+    const variables = it_buildTemplateTestVariables(payload, defaults);
+
+    const requestPreview = await it_renderTemplateRequest({
+      runtime: resolved.runtime,
+      variables,
+      maskSecrets: true,
+    });
+
+    it_traceTemplateTest(params.context, "dry_run", "success", {
+      runId,
+      templateId: resolved.template.id,
+      templateCategory: resolved.template.category,
+      missingCount: requestPreview.missing.length,
+      requestMethod: requestPreview.method,
+      stream: requestPreview.stream,
+    });
+
+    return {
+      request: {
+        ...requestPreview,
+        headers: it_maskHeaders(requestPreview.headers),
+      },
+      missing: requestPreview.missing,
+    };
+  } catch (error) {
+    it_traceTemplateTest(params.context, "dry_run", "error", {
+      runId,
+      error: it_errorMessage(error),
+    });
+    throw error;
+  }
 }
 
 export async function it_testTemplateLive(params: {
@@ -222,34 +266,58 @@ export async function it_testTemplateLive(params: {
   tokenInfo?: ReturnType<typeof it_extractTokenInfo>;
 }> {
   const payload = it_asRecord(params.payload);
-  const resolved = it_resolveTemplateTestRuntime(params.context, payload);
-  const defaults = it_buildTemplateTestDefaults(params.context.configSnapshot, resolved.template);
-  const variables = it_buildTemplateTestVariables(payload, defaults);
-
-  const preview = await it_renderTemplateRequest({
-    runtime: resolved.runtime,
-    variables,
-  });
-  if (preview.missing.length) {
-    throw new Error(`missing template variables: ${preview.missing.join(", ")}`);
-  }
-
   const runId = String(payload.runId || "");
-  const result = await it_executeTemplate({
-    runtime: resolved.runtime,
-    variables,
-    onDelta: (delta, full) => {
-      params.context.emitTemplateTestDelta?.({ runId, delta, full });
-    },
-  });
-  const tokenInfo =
-    resolved.template.category === "token"
-      ? it_extractTokenInfo(resolved.template, result)
-      : undefined;
-
-  return {
+  const start = Date.now();
+  it_traceTemplateTest(params.context, "live", "start", {
     runId,
-    result,
-    tokenInfo,
-  };
+    hasTemplateId: Boolean(String(payload.templateId || "").trim()),
+  });
+
+  try {
+    const resolved = it_resolveTemplateTestRuntime(params.context, payload);
+    const defaults = it_buildTemplateTestDefaults(params.context.configSnapshot, resolved.template);
+    const variables = it_buildTemplateTestVariables(payload, defaults);
+
+    const preview = await it_renderTemplateRequest({
+      runtime: resolved.runtime,
+      variables,
+    });
+    if (preview.missing.length) {
+      throw new Error(`missing template variables: ${preview.missing.join(", ")}`);
+    }
+
+    const result = await it_executeTemplate({
+      runtime: resolved.runtime,
+      variables,
+      onDelta: (delta, full) => {
+        params.context.emitTemplateTestDelta?.({ runId, delta, full });
+      },
+    });
+    const tokenInfo =
+      resolved.template.category === "token"
+        ? it_extractTokenInfo(resolved.template, result)
+        : undefined;
+
+    it_traceTemplateTest(params.context, "live", "success", {
+      runId,
+      templateId: resolved.template.id,
+      templateCategory: resolved.template.category,
+      statusCode: result.status,
+      hasTokenInfo: Boolean(tokenInfo),
+      durationMs: Date.now() - start,
+    });
+
+    return {
+      runId,
+      result,
+      tokenInfo,
+    };
+  } catch (error) {
+    it_traceTemplateTest(params.context, "live", "error", {
+      runId,
+      error: it_errorMessage(error),
+      durationMs: Date.now() - start,
+    });
+    throw error;
+  }
 }

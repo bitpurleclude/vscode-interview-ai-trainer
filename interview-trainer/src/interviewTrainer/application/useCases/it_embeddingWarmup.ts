@@ -32,8 +32,28 @@ export function it_isIdleForWarmup(host: ItEmbeddingWarmupHost): boolean {
   return !host.state.steps.some((step) => step.status === "running");
 }
 
-
-
+function it_traceWarmupClamp(
+  host: ItEmbeddingWarmupHost,
+  field: string,
+  rawValue: unknown,
+  clampedValue: number,
+): void {
+  if (rawValue === undefined) {
+    return;
+  }
+  const normalized = typeof rawValue === "number" ? rawValue : Number(rawValue);
+  const comparable = Number.isFinite(normalized) ? normalized : rawValue;
+  if (comparable === clampedValue) {
+    return;
+  }
+  host.logCorpusTrace("embedding warmup guardrail clamp", {
+    event: "application.embedding_warmup.guardrail_clamp",
+    status: "warn",
+    field,
+    rawValue: comparable,
+    clampedValue,
+  });
+}
 
 export function it_scheduleEmbeddingWarmup(
   host: ItEmbeddingWarmupHost,
@@ -100,14 +120,22 @@ export async function it_runEmbeddingWarmup(
     "embedding",
     "retrieval",
   );
+  const warmupConcurrencyRaw =
+    retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency;
   const warmupConcurrency = it_clampInteger(
-    retrievalCfg.embedding_max_concurrency ?? retrievalCfg.embeddingMaxConcurrency,
+    warmupConcurrencyRaw,
     Number(
       retrievalCfg.embedding_max_concurrency ??
         retrievalCfg.embeddingMaxConcurrency ??
         retrievalGuardrails.warmupConcurrency.min,
     ),
     retrievalGuardrails.warmupConcurrency,
+  );
+  it_traceWarmupClamp(
+    host,
+    "embedding_max_concurrency",
+    warmupConcurrencyRaw,
+    warmupConcurrency,
   );
   const cacheRoot = host.context.globalStorageUri?.fsPath;
   const corpusCacheMb = Number(
@@ -184,6 +212,18 @@ export async function it_runEmbeddingWarmup(
     templateEnv: env,
     templateContext: host.context,
   };
+  it_traceWarmupClamp(
+    host,
+    "vector.batch_size",
+    vectorCfg.batch_size,
+    resolvedVector.batchSize,
+  );
+  it_traceWarmupClamp(
+    host,
+    "vector.query_max_chars",
+    vectorCfg.query_max_chars,
+    resolvedVector.queryMaxChars,
+  );
   if (!embeddingTemplate) {
     host.updateEmbeddingWarmup({
       status: "idle",

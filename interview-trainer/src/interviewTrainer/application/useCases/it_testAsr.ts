@@ -5,8 +5,29 @@ function it_asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function it_traceAsr(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`test_asr ${action} ${status}`, {
+    event: `application.test_asr.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
 export async function it_testAsr(params: {
   payload: unknown;
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void;
 }): Promise<Record<string, unknown>> {
   const payload = it_asRecord(params.payload);
   const asrForm = it_asRecord(payload.asr);
@@ -16,6 +37,12 @@ export async function it_testAsr(params: {
     normalizedProvider === "volc_asr" ||
     normalizedProvider === "volcengine_asr" ||
     normalizedProvider === "volc_doubao";
+  const start = Date.now();
+
+  it_traceAsr(params.onTrace, "run", "start", {
+    provider,
+    isVolc,
+  });
 
   const buildRawOutput = (
     error: unknown,
@@ -36,7 +63,14 @@ export async function it_testAsr(params: {
 
   try {
     if (provider === "mock") {
-      return { ok: true, content: String(asrForm.mockText || "mock text") };
+      const content = String(asrForm.mockText || "mock text");
+      it_traceAsr(params.onTrace, "run", "success", {
+        provider,
+        mode: "mock",
+        textLength: content.length,
+        durationMs: Date.now() - start,
+      });
+      return { ok: true, content };
     }
 
     if (isVolc) {
@@ -93,7 +127,15 @@ export async function it_testAsr(params: {
         },
         audioPayload,
       );
-      return { ok: true, content: text || "(no asr result, but api reachable)" };
+      const content = text || "(no asr result, but api reachable)";
+      it_traceAsr(params.onTrace, "run", "success", {
+        provider,
+        mode,
+        baseUrl,
+        textLength: content.length,
+        durationMs: Date.now() - start,
+      });
+      return { ok: true, content };
     }
 
     if (provider !== "baidu_vop") {
@@ -130,7 +172,14 @@ export async function it_testAsr(params: {
         len: buffer.length,
       },
     );
-    return { ok: true, content: text || "(no asr result, but api reachable)" };
+    const content = text || "(no asr result, but api reachable)";
+    it_traceAsr(params.onTrace, "run", "success", {
+      provider,
+      mode: "baidu_vop",
+      textLength: content.length,
+      durationMs: Date.now() - start,
+    });
+    return { ok: true, content };
   } catch (error) {
     const meta = isVolc
       ? {
@@ -151,6 +200,12 @@ export async function it_testAsr(params: {
           language: String(asrForm.language || "zh"),
           devPid: Number(asrForm.devPid ?? 1537),
         };
+
+    it_traceAsr(params.onTrace, "run", "error", {
+      provider,
+      error: it_errorMessage(error),
+      durationMs: Date.now() - start,
+    });
 
     return {
       ok: false,

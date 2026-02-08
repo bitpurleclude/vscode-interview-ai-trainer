@@ -13,6 +13,26 @@ function it_asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function it_traceLlm(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`test_llm ${action} ${status}`, {
+    event: `application.test_llm.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
 function it_maskHeaders(headers: Record<string, string>): Record<string, string> {
   const masked: Record<string, string> = { ...headers };
   Object.keys(masked).forEach((key) => {
@@ -35,6 +55,7 @@ export async function it_testLlm(params: {
   payload: unknown;
   onEmitRequest?: (detail: Record<string, unknown>) => void;
   onFailure?: (error: unknown, detail?: Record<string, unknown>) => void;
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void;
 }): Promise<{ ok: true; content: string }> {
   const payload = it_asRecord(params.payload);
   const llmForm = it_asRecord(payload.llm);
@@ -47,7 +68,6 @@ export async function it_testLlm(params: {
     provider === "volc_doubao"
       ? "doubao-seed-1-8-251228"
       : "ernie-4.5-turbo-128k";
-
 
   const rawApiMode = llmForm.apiMode;
   const apiModeValue =
@@ -93,6 +113,14 @@ export async function it_testLlm(params: {
   ];
 
   const apiMode = cfg.apiMode || (cfg.useResponses ? "responses" : "chat");
+  const start = Date.now();
+  it_traceLlm(params.onTrace, "run", "start", {
+    provider: cfg.provider,
+    apiMode,
+    stream: cfg.stream !== false,
+    model: cfg.model,
+  });
+
   let requestDetail: Record<string, unknown> | null = null;
 
   if (provider === "openai_compatible") {
@@ -125,13 +153,30 @@ export async function it_testLlm(params: {
   }
 
   params.onEmitRequest?.(requestDetail);
+  it_traceLlm(params.onTrace, "request_preview", "success", {
+    provider: cfg.provider,
+    apiMode,
+    hasDetail: Boolean(requestDetail),
+  });
 
   try {
     const content = await it_callLlmChat(cfg, messages);
+    it_traceLlm(params.onTrace, "run", "success", {
+      provider: cfg.provider,
+      apiMode,
+      contentLength: content.length,
+      durationMs: Date.now() - start,
+    });
     return { ok: true, content };
   } catch (error) {
     params.onFailure?.(error, {
       config: { ...cfg, apiKey: cfg.apiKey ? "***" : "" },
+    });
+    it_traceLlm(params.onTrace, "run", "error", {
+      provider: cfg.provider,
+      apiMode,
+      error: it_errorMessage(error),
+      durationMs: Date.now() - start,
     });
     throw error;
   }
