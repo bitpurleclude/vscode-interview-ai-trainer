@@ -9,6 +9,24 @@ import { InterviewTrainerWebviewViewProvider } from "./webview/InterviewTrainerW
 
 const IT_E2E_FIXTURE_AUDIO_MAX_BYTES = 256 * 1024;
 const IT_E2E_FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
+const IT_E2E_WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiClickFlow";
+const IT_E2E_WEBVIEW_UI_REQUEST = "it/test/webviewUiAutomationRequest";
+const IT_E2E_WEBVIEW_UI_ACK = "it/test/webviewUiAutomationAck";
+const IT_E2E_WEBVIEW_UI_READY = "it/test/webviewUiAutomationReady";
+const IT_E2E_WEBVIEW_UI_TIMEOUT_MS = 20_000;
+
+type ItE2EUiAutomationResult = {
+  runId: string;
+  status: "success" | "error";
+  activePage?: "practice" | "settings" | "unknown";
+  steps?: Array<{ action: string; ok: boolean; detail?: string }>;
+  error?: string;
+};
+
+type ItE2EUiPending = {
+  resolve: (result: ItE2EUiAutomationResult) => void;
+  timeout: NodeJS.Timeout;
+};
 
 function it_findFixtureFile(
   fixtureDir: string,
@@ -141,6 +159,86 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   if (process.env.IT_E2E_ENABLE_TEST_COMMANDS === "1") {
+    const pendingUiRuns = new Map<string, ItE2EUiPending>();
+    let webviewUiBridgeReady = false;
+
+    viewProvider.webviewProtocol.on(IT_E2E_WEBVIEW_UI_READY, () => {
+      webviewUiBridgeReady = true;
+      return { received: true };
+    });
+
+    viewProvider.webviewProtocol.on(IT_E2E_WEBVIEW_UI_ACK, (message) => {
+      const runId = String(message.data?.runId || "");
+      if (!runId) {
+        return { received: false, reason: "missing runId" };
+      }
+      const pending = pendingUiRuns.get(runId);
+      if (!pending) {
+        return { received: false, reason: "not pending" };
+      }
+      clearTimeout(pending.timeout);
+      pendingUiRuns.delete(runId);
+      pending.resolve(message.data as ItE2EUiAutomationResult);
+      return { received: true };
+    });
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(IT_E2E_WEBVIEW_UI_FLOW_COMMAND, async () => {
+        const runId = `e2e-ui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        const readyDeadline = Date.now() + 15_000;
+        while (!webviewUiBridgeReady && Date.now() < readyDeadline) {
+          await vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        if (!webviewUiBridgeReady) {
+          return {
+            runId,
+            status: "error",
+            error: "Webview UI automation bridge is not ready",
+          } satisfies ItE2EUiAutomationResult;
+        }
+
+        const waitForResult = new Promise<ItE2EUiAutomationResult>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            pendingUiRuns.delete(runId);
+            reject(new Error(`Webview UI automation timed out after ${IT_E2E_WEBVIEW_UI_TIMEOUT_MS}ms`));
+          }, IT_E2E_WEBVIEW_UI_TIMEOUT_MS);
+          pendingUiRuns.set(runId, { resolve, timeout });
+        });
+
+        const sent = await sendToWebview(IT_E2E_WEBVIEW_UI_REQUEST, { runId });
+        if (!sent) {
+          const pending = pendingUiRuns.get(runId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingUiRuns.delete(runId);
+          }
+          return {
+            runId,
+            status: "error",
+            error: "Webview is not ready",
+          } satisfies ItE2EUiAutomationResult;
+        }
+
+        try {
+          return await waitForResult;
+        } catch (error) {
+          return {
+            runId,
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          } satisfies ItE2EUiAutomationResult;
+        } finally {
+          const pending = pendingUiRuns.get(runId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingUiRuns.delete(runId);
+          }
+        }
+      }),
+    );
+
     context.subscriptions.push(
       vscode.commands.registerCommand(IT_E2E_FIXTURE_ANALYZE_COMMAND, async () => {
         const workspaceRoot =

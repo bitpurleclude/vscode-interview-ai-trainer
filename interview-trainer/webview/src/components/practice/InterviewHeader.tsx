@@ -49,12 +49,14 @@ export const InterviewHeader: React.FC<InterviewHeaderProps> = (props) => {
       <div className="it-title">面试训练助手</div>
       <div className="it-page-tabs">
         <button
+          data-testid="it-tab-practice"
           className={`it-tab ${activePage === "practice" ? "active" : ""}`}
           onClick={() => onSetActivePage("practice")}
         >
           练习
         </button>
         <button
+          data-testid="it-tab-settings"
           className={`it-tab ${activePage === "settings" ? "active" : ""}`}
           onClick={() => onSetActivePage("settings")}
         >
@@ -64,6 +66,7 @@ export const InterviewHeader: React.FC<InterviewHeaderProps> = (props) => {
       {activePage === "practice" && (
         <div className="it-actions">
           <button
+            data-testid="it-action-record"
             className={`it-button ${
               recordingState === "recording" ? "it-button--danger" : "it-button--primary"
             }`}
@@ -86,16 +89,27 @@ export const InterviewHeader: React.FC<InterviewHeaderProps> = (props) => {
             />
           </label>
           <button
+            data-testid="it-action-analyze"
             className={`it-button ${isProcessing ? "it-button--danger" : ""}`}
             disabled={isProcessing ? uiLocked : canAnalyze}
             onClick={isProcessing ? onCancelAnalyze : onAnalyze}
           >
             {isProcessing ? "结束分析" : "开始分析"}
           </button>
-          <button className="it-button" disabled={uiLocked || savingResult} onClick={onSaveResult}>
+          <button
+            data-testid="it-action-save-result"
+            className="it-button"
+            disabled={uiLocked || savingResult}
+            onClick={onSaveResult}
+          >
             {savingResult ? "保存中..." : "保存结果"}
           </button>
-          <button className="it-button" disabled={uiLocked} onClick={onLoadHistory}>
+          <button
+            data-testid="it-action-history"
+            className="it-button"
+            disabled={uiLocked}
+            onClick={onLoadHistory}
+          >
             历史记录
           </button>
         </div>

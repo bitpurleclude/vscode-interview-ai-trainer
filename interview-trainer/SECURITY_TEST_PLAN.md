@@ -46,7 +46,8 @@
 - [x] P2-25 Fixture-driven analyze request roundtrip assertions at use-case boundary (`it_analysisFlow.integration.test.ts`).
 - [x] P2-26 Interface handler + protocol + host use-case fixture roundtrip tests (`it_webviewResultHandlers.integration.test.ts`).
 - [x] P2-27 Real extension activation fixture-analyze smoke command (`itInterviewTrainer.__test.runFixtureAnalyze`).
-- [ ] P2 suites pending (real UI click automation for full analyze lifecycle in Webview).
+- [x] P2-28 Real Webview tab/button click automation smoke command (`itInterviewTrainer.__test.runWebviewUiClickFlow`).
+- [ ] P2 suites pending (full analyze lifecycle automation through actual Webview controls is still pending).
 
 ## Analyze Full-Flow Fault Matrix (new)
 

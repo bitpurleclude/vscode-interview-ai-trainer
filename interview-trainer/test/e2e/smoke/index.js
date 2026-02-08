@@ -4,6 +4,7 @@ const path = require("path");
 const vscode = require("vscode");
 
 const FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
+const WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiClickFlow";
 
 function withTimeout(promise, timeoutMs, label) {
   let timer;
@@ -100,6 +101,25 @@ function assertFixtureAnalyzeResult(result) {
   );
 }
 
+function assertWebviewUiFlowResult(result) {
+  assert.ok(result && typeof result === "object", "Webview UI flow result should be an object");
+  assert.strictEqual(
+    result.status,
+    "success",
+    `Webview UI flow failed: ${JSON.stringify(result)}`,
+  );
+  assert.ok(Array.isArray(result.steps), "Webview UI flow should include steps");
+  assert.ok(result.steps.length >= 3, "Webview UI flow should include at least 3 steps");
+
+  const failedSteps = result.steps.filter((step) => step?.ok === false);
+  assert.strictEqual(
+    failedSteps.length,
+    0,
+    `Webview UI flow contains failed steps: ${JSON.stringify(failedSteps)}`,
+  );
+  assert.strictEqual(result.activePage, "practice", "Webview UI flow should end on practice page");
+}
+
 async function runSmoke(extension) {
   const allCommands = await vscode.commands.getCommands(true);
   [
@@ -109,6 +129,7 @@ async function runSmoke(extension) {
     "itInterviewTrainer.analyzeAudioFile",
     "itInterviewTrainer.mainView.focus",
     FIXTURE_ANALYZE_COMMAND,
+    WEBVIEW_UI_FLOW_COMMAND,
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
@@ -126,6 +147,12 @@ async function runSmoke(extension) {
     120_000,
   );
   assertFixtureAnalyzeResult(fixtureAnalyzeResult);
+
+  const webviewUiFlowResult = await executeCommandAndAssert(
+    WEBVIEW_UI_FLOW_COMMAND,
+    60_000,
+  );
+  assertWebviewUiFlowResult(webviewUiFlowResult);
 
   assert.strictEqual(extension.isActive, true, "Extension became inactive during smoke commands");
 }

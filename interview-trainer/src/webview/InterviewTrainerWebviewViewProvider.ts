@@ -61,6 +61,7 @@ export class InterviewTrainerWebviewViewProvider
     `;
 
     const nonce = crypto.randomBytes(16).toString("hex");
+    const e2eTestMode = process.env.IT_E2E_ENABLE_TEST_COMMANDS === "1";
 
     return `<!DOCTYPE html>
       <html lang="zh-CN">
@@ -159,6 +160,7 @@ export class InterviewTrainerWebviewViewProvider
             window.__itReady = false;
             window.__itScriptLoaded = false;
             window.__itLastError = "";
+            window.__itE2ETestMode = ${e2eTestMode ? "true" : "false"};
 
             window.addEventListener("error", (event) => {
               try {

@@ -27,6 +27,47 @@ import "./styles.css";
 
 type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
 
+const IT_E2E_WEBVIEW_UI_REQUEST = "it/test/webviewUiAutomationRequest";
+const IT_E2E_WEBVIEW_UI_ACK = "it/test/webviewUiAutomationAck";
+const IT_E2E_WEBVIEW_UI_READY = "it/test/webviewUiAutomationReady";
+const IT_E2E_UI_CLICK_DELAY_MS = 80;
+
+type ItE2EUiStep = {
+  action: string;
+  ok: boolean;
+  detail?: string;
+};
+
+function it_isE2ETestModeEnabled(): boolean {
+  return Boolean((window as any).__itE2ETestMode);
+}
+
+function it_delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function it_detectPageFromDom(): "practice" | "settings" | "unknown" {
+  if (document.querySelector(".it-settings")) {
+    return "settings";
+  }
+  if (document.querySelector(".it-flow")) {
+    return "practice";
+  }
+  return "unknown";
+}
+
+function it_clickUiElement(selector: string): void {
+  const element = document.querySelector<HTMLElement>(selector);
+  if (!element) {
+    throw new Error(`Element not found: ${selector}`);
+  }
+  const disabled = "disabled" in element && Boolean((element as HTMLButtonElement).disabled);
+  if (disabled) {
+    throw new Error(`Element is disabled: ${selector}`);
+  }
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+}
+
 const InterviewTrainer: React.FC = () => {
   const [itState, setItState] = useState<ItState>(DEFAULT_STATE);
   const [activeTab, setActiveTab] = useState<ResultTab>("transcript");
@@ -424,6 +465,83 @@ const InterviewTrainer: React.FC = () => {
       disposeSettings();
     };
   }, [handleLoadHistory]);
+
+  useEffect(() => {
+    if (!it_isE2ETestModeEnabled()) {
+      return;
+    }
+
+    void request(
+      IT_E2E_WEBVIEW_UI_READY,
+      { ready: true, ts: Date.now() },
+      { timeoutMs: 5_000 },
+    );
+
+    const disposeUiAutomation = on(IT_E2E_WEBVIEW_UI_REQUEST, (payload) => {
+      const runId = String(payload?.runId || "");
+      const steps: ItE2EUiStep[] = [];
+
+      const sendAck = async (status: "success" | "error", error?: string) => {
+        await request(
+          IT_E2E_WEBVIEW_UI_ACK,
+          {
+            runId,
+            status,
+            error,
+            activePage: it_detectPageFromDom(),
+            steps,
+          },
+          { timeoutMs: 10_000 },
+        );
+      };
+
+      void (async () => {
+        if (!runId) {
+          await sendAck("error", "Missing runId in UI automation request");
+          return;
+        }
+
+        try {
+          it_clickUiElement("[data-testid='it-tab-settings']");
+          await it_delay(IT_E2E_UI_CLICK_DELAY_MS);
+          const settingsPage = it_detectPageFromDom();
+          steps.push({
+            action: "open-settings-tab",
+            ok: settingsPage === "settings",
+            detail: `page=${settingsPage}`,
+          });
+          if (settingsPage !== "settings") {
+            throw new Error(`Expected settings page, got ${settingsPage}`);
+          }
+
+          it_clickUiElement("[data-testid='it-tab-practice']");
+          await it_delay(IT_E2E_UI_CLICK_DELAY_MS);
+          const practicePage = it_detectPageFromDom();
+          steps.push({
+            action: "return-practice-tab",
+            ok: practicePage === "practice",
+            detail: `page=${practicePage}`,
+          });
+          if (practicePage !== "practice") {
+            throw new Error(`Expected practice page, got ${practicePage}`);
+          }
+
+          it_clickUiElement("[data-testid='it-action-history']");
+          steps.push({ action: "click-history-button", ok: true });
+
+          await sendAck("success");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          steps.push({ action: "ui-click-flow", ok: false, detail: message });
+          await sendAck("error", message);
+        }
+      })();
+    });
+
+    return () => {
+      disposeUiAutomation();
+    };
+  }, []);
 
   const practiceProps = {
     steps: itState.steps,
