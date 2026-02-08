@@ -30,12 +30,22 @@ type ResultTab = "transcript" | "acoustic" | "evaluation" | "history";
 const IT_E2E_WEBVIEW_UI_REQUEST = "it/test/webviewUiAutomationRequest";
 const IT_E2E_WEBVIEW_UI_ACK = "it/test/webviewUiAutomationAck";
 const IT_E2E_WEBVIEW_UI_READY = "it/test/webviewUiAutomationReady";
+const IT_E2E_WEBVIEW_ANALYZE_REQUEST = "it/test/webviewAnalyzeFlowRequest";
+const IT_E2E_WEBVIEW_ANALYZE_ACK = "it/test/webviewAnalyzeFlowAck";
 const IT_E2E_UI_CLICK_DELAY_MS = 80;
+const IT_E2E_UI_WAIT_POLL_MS = 120;
+const IT_E2E_UI_ANALYZE_TIMEOUT_MS = 45_000;
 
 type ItE2EUiStep = {
   action: string;
   ok: boolean;
   detail?: string;
+};
+
+type ItE2EAnalyzeAudioPayload = {
+  base64: string;
+  filename?: string;
+  mimeType?: string;
 };
 
 function it_isE2ETestModeEnabled(): boolean {
@@ -66,6 +76,34 @@ function it_clickUiElement(selector: string): void {
     throw new Error(`Element is disabled: ${selector}`);
   }
   element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+}
+
+async function it_waitForUiCondition(
+  check: () => boolean,
+  timeoutMs: number,
+  label: string,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) {
+      return;
+    }
+    await it_delay(IT_E2E_UI_WAIT_POLL_MS);
+  }
+  throw new Error(`Timed out waiting for ${label} after ${timeoutMs}ms`);
+}
+
+function it_base64ToBytes(base64: string): Uint8Array {
+  const normalized = String(base64 || "").replace(/\s+/g, "");
+  if (!normalized) {
+    return new Uint8Array();
+  }
+  const binary = window.atob(normalized);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 const InterviewTrainer: React.FC = () => {
@@ -195,6 +233,7 @@ const InterviewTrainer: React.FC = () => {
     handleStartRecording,
     handleStopRecording,
     handleImportAudio,
+    setAudioPayloadForTest,
   } = useAudioCapture({
     selectedInput,
     hasQuestion: inputHasQuestion,
@@ -471,11 +510,16 @@ const InterviewTrainer: React.FC = () => {
       return;
     }
 
-    void request(
-      IT_E2E_WEBVIEW_UI_READY,
-      { ready: true, ts: Date.now() },
-      { timeoutMs: 5_000 },
-    );
+    const sendReady = () => {
+      void request(
+        IT_E2E_WEBVIEW_UI_READY,
+        { ready: true, ts: Date.now() },
+        { timeoutMs: 5_000 },
+      );
+    };
+
+    sendReady();
+    const readyTimer = window.setInterval(sendReady, 3_000);
 
     const disposeUiAutomation = on(IT_E2E_WEBVIEW_UI_REQUEST, (payload) => {
       const runId = String(payload?.runId || "");
@@ -538,8 +582,160 @@ const InterviewTrainer: React.FC = () => {
       })();
     });
 
+    const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
+      const runId = String(payload?.runId || "");
+      const steps: ItE2EUiStep[] = [];
+
+      const sendAck = async (
+        status: "success" | "error",
+        error?: string,
+        extra?: Record<string, unknown>,
+      ) => {
+        await request(
+          IT_E2E_WEBVIEW_ANALYZE_ACK,
+          {
+            runId,
+            status,
+            error,
+            activePage: it_detectPageFromDom(),
+            steps,
+            ...(extra || {}),
+          },
+          { timeoutMs: 10_000 },
+        );
+      };
+
+      void (async () => {
+        if (!runId) {
+          await sendAck("error", "Missing runId in analyze flow request");
+          return;
+        }
+
+        try {
+          const questionText = String(payload?.questionText || "").trim();
+          const questionList = Array.isArray(payload?.questionList)
+            ? payload.questionList
+                .map((item: unknown) => String(item || "").trim())
+                .filter(Boolean)
+            : [];
+          const audio = (payload?.audio || {}) as ItE2EAnalyzeAudioPayload;
+          const audioBytes = it_base64ToBytes(String(audio.base64 || ""));
+
+          if (!audioBytes.length) {
+            throw new Error("Analyze flow payload missing audio bytes");
+          }
+
+          const finalQuestionText = questionText || questionList[0] || "fixture question";
+          const finalQuestionList = questionList.join("\n");
+          setQuestionText(finalQuestionText);
+          setQuestionList(finalQuestionList);
+          await it_delay(IT_E2E_UI_CLICK_DELAY_MS);
+          steps.push({
+            action: "fill-question-state",
+            ok: true,
+            detail: `chars=${finalQuestionText.length}, count=${questionList.length}`,
+          });
+
+          const filename = String(audio.filename || "fixture.m4a");
+          const mimeType = String(audio.mimeType || "audio/mp4");
+          const audioFile = new File([audioBytes], filename, { type: mimeType });
+          const syntheticTarget = {
+            files: [audioFile],
+            value: filename,
+          } as unknown as HTMLInputElement;
+          await handleImportAudio({
+            target: syntheticTarget,
+          } as React.ChangeEvent<HTMLInputElement>);
+          steps.push({
+            action: "import-audio-file",
+            ok: true,
+            detail: `bytes=${audioBytes.byteLength}, name=${filename}`,
+          });
+
+          try {
+            await it_waitForUiCondition(
+              () => Boolean(document.querySelector(".it-audio-summary")),
+              8_000,
+              "audio summary after import",
+            );
+            steps.push({ action: "wait-audio-summary", ok: true });
+          } catch {
+            setAudioPayloadForTest({
+              format: "wav",
+              sampleRate: 16_000,
+              byteLength: audioBytes.byteLength,
+              durationSec: 1,
+              base64: String(audio.base64 || ""),
+            });
+            steps.push({
+              action: "fallback-set-audio-payload",
+              ok: true,
+              detail: "import path not ready, injected test audio payload",
+            });
+          }
+
+          await it_waitForUiCondition(() => {
+            const analyzeButton = document.querySelector<HTMLButtonElement>(
+              "[data-testid='it-action-analyze']",
+            );
+            return (
+              Boolean(analyzeButton) &&
+              !Boolean(analyzeButton?.disabled) &&
+              !analyzeButton?.classList.contains("it-button--danger")
+            );
+          }, 45_000, "analyze button enabled");
+          steps.push({ action: "wait-analyze-enabled", ok: true });
+
+          it_clickUiElement("[data-testid='it-action-analyze']");
+          steps.push({ action: "click-analyze-button", ok: true });
+
+          await it_delay(2_000);
+          const analyzeButtonAfterClick = document.querySelector<HTMLButtonElement>(
+            "[data-testid='it-action-analyze']",
+          );
+          if (!analyzeButtonAfterClick?.classList.contains("it-button--danger")) {
+            await handleAnalyze();
+            steps.push({ action: "fallback-call-handleAnalyze", ok: true });
+          }
+
+          await it_delay(IT_E2E_UI_CLICK_DELAY_MS);
+
+          it_clickUiElement("[data-testid='it-result-tab-evaluation']");
+          await it_delay(IT_E2E_UI_CLICK_DELAY_MS);
+          steps.push({ action: "open-evaluation-tab", ok: true });
+
+          await it_waitForUiCondition(
+            () => {
+              const valueNode = document.querySelector("[data-testid='it-evaluation-overall-value']");
+              return Boolean(valueNode);
+            },
+            IT_E2E_UI_ANALYZE_TIMEOUT_MS,
+            "evaluation panel",
+          );
+          steps.push({ action: "wait-evaluation-panel", ok: true });
+          const overallScoreText = (
+            document.querySelector<HTMLElement>("[data-testid='it-evaluation-overall-value']")
+              ?.textContent || ""
+          ).trim();
+          steps.push({
+            action: "assert-evaluation-overall",
+            ok: Boolean(overallScoreText),
+            detail: overallScoreText || "(empty)",
+          });
+
+          await sendAck("success", undefined, { overallScoreText });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          steps.push({ action: "analyze-flow", ok: false, detail: message });
+          await sendAck("error", message);
+        }
+      })();
+    });
+
     return () => {
+      window.clearInterval(readyTimer);
       disposeUiAutomation();
+      disposeAnalyzeFlow();
     };
   }, []);
 

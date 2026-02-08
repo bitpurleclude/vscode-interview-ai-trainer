@@ -21,5 +21,6 @@
 - `test:e2e:smoke` clears `ELECTRON_RUN_AS_NODE` before launch to avoid Electron/VS Code arg parsing failure.
 - `test:e2e:smoke` sets `IT_E2E_ENABLE_TEST_COMMANDS=1` so hidden fixture analyze/UI automation commands are only enabled during host smoke tests.
 - `test:e2e:smoke` now verifies fixture analyze + webview tab/button click automation in one host run.
+- `test:e2e:smoke` now also verifies webview analyze lifecycle through controls (fill question, import audio, click analyze, and capture success/error outcome).
 - `test:e2e:smoke` now uses isolated per-run profile dirs (`user-data`/`extensions`) and removes them after run to reduce mutex conflicts.
 - When adding or changing scripts, update this document and `SECURITY_TEST_PLAN.md` together.

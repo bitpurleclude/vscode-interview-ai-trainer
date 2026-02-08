@@ -77,11 +77,18 @@ export const InterviewHeader: React.FC<InterviewHeaderProps> = (props) => {
           </button>
           <label className="it-button it-button--secondary">
             导入音频
-            <input type="file" accept="audio/*" onChange={onImportAudio} disabled={uiLocked} />
+            <input
+              data-testid="it-input-audio-file"
+              type="file"
+              accept="audio/*"
+              onChange={onImportAudio}
+              disabled={uiLocked}
+            />
           </label>
           <label className="it-button it-button--secondary">
             导入题干
             <input
+              data-testid="it-input-question-file"
               type="file"
               accept=".txt,.md,text/plain,text/markdown"
               onChange={onImportQuestions}

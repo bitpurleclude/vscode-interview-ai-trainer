@@ -212,6 +212,10 @@ export function useAudioCapture({
     }
   };
 
+  const setAudioPayloadForTest = (audio: ItAnalyzeRequest["audio"] | null) => {
+    setAudioPayload(audio);
+  };
+
   return {
     audioPayload,
     isImporting,
@@ -219,5 +223,6 @@ export function useAudioCapture({
     handleStartRecording,
     handleStopRecording,
     handleImportAudio,
+    setAudioPayloadForTest,
   };
 }

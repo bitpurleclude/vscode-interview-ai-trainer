@@ -82,24 +82,28 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = (props) => {
     <div className="it-results">
       <div className="it-tabs">
         <button
+          data-testid="it-result-tab-transcript"
           className={`it-tab ${activeTab === "transcript" ? "active" : ""}`}
           onClick={() => onSetActiveTab("transcript")}
         >
           转录文本
         </button>
         <button
+          data-testid="it-result-tab-acoustic"
           className={`it-tab ${activeTab === "acoustic" ? "active" : ""}`}
           onClick={() => onSetActiveTab("acoustic")}
         >
           声学分析
         </button>
         <button
+          data-testid="it-result-tab-evaluation"
           className={`it-tab ${activeTab === "evaluation" ? "active" : ""}`}
           onClick={() => onSetActiveTab("evaluation")}
         >
           面试评价
         </button>
         <button
+          data-testid="it-result-tab-history"
           className={`it-tab ${activeTab === "history" ? "active" : ""}`}
           onClick={() => onSetActiveTab("history")}
         >
@@ -178,7 +182,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = (props) => {
                 <div className="it-evaluation__summary">{evaluationPreview.topicSummary}</div>
                 <div className="it-evaluation__overall">
                   <span>总分</span>
-                  <span className="it-evaluation__overall-value">
+                  <span data-testid="it-evaluation-overall-value" className="it-evaluation__overall-value">
                     {evaluationPreview.overallScore ?? "-"}
                   </span>
                 </div>

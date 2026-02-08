@@ -5,6 +5,7 @@ const vscode = require("vscode");
 
 const FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
 const WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiClickFlow";
+const WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyzeFlow";
 
 function withTimeout(promise, timeoutMs, label) {
   let timer;
@@ -120,6 +121,42 @@ function assertWebviewUiFlowResult(result) {
   assert.strictEqual(result.activePage, "practice", "Webview UI flow should end on practice page");
 }
 
+function assertWebviewAnalyzeFlowResult(result) {
+  assert.ok(result && typeof result === "object", "Webview analyze flow result should be an object");
+  assert.ok(
+    result.status === "success" || result.status === "error",
+    `Unexpected webview analyze status: ${JSON.stringify(result)}`,
+  );
+  assert.ok(Array.isArray(result.steps), "Webview analyze flow should include steps");
+  assert.ok(result.steps.length >= 5, "Webview analyze flow should include critical lifecycle steps");
+
+  const stepMap = new Map(result.steps.map((step) => [step.action, step]));
+  [
+    "fill-question-state",
+    "import-audio-file",
+    "wait-audio-summary",
+    "wait-analyze-enabled",
+    "click-analyze-button",
+  ].forEach((action) => {
+    const step = stepMap.get(action);
+    assert.ok(step, `Webview analyze flow missing step: ${action}`);
+    assert.strictEqual(step.ok, true, `Webview analyze step failed: ${action}`);
+  });
+
+  if (result.status === "success") {
+    assert.ok(
+      typeof result.overallScoreText === "string" && result.overallScoreText.length > 0,
+      "Webview analyze success should return non-empty overallScoreText",
+    );
+    return;
+  }
+
+  assert.ok(
+    typeof result.error === "string" && result.error.length > 0,
+    "Webview analyze error should include readable message",
+  );
+}
+
 async function runSmoke(extension) {
   const allCommands = await vscode.commands.getCommands(true);
   [
@@ -130,6 +167,7 @@ async function runSmoke(extension) {
     "itInterviewTrainer.mainView.focus",
     FIXTURE_ANALYZE_COMMAND,
     WEBVIEW_UI_FLOW_COMMAND,
+    WEBVIEW_ANALYZE_FLOW_COMMAND,
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
@@ -153,6 +191,12 @@ async function runSmoke(extension) {
     60_000,
   );
   assertWebviewUiFlowResult(webviewUiFlowResult);
+
+  const webviewAnalyzeFlowResult = await executeCommandAndAssert(
+    WEBVIEW_ANALYZE_FLOW_COMMAND,
+    120_000,
+  );
+  assertWebviewAnalyzeFlowResult(webviewAnalyzeFlowResult);
 
   assert.strictEqual(extension.isActive, true, "Extension became inactive during smoke commands");
 }

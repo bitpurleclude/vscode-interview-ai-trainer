@@ -101,12 +101,14 @@ export const PracticeFlow: React.FC<PracticeFlowProps> = (props) => {
         )}
         <div className="it-question">
           <textarea
+            data-testid="it-input-question-text"
             className={`it-textarea it-textarea--question${questionError ? " it-input--error" : ""}`}
             placeholder="题干材料（可选）"
             value={questionText}
             onChange={onQuestionTextChange}
           />
           <textarea
+            data-testid="it-input-question-list"
             className={`it-textarea it-textarea--questions${questionError ? " it-input--error" : ""}`}
             placeholder="小题列表（一行一个，可选）"
             value={questionList}
