@@ -18,6 +18,20 @@ const cachedEmbeddingEnsurePromises: Map<string, Promise<ItEmbeddingEnsureResult
 const loggedEmbeddingCacheLoads: Set<string> = new Set();
 const loggedEmbeddingCacheWrites: Set<string> = new Set();
 
+
+function it_traceEmbeddingCache(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`embedding_cache ${action} ${status}`, {
+    event: `infra.embedding_cache.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
 export function it_clearEmbeddingCaches(cacheKey?: string): void {
   if (cacheKey) {
     cachedEmbeddings.delete(cacheKey);
@@ -95,7 +109,7 @@ export function it_getEmbeddingCache(
     cachedEmbeddings.set(cacheKey, cache);
     if (cachePath && !loggedEmbeddingCacheLoads.has(cachePath)) {
       loggedEmbeddingCacheLoads.add(cachePath);
-      onTrace?.("向量缓存读取", {
+      it_traceEmbeddingCache(onTrace, "load", "success", {
         cachePath,
         items: cache.size,
       });
@@ -120,16 +134,24 @@ export async function it_embedTexts(
   if (!texts.length) {
     return [];
   }
+  const sink = onTrace || cfg.onTrace;
   const splitThreshold = it_resolveEmbeddingSplitThreshold(cfg, texts.length);
   if (texts.length <= splitThreshold) {
     return it_requestEmbeddings(
       {
         ...cfg,
-        onTrace: onTrace || cfg.onTrace,
+        onTrace: sink,
       },
       texts,
     );
   }
+
+  const chunkCount = Math.ceil(texts.length / splitThreshold);
+  it_traceEmbeddingCache(sink, "request_split", "start", {
+    textCount: texts.length,
+    splitThreshold,
+    chunkCount,
+  });
 
   const merged: number[][] = [];
   for (let i = 0; i < texts.length; i += splitThreshold) {
@@ -137,7 +159,7 @@ export async function it_embedTexts(
     const vectors = await it_requestEmbeddings(
       {
         ...cfg,
-        onTrace: onTrace || cfg.onTrace,
+        onTrace: sink,
       },
       chunk,
     );
@@ -146,6 +168,13 @@ export async function it_embedTexts(
     }
     merged.push(...vectors);
   }
+
+  it_traceEmbeddingCache(sink, "request_split", "success", {
+    textCount: texts.length,
+    splitThreshold,
+    chunkCount,
+    vectorCount: merged.length,
+  });
   return merged;
 }
 
@@ -200,7 +229,7 @@ function it_logEmbeddingCacheWriteOnce(
     return;
   }
   loggedEmbeddingCacheWrites.add(cachePath);
-  onTrace?.("向量缓存写入", {
+  it_traceEmbeddingCache(onTrace, "save", "success", {
     cachePath,
     items,
   });

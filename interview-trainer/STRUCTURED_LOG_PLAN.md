@@ -17,6 +17,7 @@
 - [x] P7 e2e protocol guard assertions (real Webview request -> missing handler -> structured error)
 - [x] P8 command/token/messenger observability (extension command boundary, token lifecycle, webview messenger telemetry)
 - [x] P9 config/recording/persistence/cache/embedding observability (service write paths and cache maintenance)
+- [x] P10 remaining trace normalization for evaluation/cache/indexer observability
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -119,6 +120,12 @@
 - Add persistence events for report append, attempt append, topic-meta read/write, and save-current-result.
 - Add retrieval cache clear events and storage cache remove events with `start/success/noop/error`.
 - Add embedding request telemetry (`infra.embedding.request`) with provider/model context and duration.
+
+### P10 - Remaining Trace Normalization
+- Normalize evaluation LLM trace events to stable `application.evaluation_llm.*` families.
+- Normalize embedding cache read/write/split tracing to `infra.embedding_cache.*` events.
+- Normalize embedding warmup lifecycle tracing to `infra.embedding_warmup.prepare`.
+- Normalize incremental index fallback tracing to `infra.corpus_index.incremental_fallback`.
 
 ## 5. Impact
 - Positive:

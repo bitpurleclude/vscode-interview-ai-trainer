@@ -15,6 +15,20 @@ import {
 } from "./cache_embedding";
 import { it_getItemKey } from "./utils";
 
+
+function it_traceEmbeddingWarmup(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`embedding_warmup ${action} ${status}`, {
+    event: `infra.embedding_warmup.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
 export async function it_prepareEmbeddingCache(
   corpus: ItCorpusItem[],
   vectorCfg: ItVectorSearchConfig,
@@ -54,7 +68,7 @@ export async function it_prepareEmbeddingCache(
     ? Math.max(1, Math.floor(Number(options.maxConcurrency)))
     : 1;
   options.onProgress?.(0, total);
-  options.onTrace?.("向量预计算任务", {
+  it_traceEmbeddingWarmup(options.onTrace, "prepare", "start", {
     total,
     cached,
     batchSize,
@@ -110,9 +124,18 @@ export async function it_prepareEmbeddingCache(
     options.onProgress?.(done, total);
   });
   if (aborted) {
-    options.onTrace?.("向量预计算已中止", { done, total, created });
+    it_traceEmbeddingWarmup(options.onTrace, "prepare", "aborted", {
+      done,
+      total,
+      created,
+    });
   } else {
-    options.onTrace?.("向量预计算完成", { done, total, created, cached });
+    it_traceEmbeddingWarmup(options.onTrace, "prepare", "success", {
+      done,
+      total,
+      created,
+      cached,
+    });
   }
 
   const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));

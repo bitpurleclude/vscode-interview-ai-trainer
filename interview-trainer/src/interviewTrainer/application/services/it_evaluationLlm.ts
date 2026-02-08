@@ -29,6 +29,27 @@ function it_maskLlmConfig(config: ItLlmConfig): Record<string, unknown> {
   };
 }
 
+
+function it_traceEvaluationLlm(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: "generate_revised_by_outline" | "generate_outlines",
+  status: "start" | "success" | "error",
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`evaluation_llm ${action} ${status}`, {
+    event: `application.evaluation_llm.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 async function it_generateRevisedByOutline(
   config: ItEvaluationConfig,
   items: Array<{
@@ -111,7 +132,7 @@ async function it_generateRevisedByOutline(
       templateVars: config.templateVars,
       templateMaxRetries: config.templateMaxRetries,
     };
-    onTrace?.("面试评价 LLM 请求（按提纲生成示范）", {
+    it_traceEvaluationLlm(onTrace, "generate_revised_by_outline", "start", {
       config: it_maskLlmConfig(callConfig),
       messages: [
         { role: "system", content: systemPrompt },
@@ -133,7 +154,9 @@ async function it_generateRevisedByOutline(
       },
     );
     onStream?.({ text: content, done: true });
-    onTrace?.("面试评价 LLM 返回（按提纲生成示范）", { text: content });
+    it_traceEvaluationLlm(onTrace, "generate_revised_by_outline", "success", {
+      text: content,
+    });
     const parsed = it_extractJsonPayload(content);
     const list = Array.isArray(parsed?.answers)
       ? parsed.answers
@@ -147,8 +170,8 @@ async function it_generateRevisedByOutline(
     }
     return list.map((entry: any) => String(entry?.revised || ""));
   } catch (error) {
-    onTrace?.("面试评价 LLM 失败（按提纲生成示范）", {
-      error: error instanceof Error ? error.message : String(error),
+    it_traceEvaluationLlm(onTrace, "generate_revised_by_outline", "error", {
+      error: it_errorMessage(error),
     });
     return null;
   }
@@ -211,7 +234,7 @@ async function it_generateOutlines(
       templateVars: config.templateVars,
       templateMaxRetries: config.templateMaxRetries,
     };
-    onTrace?.("面试评价 LLM 请求（提纲修复）", {
+    it_traceEvaluationLlm(onTrace, "generate_outlines", "start", {
       config: it_maskLlmConfig(callConfig),
       messages: [
         { role: "system", content: systemPrompt },
@@ -233,7 +256,9 @@ async function it_generateOutlines(
       },
     );
     onStream?.({ text: content, done: true });
-    onTrace?.("面试评价 LLM 返回（提纲修复）", { text: content });
+    it_traceEvaluationLlm(onTrace, "generate_outlines", "success", {
+      text: content,
+    });
     const parsed = it_extractJsonPayload(content);
     const outlineList = Array.isArray(parsed?.outlines)
       ? parsed.outlines
@@ -254,8 +279,8 @@ async function it_generateOutlines(
       ),
     }));
   } catch (error) {
-    onTrace?.("面试评价 LLM 失败（提纲修复）", {
-      error: error instanceof Error ? error.message : String(error),
+    it_traceEvaluationLlm(onTrace, "generate_outlines", "error", {
+      error: it_errorMessage(error),
     });
     return null;
   }

@@ -5,6 +5,20 @@ import type { ItCorpusItem } from "../../domain/notes/types";
 import { it_isWithinRoot, it_normalizePath, it_readTextAsync } from "./utils";
 import { IT_ALLOWED_EXTS, IT_MAX_CHUNK_LEN, IT_MAX_FILE_SIZE } from "./indexer_constants";
 
+
+function it_traceDirtyIndexer(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`corpus_index ${action} ${status}`, {
+    event: `infra.corpus_index.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
 export async function it_applyDirtyFilesToCorpus(
   base: { corpus: ItCorpusItem[]; dirMtimes: Record<string, number> },
   entries: Array<[string, string]>,
@@ -101,7 +115,10 @@ export async function it_applyDirtyFilesToCorpus(
       continue;
     }
     if (stat.isDirectory()) {
-      onTrace?.("语料增量更新跳过：包含目录变更，改为全量扫描", { path: filePath });
+      it_traceDirtyIndexer(onTrace, "incremental_fallback", "triggered", {
+        reason: "directory_changed",
+        path: filePath,
+      });
       return null;
     }
     if (!stat.isFile()) {

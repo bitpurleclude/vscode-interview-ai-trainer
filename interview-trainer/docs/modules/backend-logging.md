@@ -10,10 +10,14 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/application/services/it_logSinkGateway.ts`
 - `src/interviewTrainer/application/services/it_extensionRecording.ts`
 - `src/interviewTrainer/application/services/it_analysisPersistence.ts`
+- `src/interviewTrainer/application/services/it_evaluationLlm.ts`
 - `src/interviewTrainer/application/useCases/it_saveCurrentResult.ts`
 - `src/interviewTrainer/application/useCases/it_retrievalActions.ts`
 - `src/interviewTrainer/infra/api/it_configService.ts`
 - `src/interviewTrainer/infra/api/it_embedding.ts`
+- `src/interviewTrainer/infra/notes/cache_embedding.ts`
+- `src/interviewTrainer/infra/notes/indexer_dirty.ts`
+- `src/interviewTrainer/infra/notes/cache_warmup.ts`
 - `src/interviewTrainer/infra/storage/it_cache.ts`
 - `src/interviewTrainer/infra/logging/it_outputChannelLogSink.ts`
 - `src/interviewTrainer/infra/logging/it_traceLogger.ts`
@@ -130,4 +134,16 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `infra.storage.cache.remove_dir`
 - Embedding request telemetry:
   - `infra.embedding.request`
+
+## Additional event families (P10)
+- Evaluation LLM normalization events:
+  - `application.evaluation_llm.generate_revised_by_outline`
+  - `application.evaluation_llm.generate_outlines`
+- Embedding cache and warmup normalization events:
+  - `infra.embedding_cache.load`
+  - `infra.embedding_cache.save`
+  - `infra.embedding_cache.request_split`
+  - `infra.embedding_warmup.prepare`
+- Incremental index fallback normalization event:
+  - `infra.corpus_index.incremental_fallback`
 
