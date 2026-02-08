@@ -13,13 +13,17 @@ const IT_E2E_WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiCl
 const IT_E2E_WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyzeFlow";
 const IT_E2E_WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelFlow";
 const IT_E2E_WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
+const IT_E2E_WEBVIEW_PROTOCOL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewProtocolGuardFlow";
 const IT_E2E_WEBVIEW_UI_REQUEST = "it/test/webviewUiAutomationRequest";
 const IT_E2E_WEBVIEW_UI_ACK = "it/test/webviewUiAutomationAck";
 const IT_E2E_WEBVIEW_UI_READY = "it/test/webviewUiAutomationReady";
 const IT_E2E_WEBVIEW_ANALYZE_REQUEST = "it/test/webviewAnalyzeFlowRequest";
 const IT_E2E_WEBVIEW_ANALYZE_ACK = "it/test/webviewAnalyzeFlowAck";
+const IT_E2E_WEBVIEW_PROTOCOL_REQUEST = "it/test/webviewProtocolGuardRequest";
+const IT_E2E_WEBVIEW_PROTOCOL_ACK = "it/test/webviewProtocolGuardAck";
 const IT_E2E_WEBVIEW_UI_TIMEOUT_MS = 20_000;
 const IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS = 90_000;
+const IT_E2E_WEBVIEW_PROTOCOL_TIMEOUT_MS = 20_000;
 const IT_E2E_WORKSPACE_ERROR_CODE = "workspace_not_found";
 const IT_E2E_WORKSPACE_ERROR_MESSAGE = "Please open a workspace folder before running analysis.";
 
@@ -32,6 +36,7 @@ type ItE2EUiAutomationResult = {
   error?: string;
   errorCode?: string;
   userMessage?: string;
+  probeResponse?: unknown;
 };
 
 type ItE2EUiPending = {
@@ -45,6 +50,7 @@ type ItE2EErrorPayload = {
   message: string;
   errorCode?: string;
   userMessage?: string;
+  probeResponse?: unknown;
 };
 
 function it_createE2EWorkspaceRequiredError(): Error {
@@ -349,6 +355,7 @@ export function activate(context: vscode.ExtensionContext) {
   if (process.env.IT_E2E_ENABLE_TEST_COMMANDS === "1") {
     const pendingUiRuns = new Map<string, ItE2EUiPending>();
     const pendingAnalyzeRuns = new Map<string, ItE2EUiPending>();
+    const pendingProtocolRuns = new Map<string, ItE2EUiPending>();
     let webviewUiBridgeReady = false;
 
     const ensureWebviewUiBridgeReady = async (): Promise<{ ready: boolean; reason?: string }> => {
@@ -399,6 +406,22 @@ export function activate(context: vscode.ExtensionContext) {
       }
       clearTimeout(pending.timeout);
       pendingAnalyzeRuns.delete(runId);
+      pending.resolve(message.data as ItE2EUiAutomationResult);
+      return { received: true };
+    });
+
+    viewProvider.webviewProtocol.on(IT_E2E_WEBVIEW_PROTOCOL_ACK, (message) => {
+      webviewUiBridgeReady = true;
+      const runId = String(message.data?.runId || "");
+      if (!runId) {
+        return { received: false, reason: "missing runId" };
+      }
+      const pending = pendingProtocolRuns.get(runId);
+      if (!pending) {
+        return { received: false, reason: "not pending" };
+      }
+      clearTimeout(pending.timeout);
+      pendingProtocolRuns.delete(runId);
       pending.resolve(message.data as ItE2EUiAutomationResult);
       return { received: true };
     });
@@ -563,6 +586,66 @@ export function activate(context: vscode.ExtensionContext) {
       ),
     );
 
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(IT_E2E_WEBVIEW_PROTOCOL_FLOW_COMMAND, async () => {
+        const runId = `e2e-webview-protocol-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        const readyState = await ensureWebviewUiBridgeReady();
+        if (!readyState.ready) {
+          return {
+            runId,
+            status: "error",
+            error: readyState.reason || "Webview bridge not ready",
+          } satisfies ItE2EUiAutomationResult;
+        }
+
+        const waitForResult = new Promise<ItE2EUiAutomationResult>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            pendingProtocolRuns.delete(runId);
+            reject(
+              new Error(
+                `Webview protocol guard flow timed out after ${IT_E2E_WEBVIEW_PROTOCOL_TIMEOUT_MS}ms`,
+              ),
+            );
+          }, IT_E2E_WEBVIEW_PROTOCOL_TIMEOUT_MS);
+          pendingProtocolRuns.set(runId, { resolve, timeout });
+        });
+
+        const sent = await sendToWebview(IT_E2E_WEBVIEW_PROTOCOL_REQUEST, { runId });
+        if (!sent) {
+          const pending = pendingProtocolRuns.get(runId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingProtocolRuns.delete(runId);
+          }
+          return {
+            runId,
+            status: "error",
+            error: "Webview is not ready",
+          } satisfies ItE2EUiAutomationResult;
+        }
+
+        try {
+          return await waitForResult;
+        } catch (error) {
+          const errorPayload = it_toE2EErrorPayload(error);
+          return {
+            runId,
+            status: "error",
+            error: errorPayload.message,
+            errorCode: errorPayload.errorCode,
+            userMessage: errorPayload.userMessage,
+          } satisfies ItE2EUiAutomationResult;
+        } finally {
+          const pending = pendingProtocolRuns.get(runId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingProtocolRuns.delete(runId);
+          }
+        }
+      }),
+    );
 
     context.subscriptions.push(
       vscode.commands.registerCommand(IT_E2E_FIXTURE_ANALYZE_COMMAND, async () => {

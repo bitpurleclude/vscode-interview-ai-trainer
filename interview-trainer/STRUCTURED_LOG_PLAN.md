@@ -14,6 +14,7 @@
 - [x] P4 docs sync and delivery checks (`build/test/e2e smoke/package`)
 - [x] P5 handler-wide boundary logging (`it_runLoggedHandler` applied to all Webview route handlers)
 - [x] P6 protocol anomaly logging (`WebviewProtocol` observer + `handler_not_found` request response)
+- [x] P7 e2e protocol guard assertions (real Webview request -> missing handler -> structured error)
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -99,6 +100,11 @@
 - Add protocol observer events for invalid messages, unhandled requests, handler runtime exceptions, and send failures.
 - Return structured `handler_not_found` error for unknown request messages with `messageId`.
 - Map protocol anomalies to structured error/warn logs in extension runtime.
+
+### P7 - E2E Assertion Coverage
+- Add hidden command to trigger a real Webview request to a missing handler in smoke mode.
+- Assert structured error payload (`status=error`, `errorCode=handler_not_found`) end to end.
+- Keep protocol guard verification in both workspace and no-workspace smoke runs.
 
 ## 5. Impact
 - Positive:

@@ -8,6 +8,7 @@ const WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiClickFlow
 const WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyzeFlow";
 const WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelFlow";
 const WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
+const WEBVIEW_PROTOCOL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewProtocolGuardFlow";
 
 const SMOKE_MODE = String(process.env.IT_E2E_SMOKE_MODE || "workspace").toLowerCase();
 const WORKSPACE_ERROR_CODE = "workspace_not_found";
@@ -289,6 +290,42 @@ function assertWebviewSaveFlowResult(result) {
   );
 }
 
+
+function assertWebviewProtocolGuardResult(result) {
+  assert.ok(result && typeof result === "object", "Webview protocol guard result should be an object");
+  assert.strictEqual(
+    result.status,
+    "success",
+    `Webview protocol guard flow failed: ${JSON.stringify(result)}`,
+  );
+  assert.ok(Array.isArray(result.steps), "Webview protocol guard flow should include steps");
+
+  const stepMap = new Map(result.steps.map((step) => [step.action, step]));
+  ["request-missing-handler", "assert-missing-handler-error"].forEach((action) => {
+    const step = stepMap.get(action);
+    assert.ok(step, `Webview protocol guard flow missing step: ${action}`);
+    assert.strictEqual(step.ok, true, `Webview protocol guard step failed: ${action}`);
+  });
+
+  const probeResponse = result.probeResponse;
+  assert.ok(probeResponse && typeof probeResponse === "object", "Protocol guard should include probeResponse");
+  assert.strictEqual(
+    probeResponse.status,
+    "error",
+    `Protocol guard should return error status for missing handler: ${JSON.stringify(probeResponse)}`,
+  );
+  assert.strictEqual(
+    probeResponse.errorCode,
+    "handler_not_found",
+    `Protocol guard should return handler_not_found: ${JSON.stringify(probeResponse)}`,
+  );
+  const errorText = String(probeResponse.error || "").toLowerCase();
+  assert.ok(
+    errorText.includes("no handler") || errorText.includes("handler"),
+    `Protocol guard should include handler error text: ${JSON.stringify(probeResponse)}`,
+  );
+}
+
 function assertExpectedCommandsPresent(allCommands) {
   [
     "itInterviewTrainer.open",
@@ -301,6 +338,7 @@ function assertExpectedCommandsPresent(allCommands) {
     WEBVIEW_ANALYZE_FLOW_COMMAND,
     WEBVIEW_CANCEL_FLOW_COMMAND,
     WEBVIEW_SAVE_FLOW_COMMAND,
+    WEBVIEW_PROTOCOL_FLOW_COMMAND,
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
@@ -344,6 +382,12 @@ async function runWorkspaceSmoke(extension) {
     120_000,
   );
   assertWebviewSaveFlowResult(webviewSaveFlowResult);
+
+  const webviewProtocolFlowResult = await executeCommandAndAssert(
+    WEBVIEW_PROTOCOL_FLOW_COMMAND,
+    60_000,
+  );
+  assertWebviewProtocolGuardResult(webviewProtocolFlowResult);
 }
 
 async function runNoWorkspaceSmoke() {
@@ -377,6 +421,12 @@ async function runNoWorkspaceSmoke() {
     webviewAnalyzeFlowResult,
     "No-workspace webview analyze",
   );
+
+  const webviewProtocolFlowResult = await executeCommandAndAssert(
+    WEBVIEW_PROTOCOL_FLOW_COMMAND,
+    60_000,
+  );
+  assertWebviewProtocolGuardResult(webviewProtocolFlowResult);
 }
 
 async function runSmoke(extension) {

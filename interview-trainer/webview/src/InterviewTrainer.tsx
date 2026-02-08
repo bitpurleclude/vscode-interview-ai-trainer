@@ -32,6 +32,9 @@ const IT_E2E_WEBVIEW_UI_ACK = "it/test/webviewUiAutomationAck";
 const IT_E2E_WEBVIEW_UI_READY = "it/test/webviewUiAutomationReady";
 const IT_E2E_WEBVIEW_ANALYZE_REQUEST = "it/test/webviewAnalyzeFlowRequest";
 const IT_E2E_WEBVIEW_ANALYZE_ACK = "it/test/webviewAnalyzeFlowAck";
+const IT_E2E_WEBVIEW_PROTOCOL_REQUEST = "it/test/webviewProtocolGuardRequest";
+const IT_E2E_WEBVIEW_PROTOCOL_ACK = "it/test/webviewProtocolGuardAck";
+const IT_E2E_MISSING_HANDLER_PROBE_TYPE = "it/test/missingHandlerProbe";
 const IT_E2E_UI_CLICK_DELAY_MS = 80;
 const IT_E2E_UI_WAIT_POLL_MS = 120;
 const IT_E2E_UI_ANALYZE_TIMEOUT_MS = 45_000;
@@ -815,10 +818,74 @@ const InterviewTrainer: React.FC = () => {
       })();
     });
 
+    const disposeProtocolGuard = on(IT_E2E_WEBVIEW_PROTOCOL_REQUEST, (payload) => {
+      const runId = String(payload?.runId || "");
+      const steps: ItE2EUiStep[] = [];
+
+      const sendAck = async (
+        status: "success" | "error",
+        error?: string,
+        probeResponse?: unknown,
+      ) => {
+        await request(
+          IT_E2E_WEBVIEW_PROTOCOL_ACK,
+          {
+            runId,
+            status,
+            error,
+            activePage: it_detectPageFromDom(),
+            steps,
+            probeResponse,
+          },
+          { timeoutMs: 10_000 },
+        );
+      };
+
+      void (async () => {
+        if (!runId) {
+          await sendAck("error", "Missing runId in protocol guard request");
+          return;
+        }
+
+        try {
+          const probeResponse = await request(
+            IT_E2E_MISSING_HANDLER_PROBE_TYPE,
+            { probe: true, ts: Date.now() },
+            { timeoutMs: 8_000 },
+          );
+          steps.push({
+            action: "request-missing-handler",
+            ok: true,
+            detail: `type=${IT_E2E_MISSING_HANDLER_PROBE_TYPE}`,
+          });
+
+          const status = String(probeResponse?.status || "");
+          const errorCode = String(probeResponse?.errorCode || "");
+          const errorText = String(probeResponse?.error || "");
+          const valid = status === "error" && errorCode === "handler_not_found" && Boolean(errorText);
+          steps.push({
+            action: "assert-missing-handler-error",
+            ok: valid,
+            detail: `status=${status}, errorCode=${errorCode}`,
+          });
+          if (!valid) {
+            throw new Error(`Unexpected protocol probe response: ${JSON.stringify(probeResponse)}`);
+          }
+
+          await sendAck("success", undefined, probeResponse);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          steps.push({ action: "protocol-guard-flow", ok: false, detail: message });
+          await sendAck("error", message);
+        }
+      })();
+    });
+
     return () => {
       window.clearInterval(readyTimer);
       disposeUiAutomation();
       disposeAnalyzeFlow();
+      disposeProtocolGuard();
     };
   }, []);
 
