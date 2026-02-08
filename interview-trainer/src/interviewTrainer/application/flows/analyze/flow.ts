@@ -592,6 +592,7 @@ export async function it_runAnalysis(
     attemptIndex,
     response,
     reportProgress,
+    onTrace: deps.onCorpusTrace,
   });
 
   return response;

@@ -20,27 +20,129 @@ type ItEnvResolution = {
   envConfig: Record<string, any>;
 };
 
+type ItConfigTraceSink = (
+  message: string,
+  detail?: Record<string, unknown>,
+) => void;
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export class ItConfigService {
-  constructor(private context: vscode.ExtensionContext) {}
+  private traceSink?: ItConfigTraceSink;
+
+  constructor(
+    private context: vscode.ExtensionContext,
+    options?: { onTrace?: ItConfigTraceSink },
+  ) {
+    this.traceSink = options?.onTrace;
+  }
+
+  public setTraceSink(sink?: ItConfigTraceSink): void {
+    this.traceSink = sink;
+  }
+
+  private trace(action: string, status: string, detail?: Record<string, unknown>): void {
+    this.traceSink?.(`config ${action} ${status}`, {
+      event: `infra.config.${action}`,
+      status,
+      ...(detail || {}),
+    });
+  }
 
   loadBundle(): ItConfigBundle {
-    return it_loadConfigBundle(this.context);
+    this.trace("load_bundle", "start");
+    try {
+      const bundle = it_loadConfigBundle(this.context);
+      this.trace("load_bundle", "success", {
+        activeEnv: bundle.api?.active?.environment || "prod",
+        templateEnvCount: Object.keys(bundle.templates?.environments || {}).length,
+      });
+      return bundle;
+    } catch (error) {
+      this.trace("load_bundle", "error", {
+        error: it_errorMessage(error),
+      });
+      throw error;
+    }
   }
 
   saveApiConfig(apiConfig: ItApiConfig): void {
-    it_saveApiConfig(this.context, apiConfig);
+    this.trace("save_api", "start", {
+      activeEnv: apiConfig.active?.environment || "prod",
+      environmentCount: Object.keys(apiConfig.environments || {}).length,
+    });
+    try {
+      it_saveApiConfig(this.context, apiConfig);
+      this.trace("save_api", "success", {
+        activeEnv: apiConfig.active?.environment || "prod",
+      });
+    } catch (error) {
+      this.trace("save_api", "error", {
+        error: it_errorMessage(error),
+      });
+      throw error;
+    }
   }
 
   saveSkillConfig(skillConfig: Record<string, any>): void {
-    it_saveSkillConfig(this.context, skillConfig);
+    this.trace("save_skill", "start", {
+      keyCount: Object.keys(skillConfig || {}).length,
+    });
+    try {
+      it_saveSkillConfig(this.context, skillConfig);
+      this.trace("save_skill", "success", {
+        keyCount: Object.keys(skillConfig || {}).length,
+      });
+    } catch (error) {
+      this.trace("save_skill", "error", {
+        error: it_errorMessage(error),
+      });
+      throw error;
+    }
   }
 
   saveTemplatesConfig(templatesConfig: ItTemplatesConfig): void {
-    it_saveTemplatesConfig(this.context, templatesConfig);
+    this.trace("save_templates", "start", {
+      environmentCount: Object.keys(templatesConfig.environments || {}).length,
+    });
+    try {
+      it_saveTemplatesConfig(this.context, templatesConfig);
+      this.trace("save_templates", "success", {
+        environmentCount: Object.keys(templatesConfig.environments || {}).length,
+      });
+    } catch (error) {
+      this.trace("save_templates", "error", {
+        error: it_errorMessage(error),
+      });
+      throw error;
+    }
   }
 
   saveProviderConfig(providerId: string, payload: any): void {
-    it_saveProviderConfig(this.context, providerId, payload);
+    this.trace("save_provider", "start", {
+      providerId,
+      keyCount:
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? Object.keys(payload).length
+          : 0,
+    });
+    try {
+      it_saveProviderConfig(this.context, providerId, payload);
+      this.trace("save_provider", "success", {
+        providerId,
+      });
+    } catch (error) {
+      this.trace("save_provider", "error", {
+        providerId,
+        error: it_errorMessage(error),
+      });
+      throw error;
+    }
   }
 
   resolveEnvironment(apiConfig: ItApiConfig, envInput?: string): ItEnvResolution {
@@ -201,15 +303,33 @@ export class ItConfigService {
   async ensureTemplatesConfig(bundle: ItConfigBundle): Promise<ItConfigBundle> {
     const templatesConfig = bundle.templates || { version: 1, environments: {} };
     const env = bundle.api.active?.environment || "prod";
+    this.trace("ensure_templates", "start", {
+      env,
+      hadTemplates: Boolean(bundle.templates),
+    });
     const ensured = this.ensureTemplateEnvironment(templatesConfig, env);
     if (ensured === templatesConfig) {
+      this.trace("ensure_templates", "noop", {
+        env,
+      });
       return bundle;
     }
-    this.saveTemplatesConfig(ensured);
-    return {
-      ...bundle,
-      templates: ensured,
-    };
+    try {
+      this.saveTemplatesConfig(ensured);
+      this.trace("ensure_templates", "success", {
+        env,
+      });
+      return {
+        ...bundle,
+        templates: ensured,
+      };
+    } catch (error) {
+      this.trace("ensure_templates", "error", {
+        env,
+        error: it_errorMessage(error),
+      });
+      throw error;
+    }
   }
 
   applyEnvConfig(apiConfig: ItApiConfig, environment: string, envConfig: Record<string, any>): ItApiConfig {

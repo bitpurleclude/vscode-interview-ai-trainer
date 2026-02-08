@@ -22,7 +22,10 @@ describe("it_bootstrapExtensionHost", () => {
     };
 
     const outputChannel = { dispose: vi.fn() } as any;
-    const configService = { loadBundle: vi.fn(() => mockBundle) };
+    const configService = {
+      loadBundle: vi.fn(() => mockBundle),
+      setTraceSink: vi.fn(),
+    };
     const tokenService = { sync: vi.fn() };
 
     const host = {
@@ -37,6 +40,7 @@ describe("it_bootstrapExtensionHost", () => {
       updateCorpusWatchers: vi.fn(),
       registerHandlers: vi.fn(),
       scheduleEmbeddingWarmup: vi.fn(),
+      logCorpusTrace: vi.fn(),
     };
 
     it_bootstrapExtensionHost(host as any, {
@@ -48,6 +52,7 @@ describe("it_bootstrapExtensionHost", () => {
     expect(host.outputChannel).toBe(outputChannel);
     expect(host.configService).toBe(configService);
     expect(host.configBundle).toBe(mockBundle);
+    expect(configService.setTraceSink).toHaveBeenCalledTimes(1);
     expect(host.tokenService).toBe(tokenService);
     expect(host.configSnapshot).toEqual({ ok: true });
 

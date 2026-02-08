@@ -25,10 +25,31 @@ export type ItSaveCurrentResultPayload = {
   topicTitle?: unknown;
 };
 
+function it_saveTrace(
+  onTrace: ((message: string, detail?: Record<string, unknown>) => void) | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.(`save_result ${action} ${status}`, {
+    event: `application.save_result.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export async function it_saveCurrentResult(params: {
   payload: ItSaveCurrentResultPayload;
   configBundle: ItConfigBundle;
   requireWorkspaceRoot: () => string;
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void;
 }): Promise<{ ok: true; attemptIndex: number; reportPath: string }> {
   const payload = params.payload || {};
   const response = payload.response as ItAnalyzeResponse | undefined;
@@ -65,67 +86,112 @@ export async function it_saveCurrentResult(params: {
     centerSubdir: skillConfig.topics?.center_subdir || "",
   };
 
-  const workspaceRoot = params.requireWorkspaceRoot();
-  const topicDir = await it_resolveTopicDirAsync(
-    workspaceRoot,
-    resolvedTitle,
-    questionText,
-    questionList,
-    sessionsConfig,
-  );
-  const reportPath = await it_reportPathForTopicAsync(
-    topicDir,
-    resolvedTitle,
-    sessionsConfig,
-  );
-  const attemptIndex = await it_nextAttemptIndexAsync(reportPath);
-  const storedAudioPath =
-    topicDir !== response.topicDir && response.audioPath
-      ? it_storeAudioCopy(response.audioPath, topicDir, attemptIndex)
-      : response.audioPath;
-
-  await it_appendReportAsync(
-    reportPath,
-    resolvedTitle,
-    questionText || undefined,
-    questionList.length ? questionList : undefined,
-    attemptIndex,
-    response,
-    {
-      attemptHeading: "Attempt {n}",
-      segmentHeading: "Question {n}",
-      attemptNote: "Scores are for reference only.",
-    },
-  );
-  await it_updateReferenceNotesFileAsync(topicDir, response.evaluation);
-
-  const attemptData = {
-    attemptIndex,
-    timestamp: new Date().toISOString(),
-    audioPath: storedAudioPath,
-    durationSec: response.acoustic.durationSec,
-    transcript: response.transcript,
-    detailedTranscript: response.detailedTranscript,
-    evaluation: response.evaluation,
-    notes: response.notes,
-    audioSegments: response.audioSegments,
-    questionTimings: response.questionTimings,
-  };
-  await it_appendAttemptDataAsync(topicDir, attemptData);
-
-  const meta = await it_readTopicMetaAsync(topicDir);
-  const fingerprint = it_buildQuestionFingerprint(questionText, questionList);
-  const normalized = fingerprint || it_normalizeText(questionText || resolvedTitle);
-  const now = new Date().toISOString();
-  await it_writeTopicMetaAsync(topicDir, {
-    topicTitle: meta.topicTitle || resolvedTitle,
-    questionText: questionText || meta.questionText || "",
-    questionList: questionList.length ? questionList : meta.questionList || [],
-    questionHash: meta.questionHash || it_hashText(normalized),
-    createdAt: meta.createdAt || now,
-    updatedAt: now,
-    overallScore: response.evaluation.overallScore,
+  const onTrace = params.onTrace;
+  it_saveTrace(onTrace, "save_current", "start", {
+    hasQuestionText: Boolean(questionText.trim()),
+    questionCount: questionList.length,
+    topicTitle: resolvedTitle,
   });
 
-  return { ok: true, attemptIndex, reportPath };
+  try {
+    const workspaceRoot = params.requireWorkspaceRoot();
+    const topicDir = await it_resolveTopicDirAsync(
+      workspaceRoot,
+      resolvedTitle,
+      questionText,
+      questionList,
+      sessionsConfig,
+    );
+    const reportPath = await it_reportPathForTopicAsync(
+      topicDir,
+      resolvedTitle,
+      sessionsConfig,
+    );
+    const attemptIndex = await it_nextAttemptIndexAsync(reportPath);
+
+    const storedAudioPath =
+      topicDir !== response.topicDir && response.audioPath
+        ? it_storeAudioCopy(response.audioPath, topicDir, attemptIndex)
+        : response.audioPath;
+
+    it_saveTrace(onTrace, "append_report", "start", {
+      reportPath,
+      attemptIndex,
+    });
+    await it_appendReportAsync(
+      reportPath,
+      resolvedTitle,
+      questionText || undefined,
+      questionList.length ? questionList : undefined,
+      attemptIndex,
+      response,
+      {
+        attemptHeading: "Attempt {n}",
+        segmentHeading: "Question {n}",
+        attemptNote: "Scores are for reference only.",
+      },
+    );
+    await it_updateReferenceNotesFileAsync(topicDir, response.evaluation);
+    it_saveTrace(onTrace, "append_report", "success", {
+      reportPath,
+      attemptIndex,
+    });
+
+    const attemptData = {
+      attemptIndex,
+      timestamp: new Date().toISOString(),
+      audioPath: storedAudioPath,
+      durationSec: response.acoustic.durationSec,
+      transcript: response.transcript,
+      detailedTranscript: response.detailedTranscript,
+      evaluation: response.evaluation,
+      notes: response.notes,
+      audioSegments: response.audioSegments,
+      questionTimings: response.questionTimings,
+    };
+
+    it_saveTrace(onTrace, "append_attempt", "start", {
+      topicDir,
+      attemptIndex,
+    });
+    await it_appendAttemptDataAsync(topicDir, attemptData);
+    it_saveTrace(onTrace, "append_attempt", "success", {
+      topicDir,
+      attemptIndex,
+    });
+
+    const meta = await it_readTopicMetaAsync(topicDir);
+    const fingerprint = it_buildQuestionFingerprint(questionText, questionList);
+    const normalized = fingerprint || it_normalizeText(questionText || resolvedTitle);
+    const now = new Date().toISOString();
+
+    it_saveTrace(onTrace, "write_topic_meta", "start", {
+      topicDir,
+    });
+    await it_writeTopicMetaAsync(topicDir, {
+      topicTitle: meta.topicTitle || resolvedTitle,
+      questionText: questionText || meta.questionText || "",
+      questionList: questionList.length ? questionList : meta.questionList || [],
+      questionHash: meta.questionHash || it_hashText(normalized),
+      createdAt: meta.createdAt || now,
+      updatedAt: now,
+      overallScore: response.evaluation.overallScore,
+    });
+    it_saveTrace(onTrace, "write_topic_meta", "success", {
+      topicDir,
+      overallScore: response.evaluation.overallScore,
+    });
+
+    it_saveTrace(onTrace, "save_current", "success", {
+      topicDir,
+      reportPath,
+      attemptIndex,
+    });
+    return { ok: true, attemptIndex, reportPath };
+  } catch (error) {
+    it_saveTrace(onTrace, "save_current", "error", {
+      error: it_errorMessage(error),
+    });
+    throw error;
+  }
 }

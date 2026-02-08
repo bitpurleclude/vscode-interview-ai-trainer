@@ -16,6 +16,7 @@
 - [x] P6 protocol anomaly logging (`WebviewProtocol` observer + `handler_not_found` request response)
 - [x] P7 e2e protocol guard assertions (real Webview request -> missing handler -> structured error)
 - [x] P8 command/token/messenger observability (extension command boundary, token lifecycle, webview messenger telemetry)
+- [x] P9 config/recording/persistence/cache/embedding observability (service write paths and cache maintenance)
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -111,6 +112,13 @@
 - Add command boundary logs for extension command entry points (`open/openSettings/openHistory/analyzeAudioFile`).
 - Add token lifecycle logs for sync/refresh/schedule/snapshot push paths.
 - Add webview messenger telemetry route (`it/clientTrace`) and structured messenger events for timeout/orphan/listener failures.
+
+### P9 - Config, Recording, Persistence, and Cache Observability
+- Add structured trace events around config bundle load/save paths in `ItConfigService`.
+- Add recording lifecycle events for ffmpeg discovery, probe, input detection, start, and stop.
+- Add persistence events for report append, attempt append, topic-meta read/write, and save-current-result.
+- Add retrieval cache clear events and storage cache remove events with `start/success/noop/error`.
+- Add embedding request telemetry (`infra.embedding.request`) with provider/model context and duration.
 
 ## 5. Impact
 - Positive:

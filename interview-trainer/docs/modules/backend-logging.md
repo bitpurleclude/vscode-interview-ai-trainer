@@ -8,6 +8,13 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/application/services/it_logging.ts`
 - `src/interviewTrainer/application/services/it_structuredLogger.ts`
 - `src/interviewTrainer/application/services/it_logSinkGateway.ts`
+- `src/interviewTrainer/application/services/it_extensionRecording.ts`
+- `src/interviewTrainer/application/services/it_analysisPersistence.ts`
+- `src/interviewTrainer/application/useCases/it_saveCurrentResult.ts`
+- `src/interviewTrainer/application/useCases/it_retrievalActions.ts`
+- `src/interviewTrainer/infra/api/it_configService.ts`
+- `src/interviewTrainer/infra/api/it_embedding.ts`
+- `src/interviewTrainer/infra/storage/it_cache.ts`
 - `src/interviewTrainer/infra/logging/it_outputChannelLogSink.ts`
 - `src/interviewTrainer/infra/logging/it_traceLogger.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewHandlerLogging.ts`
@@ -88,4 +95,39 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `webview.messenger.orphan_response`
   - `webview.messenger.listener_error`
   - `webview.messenger.invalid_message`
+
+
+## Additional event families (P9)
+- Config service events:
+  - `infra.config.load_bundle`
+  - `infra.config.save_api`
+  - `infra.config.save_skill`
+  - `infra.config.save_templates`
+  - `infra.config.save_provider`
+  - `infra.config.ensure_templates`
+- Recording lifecycle events:
+  - `application.recording.find_ffmpeg`
+  - `application.recording.detect_input`
+  - `application.recording.probe`
+  - `application.recording.list_inputs`
+  - `application.recording.start`
+  - `application.recording.stop`
+- Persistence and save-result events:
+  - `application.persistence.persist_analysis`
+  - `application.persistence.append_report`
+  - `application.persistence.append_attempt`
+  - `application.persistence.read_topic_meta`
+  - `application.persistence.write_topic_meta`
+  - `application.save_result.save_current`
+  - `application.save_result.append_report`
+  - `application.save_result.append_attempt`
+  - `application.save_result.write_topic_meta`
+- Retrieval cache maintenance events:
+  - `application.retrieval.set_enabled`
+  - `application.retrieval.update_settings`
+  - `application.retrieval.clear_embedding_cache`
+  - `application.retrieval.clear_corpus_cache`
+  - `infra.storage.cache.remove_dir`
+- Embedding request telemetry:
+  - `infra.embedding.request`
 

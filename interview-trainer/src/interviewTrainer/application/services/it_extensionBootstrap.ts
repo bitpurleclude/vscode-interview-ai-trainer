@@ -5,6 +5,9 @@ import type { ItWebviewPort } from "./it_webviewPort";
 
 type ItBootstrapConfigService = {
   loadBundle: () => ItConfigBundle;
+  setTraceSink?: (
+    sink?: (message: string, detail?: Record<string, unknown>) => void,
+  ) => void;
 };
 
 type ItBootstrapTokenService = {
@@ -23,6 +26,7 @@ export interface ItExtensionBootstrapHost {
   updateCorpusWatchers: () => void;
   registerHandlers: () => void;
   scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
+  logCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
 }
 
 export type ItExtensionBootstrapDeps = {
@@ -37,6 +41,9 @@ export function it_bootstrapExtensionHost(
 ): void {
   host.outputChannel = deps.createOutputChannel("Interview Trainer");
   host.configService = deps.createConfigService(host.context);
+  host.configService.setTraceSink?.((message, detail) => {
+    host.logCorpusTrace?.(message, detail);
+  });
   host.configBundle = host.configService.loadBundle();
   host.tokenService = deps.createTokenService(host);
   host.tokenService.sync();

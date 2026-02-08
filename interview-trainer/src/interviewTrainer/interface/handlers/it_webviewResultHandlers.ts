@@ -72,6 +72,7 @@ export function it_registerResultHandlers(host: ItResultHandlersPort): void {
           payload: (msg.data || {}) as ItSaveCurrentResultPayload,
           configBundle: host.configBundle,
           requireWorkspaceRoot: () => host.requireWorkspaceRoot(),
+          onTrace: host.logCorpusTrace,
         }),
     ),
   );

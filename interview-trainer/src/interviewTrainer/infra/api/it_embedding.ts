@@ -17,6 +17,7 @@ export interface ItEmbeddingConfig {
   templateContext?: vscode.ExtensionContext;
   templateVars?: Record<string, unknown>;
   templateMaxRetries?: number;
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void;
 }
 
 export interface ItEmbeddingDebugRequest {
@@ -129,6 +130,29 @@ function it_isDoubaoMultimodalModel(cfg: ItEmbeddingConfig): boolean {
   return model.includes("vision") || model.includes("multimodal");
 }
 
+
+function it_traceEmbedding(
+  cfg: ItEmbeddingConfig,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  cfg.onTrace?.(`embedding ${action} ${status}`, {
+    event: `infra.embedding.${action}`,
+    status,
+    provider: cfg.provider,
+    model: cfg.model,
+    ...(detail || {}),
+  });
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 async function it_callDoubaoMultimodal(
   cfg: ItEmbeddingConfig,
   inputs: string[],
@@ -219,106 +243,144 @@ export async function it_callEmbedding(
   if (!inputs.length) {
     return [];
   }
-  if (cfg.template && cfg.templateContext && cfg.templateEnv) {
-    const embeddingInput = inputs.length === 1 ? inputs[0] : inputs;
-    const embeddingInputs = inputs.map((text) => ({
-      type: "text",
-      text,
-    }));
-    const result = await it_executeTemplate({
-      runtime: {
-        template: cfg.template,
-        environment: cfg.templateEnv || "prod",
-        context: cfg.templateContext,
-      },
-      variables: {
-        embeddingInput,
-        embeddingInputs,
-        model: cfg.model,
-        ...(cfg.templateVars || {}),
-      },
-      maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
-      timeoutSec: cfg.timeoutSec,
-      stream: false,
-    });
-    const value = result.value ?? result.raw;
-    if (Array.isArray(value)) {
-      if (value.length && Array.isArray(value[0])) {
-        return value as number[][];
-      }
-      if (value.length && value.every((item) => typeof item === "number")) {
-        return [value as number[]];
-      }
-    }
-    const vectors = it_parseEmbeddingResponse(result.raw, inputs.length);
-    if (vectors.length) {
-      return vectors;
-    }
-    throw new Error("Embedding response missing data");
-  }
-  if (it_isDoubaoMultimodalModel(cfg)) {
-    return it_callDoubaoMultimodal(cfg, inputs);
-  }
-  const url = it_buildEmbeddingUrl(cfg, false);
-  const headers = {
-    Authorization: `Bearer ${cfg.apiKey}`,
-    "Content-Type": "application/json",
-  };
-  const debugHeaders = it_buildDebugHeaders(cfg.apiKey);
-  const payload = {
-    model: cfg.model,
-    input: inputs.length === 1 ? inputs[0] : inputs,
-  };
 
-  let lastError: unknown = undefined;
-  let lastDebug: ItEmbeddingDebugInfo | undefined;
-  for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
-    try {
-      const response = await axios.post(url, payload, {
-        headers,
-        timeout: cfg.timeoutSec * 1000,
+  const startedAt = Date.now();
+  const viaTemplate = Boolean(cfg.template && cfg.templateContext && cfg.templateEnv);
+  const useMultimodal = it_isDoubaoMultimodalModel(cfg);
+  it_traceEmbedding(cfg, "request", "start", {
+    inputCount: inputs.length,
+    timeoutSec: cfg.timeoutSec,
+    maxRetries: cfg.maxRetries,
+    viaTemplate,
+    useMultimodal,
+  });
+
+  try {
+    let vectors: number[][] = [];
+
+    if (viaTemplate) {
+      const template = cfg.template as ItApiTemplate;
+      const templateContext = cfg.templateContext as vscode.ExtensionContext;
+      const templateEnv = cfg.templateEnv || "prod";
+      const embeddingInput = inputs.length === 1 ? inputs[0] : inputs;
+      const embeddingInputs = inputs.map((text) => ({
+        type: "text",
+        text,
+      }));
+      const result = await it_executeTemplate({
+        runtime: {
+          template,
+          environment: templateEnv,
+          context: templateContext,
+        },
+        variables: {
+          embeddingInput,
+          embeddingInputs,
+          model: cfg.model,
+          ...(cfg.templateVars || {}),
+        },
+        maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
+        timeoutSec: cfg.timeoutSec,
+        stream: false,
       });
-      const vectors = it_parseEmbeddingResponse(response.data, inputs.length);
+      const value = result.value ?? result.raw;
+      if (Array.isArray(value)) {
+        if (value.length && Array.isArray(value[0])) {
+          vectors = value as number[][];
+        } else if (value.length && value.every((item) => typeof item === "number")) {
+          vectors = [value as number[]];
+        }
+      }
       if (!vectors.length) {
-        const error = new Error("Embedding response missing data");
-        (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = {
-          request: {
-            provider: cfg.provider,
-            url,
-            method: "POST",
-            headers: debugHeaders,
-            payload,
-          },
-          error: {
-            message: error.message,
-            status: response.status,
-            response: response.data,
-          },
-        };
+        vectors = it_parseEmbeddingResponse(result.raw, inputs.length);
+      }
+      if (!vectors.length) {
+        throw new Error("Embedding response missing data");
+      }
+    } else if (useMultimodal) {
+      vectors = await it_callDoubaoMultimodal(cfg, inputs);
+    } else {
+      const url = it_buildEmbeddingUrl(cfg, false);
+      const headers = {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        "Content-Type": "application/json",
+      };
+      const debugHeaders = it_buildDebugHeaders(cfg.apiKey);
+      const payload = {
+        model: cfg.model,
+        input: inputs.length === 1 ? inputs[0] : inputs,
+      };
+
+      let lastError: unknown = undefined;
+      let lastDebug: ItEmbeddingDebugInfo | undefined;
+      for (let attempt = 0; attempt <= cfg.maxRetries; attempt += 1) {
+        try {
+          const response = await axios.post(url, payload, {
+            headers,
+            timeout: cfg.timeoutSec * 1000,
+          });
+          vectors = it_parseEmbeddingResponse(response.data, inputs.length);
+          if (!vectors.length) {
+            const error = new Error("Embedding response missing data");
+            (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = {
+              request: {
+                provider: cfg.provider,
+                url,
+                method: "POST",
+                headers: debugHeaders,
+                payload,
+              },
+              error: {
+                message: error.message,
+                status: response.status,
+                response: response.data,
+              },
+            };
+            throw error;
+          }
+          lastError = undefined;
+          lastDebug = undefined;
+          break;
+        } catch (err) {
+          lastError = err;
+          const debug = (err as { itDebug?: ItEmbeddingDebugInfo })?.itDebug;
+          lastDebug =
+            debug ??
+            {
+              request: {
+                provider: cfg.provider,
+                url,
+                method: "POST",
+                headers: debugHeaders,
+                payload,
+              },
+              error: it_extractDebugError(err),
+            };
+        }
+      }
+      if (lastError || !vectors.length) {
+        const error =
+          lastError instanceof Error ? lastError : new Error("Embedding request failed.");
+        if (lastDebug) {
+          (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = lastDebug;
+        }
         throw error;
       }
-      return vectors;
-    } catch (err) {
-      lastError = err;
-      const debug = (err as { itDebug?: ItEmbeddingDebugInfo })?.itDebug;
-      lastDebug =
-        debug ??
-        {
-          request: {
-            provider: cfg.provider,
-            url,
-            method: "POST",
-            headers: debugHeaders,
-            payload,
-          },
-          error: it_extractDebugError(err),
-        };
     }
+
+    it_traceEmbedding(cfg, "request", "success", {
+      inputCount: inputs.length,
+      vectorCount: vectors.length,
+      dimension: vectors[0]?.length || 0,
+      durationMs: Date.now() - startedAt,
+    });
+    return vectors;
+  } catch (error) {
+    it_traceEmbedding(cfg, "request", "error", {
+      inputCount: inputs.length,
+      durationMs: Date.now() - startedAt,
+      error: it_errorMessage(error),
+    });
+    throw error;
   }
-  const error =
-    lastError instanceof Error ? lastError : new Error("Embedding request failed.");
-  if (lastDebug) {
-    (error as Error & { itDebug?: ItEmbeddingDebugInfo }).itDebug = lastDebug;
-  }
-  throw error;
 }

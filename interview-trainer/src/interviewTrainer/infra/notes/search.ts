@@ -139,7 +139,7 @@ export async function it_retrieveNotes(
     queryEmbedding = await it_getOrCreateQueryEmbedding(
       embeddingCacheKey,
       async () => {
-        const vectors = await it_embedTexts(vectorCfg, [trimmedQuery]);
+        const vectors = await it_embedTexts(vectorCfg, [trimmedQuery], options.onTrace);
         return vectors[0] || [];
       },
     );

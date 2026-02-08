@@ -314,7 +314,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   }
 
   public async it_findFfmpeg(): Promise<string | null> {
-    return await it_findRecordingFfmpeg();
+    return await it_findRecordingFfmpeg(this);
   }
 
   public async it_detectDefaultInput(ffmpeg: string): Promise<string | null> {
@@ -325,7 +325,7 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     ffmpeg: string,
     args: string[],
   ): Promise<{ stderr: string; exitCode: number | null; exitSignal: string | null }> {
-    return await it_probeRecordingFfmpeg(ffmpeg, args);
+    return await it_probeRecordingFfmpeg(ffmpeg, args, this);
   }
 
   public async it_listInputs(ffmpeg: string): Promise<string[]> {

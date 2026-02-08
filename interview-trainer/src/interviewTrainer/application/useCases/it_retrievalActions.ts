@@ -27,6 +27,7 @@ export type ItRetrievalUseCaseContext = {
   normalizeWorkspaceKey: (root: string) => string;
   scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
   updateEmbeddingWarmup: (next: Partial<ItEmbeddingWarmupState>) => void;
+  logCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 export type ItRetrievalHostPatch = {
@@ -48,12 +49,35 @@ function it_asRecord(value: unknown): Record<string, unknown> {
 }
 
 
+function it_traceRetrieval(
+  context: ItRetrievalUseCaseContext,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  context.logCorpusTrace?.(`retrieval ${action} ${status}`, {
+    event: `application.retrieval.${action}`,
+    status,
+    ...(detail || {}),
+  });
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export async function it_setRetrievalEnabledFromWebview(params: {
   context: ItRetrievalUseCaseContext;
   payload: unknown;
 }): Promise<ItRetrievalConfigResult<{ enabled: boolean }>> {
   const payload = it_asRecord(params.payload);
   const enabled = Boolean(payload.enabled);
+  it_traceRetrieval(params.context, "set_enabled", "start", {
+    enabled,
+  });
   const configBundle = params.context.configService.loadBundle();
   configBundle.skill = {
     ...configBundle.skill,
@@ -67,6 +91,9 @@ export async function it_setRetrievalEnabledFromWebview(params: {
   if (enabled) {
     params.context.scheduleEmbeddingWarmup("retrieval-toggle");
   }
+  it_traceRetrieval(params.context, "set_enabled", "success", {
+    enabled,
+  });
   return {
     configBundle,
     configSnapshot,
@@ -80,6 +107,7 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
 }): Promise<ItRetrievalConfigResult<ItConfigSnapshot>> {
   const payload = it_asRecord(params.payload);
   const incoming = it_asRecord(payload.retrieval);
+  it_traceRetrieval(params.context, "update_settings", "start");
   const incomingVector = it_asRecord(incoming.vector);
   const configBundle = params.context.configService.loadBundle();
   const current = configBundle.skill.retrieval || {};
@@ -161,6 +189,10 @@ export async function it_updateRetrievalSettingsFromWebview(params: {
   params.context.configService.saveSkillConfig(configBundle.skill);
   const configSnapshot = await params.context.refreshConfigSnapshot();
   params.context.scheduleEmbeddingWarmup("retrieval-update");
+  it_traceRetrieval(params.context, "update_settings", "success", {
+    mode,
+    topK: configBundle.skill.retrieval?.top_k,
+  });
   return {
     configBundle,
     configSnapshot,
@@ -173,6 +205,9 @@ export async function it_clearEmbeddingCacheFromWebview(params: {
 }): Promise<ItRetrievalResult<{ cleared: boolean; path: string }>> {
   const configBundle = params.context.configService.loadBundle();
   const workspaceRoot = params.context.requireWorkspaceRoot();
+  it_traceRetrieval(params.context, "clear_embedding_cache", "start", {
+    workspaceRoot,
+  });
   const cacheRoot = params.context.extensionContext.globalStorageUri?.fsPath;
   if (!cacheRoot) {
     throw new Error("缓存目录不可用");
@@ -183,14 +218,24 @@ export async function it_clearEmbeddingCacheFromWebview(params: {
 
   let result: { cleared: boolean; path: string };
   try {
-    result = await it_removeEmbeddingCacheDirAsync(cacheRoot, workspaceHash);
+    result = await it_removeEmbeddingCacheDirAsync(
+      cacheRoot,
+      workspaceHash,
+      params.context.logCorpusTrace,
+    );
   } catch (error) {
+    it_traceRetrieval(params.context, "clear_embedding_cache", "error", {
+      error: it_errorMessage(error),
+    });
     throw new Error(
       `清理向量缓存失败：${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   if (!result.cleared) {
+    it_traceRetrieval(params.context, "clear_embedding_cache", "noop", {
+      path: result.path,
+    });
     return { configBundle, value: result };
   }
 
@@ -203,6 +248,10 @@ export async function it_clearEmbeddingCacheFromWebview(params: {
     message: "向量缓存已清理，准备重新预热",
   });
   params.context.scheduleEmbeddingWarmup("clear-cache", 1000);
+  it_traceRetrieval(params.context, "clear_embedding_cache", "success", {
+    path: result.path,
+    cleared: result.cleared,
+  });
   return { configBundle, value: result };
 }
 
@@ -211,14 +260,23 @@ export async function it_clearCorpusCacheFromWebview(params: {
 }): Promise<ItRetrievalResult<{ cleared: boolean; path: string }>> {
   const configBundle = params.context.configService.loadBundle();
   const cacheRoot = params.context.extensionContext.globalStorageUri?.fsPath;
+  it_traceRetrieval(params.context, "clear_corpus_cache", "start", {
+    cacheRoot,
+  });
   if (!cacheRoot) {
     throw new Error("Cache root not available");
   }
 
   let result: { cleared: boolean; path: string };
   try {
-    result = await it_removeCorpusCacheDirAsync(cacheRoot);
+    result = await it_removeCorpusCacheDirAsync(
+      cacheRoot,
+      params.context.logCorpusTrace,
+    );
   } catch (error) {
+    it_traceRetrieval(params.context, "clear_corpus_cache", "error", {
+      error: it_errorMessage(error),
+    });
     throw new Error(
       `Failed to clear corpus cache: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -226,6 +284,9 @@ export async function it_clearCorpusCacheFromWebview(params: {
 
   it_clearEmbeddingMemoryCache();
   if (!result.cleared) {
+    it_traceRetrieval(params.context, "clear_corpus_cache", "noop", {
+      path: result.path,
+    });
     return { configBundle, value: result };
   }
 
@@ -237,6 +298,10 @@ export async function it_clearCorpusCacheFromWebview(params: {
     message: "Rebuilding corpus index",
   });
   params.context.scheduleEmbeddingWarmup("clear-corpus-cache", 1000);
+  it_traceRetrieval(params.context, "clear_corpus_cache", "success", {
+    path: result.path,
+    cleared: result.cleared,
+  });
   return {
     configBundle,
     value: result,

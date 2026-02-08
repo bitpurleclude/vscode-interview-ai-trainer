@@ -21,6 +21,7 @@ function it_createRetrievalUseCaseContext(
     normalizeWorkspaceKey: host.normalizeWorkspaceKey,
     scheduleEmbeddingWarmup: host.scheduleEmbeddingWarmup,
     updateEmbeddingWarmup: host.updateEmbeddingWarmup,
+    logCorpusTrace: host.logCorpusTrace,
   };
 }
 

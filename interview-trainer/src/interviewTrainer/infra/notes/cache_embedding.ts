@@ -115,19 +115,32 @@ function it_resolveEmbeddingSplitThreshold(cfg: ItVectorSearchConfig, total: num
 export async function it_embedTexts(
   cfg: ItVectorSearchConfig,
   texts: string[],
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<number[][]> {
   if (!texts.length) {
     return [];
   }
   const splitThreshold = it_resolveEmbeddingSplitThreshold(cfg, texts.length);
   if (texts.length <= splitThreshold) {
-    return it_requestEmbeddings(cfg, texts);
+    return it_requestEmbeddings(
+      {
+        ...cfg,
+        onTrace: onTrace || cfg.onTrace,
+      },
+      texts,
+    );
   }
 
   const merged: number[][] = [];
   for (let i = 0; i < texts.length; i += splitThreshold) {
     const chunk = texts.slice(i, i + splitThreshold);
-    const vectors = await it_requestEmbeddings(cfg, chunk);
+    const vectors = await it_requestEmbeddings(
+      {
+        ...cfg,
+        onTrace: onTrace || cfg.onTrace,
+      },
+      chunk,
+    );
     if (!vectors.length) {
       continue;
     }
@@ -140,6 +153,7 @@ async function it_ensureEmbeddings(
   cfg: ItVectorSearchConfig,
   corpus: ItCorpusItem[],
   cache: Map<string, number[]>,
+  onTrace?: (message: string, detail?: Record<string, unknown>) => void,
 ): Promise<ItEmbeddingEnsureResult> {
   const batchSize = Math.max(1, cfg.batchSize || IT_DEFAULT_BATCH_SIZE);
   const missing: Array<{ key: string; text: string }> = [];
@@ -160,6 +174,7 @@ async function it_ensureEmbeddings(
     const embeddings = await it_embedTexts(
       cfg,
       batch.map((entry) => entry.text),
+      onTrace,
     );
     if (!embeddings.length) {
       continue;
@@ -206,7 +221,12 @@ export async function it_ensureEmbeddingCacheOnce(
   if (!pending) {
     pending = (async () => {
       const validKeys = new Set(corpus.map((item) => it_getItemKey(item)));
-      const result = await it_ensureEmbeddings(vectorCfg, corpus, cache);
+      const result = await it_ensureEmbeddings(
+        vectorCfg,
+        corpus,
+        cache,
+        options?.onTrace,
+      );
       const pruneStale = options?.pruneStale !== false;
       let hasStale = false;
       if (pruneStale) {
