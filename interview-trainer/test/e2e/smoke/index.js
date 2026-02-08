@@ -10,6 +10,7 @@ const WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelF
 const WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
 
 const SMOKE_MODE = String(process.env.IT_E2E_SMOKE_MODE || "workspace").toLowerCase();
+const WORKSPACE_ERROR_CODE = "workspace_not_found";
 
 function withTimeout(promise, timeoutMs, label) {
   let timer;
@@ -25,13 +26,30 @@ function withTimeout(promise, timeoutMs, label) {
 
 function isWorkspaceErrorMessage(value) {
   const text = String(value || "");
-  return /workspace not found/i.test(text) || /打开工作区/.test(text);
+  return /workspace not found/i.test(text) || /workspace_not_found/i.test(text);
 }
 
 function assertNoWorkspaceError(value, label) {
   assert.ok(
     !isWorkspaceErrorMessage(value),
     `${label} should not fail due to missing workspace: ${String(value || "")}`,
+  );
+}
+
+function assertWorkspaceErrorPayload(payload, label) {
+  assert.ok(payload && typeof payload === "object", `${label} should return an object payload`);
+  assert.strictEqual(
+    payload.errorCode,
+    WORKSPACE_ERROR_CODE,
+    `${label} should include structured workspace errorCode`,
+  );
+  const userMessage = String(payload.userMessage || "");
+  assert.ok(userMessage.length > 0, `${label} should expose user-readable workspace message`);
+
+  const errorText = String(payload.error || "");
+  assert.ok(
+    isWorkspaceErrorMessage(errorText) || errorText.length > 0,
+    `${label} should expose workspace error text: ${JSON.stringify(payload)}`,
   );
 }
 
@@ -120,6 +138,11 @@ function assertFixtureAnalyzeResult(result, options = {}) {
   if (forbidWorkspaceError) {
     assertNoWorkspaceError(result.error, "Fixture analyze");
     assertNoWorkspaceError(result.stateError, "Fixture analyze stateError");
+    assert.notStrictEqual(
+      result.errorCode,
+      WORKSPACE_ERROR_CODE,
+      "Fixture analyze should not return workspace_not_found in workspace mode",
+    );
   }
 }
 
@@ -179,6 +202,11 @@ function assertWebviewAnalyzeFlowResult(result, options = {}) {
   );
   if (forbidWorkspaceError) {
     assertNoWorkspaceError(result.error, "Webview analyze");
+    assert.notStrictEqual(
+      result.errorCode,
+      WORKSPACE_ERROR_CODE,
+      "Webview analyze should not return workspace_not_found in workspace mode",
+    );
   }
 }
 
@@ -305,9 +333,9 @@ async function runNoWorkspaceSmoke() {
     "error",
     `No-workspace smoke should return error for fixture analyze: ${JSON.stringify(fixtureAnalyzeResult)}`,
   );
-  assert.ok(
-    isWorkspaceErrorMessage(fixtureAnalyzeResult?.error),
-    `No-workspace fixture analyze should expose workspace error: ${JSON.stringify(fixtureAnalyzeResult)}`,
+  assertWorkspaceErrorPayload(
+    fixtureAnalyzeResult,
+    "No-workspace fixture analyze",
   );
 
   const webviewAnalyzeFlowResult = await executeCommandAndAssert(
@@ -319,9 +347,9 @@ async function runNoWorkspaceSmoke() {
     "error",
     `No-workspace smoke should return error for webview analyze: ${JSON.stringify(webviewAnalyzeFlowResult)}`,
   );
-  assert.ok(
-    isWorkspaceErrorMessage(webviewAnalyzeFlowResult?.error),
-    `No-workspace webview analyze should expose workspace error: ${JSON.stringify(webviewAnalyzeFlowResult)}`,
+  assertWorkspaceErrorPayload(
+    webviewAnalyzeFlowResult,
+    "No-workspace webview analyze",
   );
 }
 

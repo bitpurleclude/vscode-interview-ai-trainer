@@ -20,6 +20,8 @@ const IT_E2E_WEBVIEW_ANALYZE_REQUEST = "it/test/webviewAnalyzeFlowRequest";
 const IT_E2E_WEBVIEW_ANALYZE_ACK = "it/test/webviewAnalyzeFlowAck";
 const IT_E2E_WEBVIEW_UI_TIMEOUT_MS = 20_000;
 const IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS = 90_000;
+const IT_E2E_WORKSPACE_ERROR_CODE = "workspace_not_found";
+const IT_E2E_WORKSPACE_ERROR_MESSAGE = "?????????????????";
 
 type ItE2EUiAutomationResult = {
   runId: string;
@@ -28,6 +30,8 @@ type ItE2EUiAutomationResult = {
   steps?: Array<{ action: string; ok: boolean; detail?: string }>;
   overallScoreText?: string;
   error?: string;
+  errorCode?: string;
+  userMessage?: string;
 };
 
 type ItE2EUiPending = {
@@ -36,6 +40,39 @@ type ItE2EUiPending = {
 };
 
 type ItE2EAnalyzeScenario = "analyze" | "cancel" | "save";
+
+type ItE2EErrorPayload = {
+  message: string;
+  errorCode?: string;
+  userMessage?: string;
+};
+
+function it_createE2EWorkspaceRequiredError(): Error {
+  const error = new Error("workspace not found") as Error & {
+    code?: string;
+    userMessage?: string;
+  };
+  error.code = IT_E2E_WORKSPACE_ERROR_CODE;
+  error.userMessage = IT_E2E_WORKSPACE_ERROR_MESSAGE;
+  return error;
+}
+
+function it_toE2EErrorPayload(error: unknown): ItE2EErrorPayload {
+  if (error instanceof Error) {
+    const errorWithMeta = error as Error & {
+      code?: string;
+      userMessage?: string;
+    };
+    return {
+      message: error.message,
+      errorCode: errorWithMeta.code,
+      userMessage: errorWithMeta.userMessage,
+    };
+  }
+  return {
+    message: String(error),
+  };
+}
 
 function it_findFixtureFile(
   fixtureDir: string,
@@ -235,7 +272,8 @@ function it_resolveE2EWorkspaceRoot(context: vscode.ExtensionContext): string {
     return workspaceRoot;
   }
   if (it_shouldRequireWorkspaceInE2E()) {
-    throw new Error("workspace not found");
+    void vscode.window.showErrorMessage(IT_E2E_WORKSPACE_ERROR_MESSAGE);
+    throw it_createE2EWorkspaceRequiredError();
   }
   return path.resolve(context.extensionPath, "..");
 }
@@ -403,10 +441,13 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           return await waitForResult;
         } catch (error) {
+          const errorPayload = it_toE2EErrorPayload(error);
           return {
             runId,
             status: "error",
-            error: error instanceof Error ? error.message : String(error),
+            error: errorPayload.message,
+            errorCode: errorPayload.errorCode,
+            userMessage: errorPayload.userMessage,
           } satisfies ItE2EUiAutomationResult;
         } finally {
           const pending = pendingUiRuns.get(runId);
@@ -439,10 +480,13 @@ export function activate(context: vscode.ExtensionContext) {
         fixtureRequest = it_buildFixtureAnalyzeRequest(workspaceRoot);
         webviewPayload = it_buildFixtureWebviewAnalyzePayload(workspaceRoot);
       } catch (error) {
+        const errorPayload = it_toE2EErrorPayload(error);
         return {
           runId,
           status: "error",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorPayload.message,
+          errorCode: errorPayload.errorCode,
+          userMessage: errorPayload.userMessage,
         } satisfies ItE2EUiAutomationResult;
       }
       const restoreConfig = it_applyE2ETestConfigBundle(
@@ -483,10 +527,13 @@ export function activate(context: vscode.ExtensionContext) {
 
         return await waitForResult;
       } catch (error) {
+        const errorPayload = it_toE2EErrorPayload(error);
         return {
           runId,
           status: "error",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorPayload.message,
+          errorCode: errorPayload.errorCode,
+          userMessage: errorPayload.userMessage,
         } satisfies ItE2EUiAutomationResult;
       } finally {
         const pending = pendingAnalyzeRuns.get(runId);
@@ -524,9 +571,12 @@ export function activate(context: vscode.ExtensionContext) {
           const workspaceRoot = it_resolveE2EWorkspaceRoot(context);
           request = it_buildFixtureAnalyzeRequest(workspaceRoot);
         } catch (error) {
+          const errorPayload = it_toE2EErrorPayload(error);
           return {
             status: "error",
-            error: error instanceof Error ? error.message : String(error),
+            error: errorPayload.message,
+            errorCode: errorPayload.errorCode,
+            userMessage: errorPayload.userMessage,
             stateError: trainer.state.lastError?.reason || "",
           };
         }
@@ -548,9 +598,12 @@ export function activate(context: vscode.ExtensionContext) {
             overallScore: result.evaluation?.overallScore ?? null,
           };
         } catch (error) {
+          const errorPayload = it_toE2EErrorPayload(error);
           return {
             status: "error",
-            error: error instanceof Error ? error.message : String(error),
+            error: errorPayload.message,
+            errorCode: errorPayload.errorCode,
+            userMessage: errorPayload.userMessage,
             stateError: trainer.state.lastError?.reason || "",
           };
         } finally {
