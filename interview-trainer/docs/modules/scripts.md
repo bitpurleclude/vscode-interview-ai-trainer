@@ -22,6 +22,7 @@
 - `test:e2e:smoke` sets `IT_E2E_ENABLE_TEST_COMMANDS=1` so hidden fixture analyze/UI automation commands are only enabled during host smoke tests.
 - `test:e2e:smoke` now verifies fixture analyze + webview tab/button click automation in one host run.
 - `test:e2e:smoke` now also verifies webview analyze lifecycle through controls (fill question, import audio, click analyze, and capture success/error outcome).
+- `test:e2e:smoke` now covers webview edge branches for canceling an active analyze run and save-result feedback assertions.
 - `test:e2e:smoke` now uses isolated per-run profile dirs (`user-data`/`extensions`) and removes them after run to reduce mutex conflicts.
 - `test:e2e:smoke` retries transient host startup failures (`ProcessSingleton`/mutex/lock/EADDRINUSE) with isolated profiles; tune via `IT_E2E_SMOKE_MAX_ATTEMPTS` and `IT_E2E_SMOKE_RETRY_DELAY_MS`.
 - When adding or changing scripts, update this document and `SECURITY_TEST_PLAN.md` together.

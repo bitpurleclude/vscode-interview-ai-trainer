@@ -6,6 +6,8 @@ const vscode = require("vscode");
 const FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
 const WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiClickFlow";
 const WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyzeFlow";
+const WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelFlow";
+const WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
 
 function withTimeout(promise, timeoutMs, label) {
   let timer;
@@ -157,6 +159,60 @@ function assertWebviewAnalyzeFlowResult(result) {
   );
 }
 
+function assertWebviewCancelFlowResult(result) {
+  assert.ok(result && typeof result === "object", "Webview cancel flow result should be an object");
+  assert.strictEqual(
+    result.status,
+    "success",
+    `Webview cancel flow failed: ${JSON.stringify(result)}`,
+  );
+  assert.ok(Array.isArray(result.steps), "Webview cancel flow should include steps");
+
+  const stepMap = new Map(result.steps.map((step) => [step.action, step]));
+  const clickAnalyzeStep = stepMap.get("click-analyze-button");
+  assert.ok(clickAnalyzeStep, "Webview cancel flow missing step: click-analyze-button");
+  assert.strictEqual(clickAnalyzeStep.ok, true, "Webview cancel step failed: click-analyze-button");
+
+  const skippedStep = stepMap.get("skip-cancel-no-running-state");
+  if (skippedStep) {
+    assert.strictEqual(
+      skippedStep.ok,
+      true,
+      `Webview cancel skip marker should be ok: ${JSON.stringify(skippedStep)}`,
+    );
+    return;
+  }
+
+  ["wait-analyze-running", "click-cancel-button", "wait-cancel-complete"].forEach((action) => {
+    const step = stepMap.get(action);
+    assert.ok(step, `Webview cancel flow missing step: ${action}`);
+    assert.strictEqual(step.ok, true, `Webview cancel step failed: ${action}`);
+  });
+}
+
+function assertWebviewSaveFlowResult(result) {
+  assert.ok(result && typeof result === "object", "Webview save flow result should be an object");
+  assert.strictEqual(
+    result.status,
+    "success",
+    `Webview save flow failed: ${JSON.stringify(result)}`,
+  );
+  assert.ok(Array.isArray(result.steps), "Webview save flow should include steps");
+
+  const stepMap = new Map(result.steps.map((step) => [step.action, step]));
+  ["click-save-result-button", "assert-save-feedback"].forEach((action) => {
+    const step = stepMap.get(action);
+    assert.ok(step, `Webview save flow missing step: ${action}`);
+    assert.strictEqual(step.ok, true, `Webview save step failed: ${action}`);
+  });
+
+  assert.ok(
+    typeof result.saveFeedback === "string" && result.saveFeedback.length > 0,
+    "Webview save flow should return non-empty saveFeedback",
+  );
+}
+
+
 async function runSmoke(extension) {
   const allCommands = await vscode.commands.getCommands(true);
   [
@@ -168,6 +224,8 @@ async function runSmoke(extension) {
     FIXTURE_ANALYZE_COMMAND,
     WEBVIEW_UI_FLOW_COMMAND,
     WEBVIEW_ANALYZE_FLOW_COMMAND,
+    WEBVIEW_CANCEL_FLOW_COMMAND,
+    WEBVIEW_SAVE_FLOW_COMMAND,
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
@@ -197,6 +255,18 @@ async function runSmoke(extension) {
     120_000,
   );
   assertWebviewAnalyzeFlowResult(webviewAnalyzeFlowResult);
+
+  const webviewCancelFlowResult = await executeCommandAndAssert(
+    WEBVIEW_CANCEL_FLOW_COMMAND,
+    120_000,
+  );
+  assertWebviewCancelFlowResult(webviewCancelFlowResult);
+
+  const webviewSaveFlowResult = await executeCommandAndAssert(
+    WEBVIEW_SAVE_FLOW_COMMAND,
+    120_000,
+  );
+  assertWebviewSaveFlowResult(webviewSaveFlowResult);
 
   assert.strictEqual(extension.isActive, true, "Extension became inactive during smoke commands");
 }

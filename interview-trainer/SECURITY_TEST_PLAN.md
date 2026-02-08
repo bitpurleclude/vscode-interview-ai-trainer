@@ -49,7 +49,9 @@
 - [x] P2-28 Real Webview tab/button click automation smoke command (`itInterviewTrainer.__test.runWebviewUiClickFlow`).
 - [x] P2-29 Real Webview analyze lifecycle smoke command (`itInterviewTrainer.__test.runWebviewAnalyzeFlow`, captures success/error path).
 - [x] P2-30 Host smoke flaky retry strategy in `scripts/run-e2e-smoke.js` (transient mutex/lock/startup failures now auto-retry with isolated profiles).
-- [ ] P2 suites pending (real UI automation for more edge branches: cancel path, save-result path).
+- [x] P2-31 Real Webview cancel-lifecycle smoke command (`itInterviewTrainer.__test.runWebviewCancelFlow`).
+- [x] P2-32 Real Webview save-result feedback smoke command (`itInterviewTrainer.__test.runWebviewSaveResultFlow`).
+- [x] P2 suites pending items in current scope are cleared.
 
 ## Analyze Full-Flow Fault Matrix (new)
 

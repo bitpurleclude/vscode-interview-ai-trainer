@@ -48,6 +48,8 @@ type ItE2EAnalyzeAudioPayload = {
   mimeType?: string;
 };
 
+type ItE2EAnalyzeMode = "analyze" | "cancel" | "save";
+
 function it_isE2ETestModeEnabled(): boolean {
   return Boolean((window as any).__itE2ETestMode);
 }
@@ -612,6 +614,11 @@ const InterviewTrainer: React.FC = () => {
         }
 
         try {
+          const modeRaw = String(payload?.mode || "analyze").toLowerCase();
+          const mode: ItE2EAnalyzeMode =
+            modeRaw === "cancel" || modeRaw === "save" ? modeRaw : "analyze";
+          steps.push({ action: "set-flow-mode", ok: true, detail: mode });
+
           const questionText = String(payload?.questionText || "").trim();
           const questionList = Array.isArray(payload?.questionList)
             ? payload.questionList
@@ -698,6 +705,82 @@ const InterviewTrainer: React.FC = () => {
             steps.push({ action: "fallback-call-handleAnalyze", ok: true });
           }
 
+          if (mode === "cancel") {
+            let canCancel = true;
+            try {
+              await it_waitForUiCondition(() => {
+                const analyzeButton = document.querySelector<HTMLButtonElement>(
+                  "[data-testid='it-action-analyze']",
+                );
+                return Boolean(analyzeButton?.classList.contains("it-button--danger"));
+              }, 10_000, "analyze running state");
+              steps.push({ action: "wait-analyze-running", ok: true });
+            } catch {
+              canCancel = false;
+              steps.push({
+                action: "skip-cancel-no-running-state",
+                ok: true,
+                detail: "analyze finished before cancel action became available",
+              });
+            }
+
+            if (!canCancel) {
+              await sendAck("success", undefined, { mode, canceled: false, skipped: true });
+              return;
+            }
+
+            it_clickUiElement("[data-testid='it-action-analyze']");
+            steps.push({ action: "click-cancel-button", ok: true });
+
+            await it_waitForUiCondition(() => {
+              const analyzeButton = document.querySelector<HTMLButtonElement>(
+                "[data-testid='it-action-analyze']",
+              );
+              return Boolean(analyzeButton) && !analyzeButton.classList.contains("it-button--danger");
+            }, 30_000, "cancel completion");
+            steps.push({ action: "wait-cancel-complete", ok: true });
+
+            await sendAck("success", undefined, { mode, canceled: true });
+            return;
+          }
+
+          if (mode === "save") {
+            await it_waitForUiCondition(() => {
+              const analyzeButton = document.querySelector<HTMLButtonElement>(
+                "[data-testid='it-action-analyze']",
+              );
+              return Boolean(analyzeButton) && !analyzeButton.classList.contains("it-button--danger");
+            }, IT_E2E_UI_ANALYZE_TIMEOUT_MS, "analyze completion before save");
+            steps.push({ action: "wait-analyze-finished", ok: true });
+
+            it_clickUiElement("[data-testid='it-action-save-result']");
+            steps.push({ action: "click-save-result-button", ok: true });
+
+            await it_waitForUiCondition(() => {
+              const saveMessage =
+                document
+                  .querySelector<HTMLElement>("[data-testid='it-save-result-message']")
+                  ?.textContent?.trim() || "";
+              const statusError =
+                document.querySelector<HTMLElement>("[data-testid='it-status-error']")?.textContent?.trim() ||
+                "";
+              return Boolean(saveMessage || statusError);
+            }, 10_000, "save result feedback");
+            const saveFeedback = (
+              document.querySelector<HTMLElement>("[data-testid='it-save-result-message']")?.textContent ||
+              document.querySelector<HTMLElement>("[data-testid='it-status-error']")?.textContent ||
+              ""
+            ).trim();
+            steps.push({
+              action: "assert-save-feedback",
+              ok: Boolean(saveFeedback),
+              detail: saveFeedback || "(empty)",
+            });
+
+            await sendAck("success", undefined, { mode, saveFeedback });
+            return;
+          }
+
           await it_delay(IT_E2E_UI_CLICK_DELAY_MS);
 
           it_clickUiElement("[data-testid='it-result-tab-evaluation']");
@@ -723,7 +806,7 @@ const InterviewTrainer: React.FC = () => {
             detail: overallScoreText || "(empty)",
           });
 
-          await sendAck("success", undefined, { overallScoreText });
+          await sendAck("success", undefined, { overallScoreText, mode });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           steps.push({ action: "analyze-flow", ok: false, detail: message });

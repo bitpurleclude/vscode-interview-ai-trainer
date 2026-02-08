@@ -11,6 +11,8 @@ const IT_E2E_FIXTURE_AUDIO_MAX_BYTES = 256 * 1024;
 const IT_E2E_FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
 const IT_E2E_WEBVIEW_UI_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewUiClickFlow";
 const IT_E2E_WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyzeFlow";
+const IT_E2E_WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelFlow";
+const IT_E2E_WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
 const IT_E2E_WEBVIEW_UI_REQUEST = "it/test/webviewUiAutomationRequest";
 const IT_E2E_WEBVIEW_UI_ACK = "it/test/webviewUiAutomationAck";
 const IT_E2E_WEBVIEW_UI_READY = "it/test/webviewUiAutomationReady";
@@ -32,6 +34,8 @@ type ItE2EUiPending = {
   resolve: (result: ItE2EUiAutomationResult) => void;
   timeout: NodeJS.Timeout;
 };
+
+type ItE2EAnalyzeScenario = "analyze" | "cancel" | "save";
 
 function it_findFixtureFile(
   fixtureDir: string,
@@ -398,78 +402,96 @@ export function activate(context: vscode.ExtensionContext) {
       }),
     );
 
-    context.subscriptions.push(
-      vscode.commands.registerCommand(IT_E2E_WEBVIEW_ANALYZE_FLOW_COMMAND, async () => {
-        const runId = `e2e-webview-analyze-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const runWebviewAnalyzeFlowScenario = async (
+      scenario: ItE2EAnalyzeScenario,
+    ): Promise<ItE2EUiAutomationResult> => {
+      const runId = `e2e-webview-${scenario}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-        const readyState = await ensureWebviewUiBridgeReady();
-        if (!readyState.ready) {
-          return {
-            runId,
-            status: "error",
-            error: readyState.reason || "Webview bridge not ready",
-          } satisfies ItE2EUiAutomationResult;
-        }
+      const readyState = await ensureWebviewUiBridgeReady();
+      if (!readyState.ready) {
+        return {
+          runId,
+          status: "error",
+          error: readyState.reason || "Webview bridge not ready",
+        } satisfies ItE2EUiAutomationResult;
+      }
 
-        const workspaceRoot =
-          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ||
-          path.resolve(context.extensionPath, "..");
-        const fixtureRequest = it_buildFixtureAnalyzeRequest(workspaceRoot);
-        const webviewPayload = it_buildFixtureWebviewAnalyzePayload(workspaceRoot);
-        const restoreConfig = it_applyE2ETestConfigBundle(
-          trainer,
-          fixtureRequest.questionList?.join("\n") || fixtureRequest.questionText || "e2e transcript",
-        );
+      const workspaceRoot =
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ||
+        path.resolve(context.extensionPath, "..");
+      const fixtureRequest = it_buildFixtureAnalyzeRequest(workspaceRoot);
+      const webviewPayload = it_buildFixtureWebviewAnalyzePayload(workspaceRoot);
+      const restoreConfig = it_applyE2ETestConfigBundle(
+        trainer,
+        fixtureRequest.questionList?.join("\n") || fixtureRequest.questionText || "e2e transcript",
+      );
 
-        try {
-          const waitForResult = new Promise<ItE2EUiAutomationResult>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              pendingAnalyzeRuns.delete(runId);
-              reject(
-                new Error(
-                  `Webview analyze flow timed out after ${IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS}ms`,
-                ),
-              );
-            }, IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS);
-            pendingAnalyzeRuns.set(runId, { resolve, timeout });
-          });
+      try {
+        const waitForResult = new Promise<ItE2EUiAutomationResult>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            pendingAnalyzeRuns.delete(runId);
+            reject(
+              new Error(`Webview ${scenario} flow timed out after ${IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS}ms`),
+            );
+          }, IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS);
+          pendingAnalyzeRuns.set(runId, { resolve, timeout });
+        });
 
-          const sent = await sendToWebview(IT_E2E_WEBVIEW_ANALYZE_REQUEST, {
-            runId,
-            questionText: webviewPayload.questionText,
-            questionList: webviewPayload.questionList,
-            audio: webviewPayload.audio,
-          });
-          if (!sent) {
-            const pending = pendingAnalyzeRuns.get(runId);
-            if (pending) {
-              clearTimeout(pending.timeout);
-              pendingAnalyzeRuns.delete(runId);
-            }
-            return {
-              runId,
-              status: "error",
-              error: "Webview is not ready",
-            } satisfies ItE2EUiAutomationResult;
-          }
-
-          return await waitForResult;
-        } catch (error) {
-          return {
-            runId,
-            status: "error",
-            error: error instanceof Error ? error.message : String(error),
-          } satisfies ItE2EUiAutomationResult;
-        } finally {
+        const sent = await sendToWebview(IT_E2E_WEBVIEW_ANALYZE_REQUEST, {
+          runId,
+          mode: scenario,
+          questionText: webviewPayload.questionText,
+          questionList: webviewPayload.questionList,
+          audio: webviewPayload.audio,
+        });
+        if (!sent) {
           const pending = pendingAnalyzeRuns.get(runId);
           if (pending) {
             clearTimeout(pending.timeout);
             pendingAnalyzeRuns.delete(runId);
           }
-          restoreConfig();
+          return {
+            runId,
+            status: "error",
+            error: "Webview is not ready",
+          } satisfies ItE2EUiAutomationResult;
         }
-      }),
+
+        return await waitForResult;
+      } catch (error) {
+        return {
+          runId,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        } satisfies ItE2EUiAutomationResult;
+      } finally {
+        const pending = pendingAnalyzeRuns.get(runId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pendingAnalyzeRuns.delete(runId);
+        }
+        restoreConfig();
+      }
+    };
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(IT_E2E_WEBVIEW_ANALYZE_FLOW_COMMAND, async () =>
+        runWebviewAnalyzeFlowScenario("analyze"),
+      ),
     );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(IT_E2E_WEBVIEW_CANCEL_FLOW_COMMAND, async () =>
+        runWebviewAnalyzeFlowScenario("cancel"),
+      ),
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand(IT_E2E_WEBVIEW_SAVE_FLOW_COMMAND, async () =>
+        runWebviewAnalyzeFlowScenario("save"),
+      ),
+    );
+
 
     context.subscriptions.push(
       vscode.commands.registerCommand(IT_E2E_FIXTURE_ANALYZE_COMMAND, async () => {
