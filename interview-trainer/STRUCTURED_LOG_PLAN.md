@@ -23,6 +23,7 @@
 - [x] P13 webview bridge handshake and workspace selection trace coverage
 - [x] P14 template/result/provider/recording and analysis-stage coverage
 - [x] P15 core/test/guardrail clamp observability coverage
+- [x] P16 environment/template executor/client action observability coverage
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -162,6 +163,11 @@
 - Add template test inner logs for dry-run/live (`missingCount`, template category, duration, token extraction outcome).
 - Add ASR/Embedding/LLM connectivity test inner logs with provider/mode and duration in success/error paths.
 - Add retrieval and embedding warmup guardrail clamp warning events to record `rawValue -> clampedValue` for diagnosis.
+
+### P16 - Environment, Template Executor, and Client Action Coverage
+- Add application-level environment action logs around all environment settings use-cases with payload summary and duration.
+- Add template executor internal logs for render/run/attempt lifecycle and retry diagnostics (`statusCode`, `attempt`, `durationMs`).
+- Add environment-settings UI action traces in webview (`set_active/create/delete/save_prompts/save_topic_settings/save_streaming_settings`).
 
 ## 5. Impact
 - Positive:

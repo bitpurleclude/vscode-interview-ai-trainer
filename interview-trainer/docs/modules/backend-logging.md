@@ -36,6 +36,9 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/interface/handlers/it_webviewTestAsrHandlers.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewTestEmbeddingHandlers.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewTestLlmHandlers.ts`
+- `src/interviewTrainer/application/useCases/it_environmentConfig.ts`
+- `src/interviewTrainer/interface/handlers/it_webviewEnvironmentHandlers.ts`
+- `webview/src/hooks/useEnvironmentSettings.ts`
 ## Structured Log Contract
 Each line emitted to the output channel is a JSON object with stable fields:
 - `ts`
@@ -249,3 +252,29 @@ Unknown request messages with `messageId` now return a structured error payload 
 - Guardrail clamp diagnostics:
   - `application.retrieval.guardrail_clamp`
   - `application.embedding_warmup.guardrail_clamp`
+
+## Additional event families (P16)
+- Environment settings action events:
+  - `application.environment.set_active`
+  - `application.environment.create`
+  - `application.environment.delete`
+  - `application.environment.update_topic_settings`
+  - `application.environment.update_asr_settings`
+  - `application.environment.update_llm_settings`
+  - `application.environment.update_llm_task_profiles`
+  - `application.environment.save_llm_profile`
+  - `application.environment.delete_llm_profile`
+  - `application.environment.save_prompts`
+  - `application.environment.update_streaming_settings`
+- Template executor lifecycle events:
+  - `infra.template_executor.render_request`
+  - `infra.template_executor.run`
+  - `infra.template_executor.attempt`
+- Webview environment action traces:
+  - `webview.environment.set_active`
+  - `webview.environment.create`
+  - `webview.environment.delete`
+  - `webview.environment.save_prompts`
+  - `webview.environment.save_topic_settings`
+  - `webview.environment.save_streaming_settings`
+

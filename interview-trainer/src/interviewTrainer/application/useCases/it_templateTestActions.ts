@@ -281,6 +281,7 @@ export async function it_testTemplateLive(params: {
     const preview = await it_renderTemplateRequest({
       runtime: resolved.runtime,
       variables,
+      onTrace: params.context.logTrace,
     });
     if (preview.missing.length) {
       throw new Error(`missing template variables: ${preview.missing.join(", ")}`);
@@ -292,6 +293,7 @@ export async function it_testTemplateLive(params: {
       onDelta: (delta, full) => {
         params.context.emitTemplateTestDelta?.({ runId, delta, full });
       },
+      onTrace: params.context.logTrace,
     });
     const tokenInfo =
       resolved.template.category === "token"

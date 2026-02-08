@@ -26,6 +26,43 @@ export type ItTemplateRuntime = {
   context: vscode.ExtensionContext;
 };
 
+type ItTemplateExecutorTrace = (
+  message: string,
+  detail?: Record<string, unknown>,
+) => void;
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function it_statusFromError(error: unknown): number | undefined {
+  if (error && typeof error === "object") {
+    const response = (error as { response?: { status?: unknown } }).response;
+    if (response && typeof response.status === "number") {
+      return response.status;
+    }
+  }
+  return undefined;
+}
+
+function it_traceTemplateExecutor(
+  onTrace: ItTemplateExecutorTrace | undefined,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  onTrace?.("template_executor " + action + " " + status, {
+    event: "infra.template_executor." + action,
+    layer: "infra",
+    module: "it_templateExecutor",
+    status,
+    ...(detail || {}),
+  });
+}
+
 export type ItTemplateExecutionOptions = {
   runtime: ItTemplateRuntime;
   variables?: Record<string, unknown>;
@@ -33,6 +70,7 @@ export type ItTemplateExecutionOptions = {
   timeoutSec?: number;
   stream?: boolean;
   onDelta?: (delta: string, full: string) => void;
+  onTrace?: ItTemplateExecutorTrace;
   abortSignal?: { aborted: boolean };
 };
 
@@ -93,60 +131,88 @@ export async function it_renderTemplateRequest(options: {
   stream?: boolean;
   timeoutSec?: number;
   maskSecrets?: boolean;
+  onTrace?: ItTemplateExecutorTrace;
 }): Promise<ItTemplateRenderResult> {
   const { runtime } = options;
   const variables = { ...(options.variables || {}) };
-  await it_injectTemplateSecrets(runtime, variables);
-  if (options.maskSecrets) {
-    it_maskTemplateSecrets(variables);
-  }
-  const ctx: ItTemplateRenderContext = {
-    variables,
-    missing: new Set<string>(),
-  };
-  const request = runtime.template.request || { method: "POST", url: "" };
-  const streamEnabled =
-    typeof options.stream === "boolean"
-      ? options.stream
-      : typeof request.stream === "boolean"
-        ? request.stream
-        : false;
-  if (variables.stream === undefined) {
-    variables.stream = streamEnabled;
-  }
-  if (variables.timeoutSec === undefined && request.timeoutSec !== undefined) {
-    variables.timeoutSec = request.timeoutSec;
-  }
-  const renderedUrl = await it_renderTemplateValue(request.url, ctx);
-  const renderedHeaders = await it_renderTemplateValue(request.headers || {}, ctx);
-  const renderedQuery = await it_renderTemplateValue(request.query || {}, ctx);
-  const renderedBody = await it_renderTemplateValue(request.body, ctx);
+  const startedAt = Date.now();
+  it_traceTemplateExecutor(options.onTrace, "render_request", "start", {
+    templateId: runtime.template.id,
+    templateCategory: runtime.template.category,
+    environment: runtime.environment,
+  });
 
-  const query = it_isPlainObject(renderedQuery) ? renderedQuery : {};
-  const url = it_appendQuery(String(renderedUrl || ""), query);
-  const headers: Record<string, string> = {};
-  if (it_isPlainObject(renderedHeaders)) {
-    Object.entries(renderedHeaders).forEach(([key, value]) => {
-      if (value === undefined || value === null) {
-        return;
-      }
-      headers[key] = it_formatTemplateValue(value);
+  try {
+    await it_injectTemplateSecrets(runtime, variables);
+    if (options.maskSecrets) {
+      it_maskTemplateSecrets(variables);
+    }
+    const ctx: ItTemplateRenderContext = {
+      variables,
+      missing: new Set<string>(),
+    };
+    const request = runtime.template.request || { method: "POST", url: "" };
+    const streamEnabled =
+      typeof options.stream === "boolean"
+        ? options.stream
+        : typeof request.stream === "boolean"
+          ? request.stream
+          : false;
+    if (variables.stream === undefined) {
+      variables.stream = streamEnabled;
+    }
+    if (variables.timeoutSec === undefined && request.timeoutSec !== undefined) {
+      variables.timeoutSec = request.timeoutSec;
+    }
+    const renderedUrl = await it_renderTemplateValue(request.url, ctx);
+    const renderedHeaders = await it_renderTemplateValue(request.headers || {}, ctx);
+    const renderedQuery = await it_renderTemplateValue(request.query || {}, ctx);
+    const renderedBody = await it_renderTemplateValue(request.body, ctx);
+
+    const query = it_isPlainObject(renderedQuery) ? renderedQuery : {};
+    const url = it_appendQuery(String(renderedUrl || ""), query);
+    const headers: Record<string, string> = {};
+    if (it_isPlainObject(renderedHeaders)) {
+      Object.entries(renderedHeaders).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+          return;
+        }
+        headers[key] = it_formatTemplateValue(value);
+      });
+    }
+    const timeoutSec = Number(
+      options.timeoutSec ?? request.timeoutSec ?? variables.timeoutSec ?? 0,
+    );
+
+    const result = {
+      method: String(request.method || "POST").toUpperCase(),
+      url,
+      headers,
+      query,
+      body: renderedBody,
+      stream: streamEnabled,
+      timeoutSec: Number.isFinite(timeoutSec) && timeoutSec > 0 ? timeoutSec : undefined,
+      missing: Array.from(ctx.missing),
+    };
+
+    it_traceTemplateExecutor(options.onTrace, "render_request", "success", {
+      templateId: runtime.template.id,
+      environment: runtime.environment,
+      missingCount: result.missing.length,
+      stream: result.stream,
+      durationMs: Date.now() - startedAt,
     });
-  }
-  const timeoutSec = Number(
-    options.timeoutSec ?? request.timeoutSec ?? variables.timeoutSec ?? 0,
-  );
 
-  return {
-    method: String(request.method || "POST").toUpperCase(),
-    url,
-    headers,
-    query,
-    body: renderedBody,
-    stream: streamEnabled,
-    timeoutSec: Number.isFinite(timeoutSec) && timeoutSec > 0 ? timeoutSec : undefined,
-    missing: Array.from(ctx.missing),
-  };
+    return result;
+  } catch (error) {
+    it_traceTemplateExecutor(options.onTrace, "render_request", "error", {
+      templateId: runtime.template.id,
+      environment: runtime.environment,
+      error: it_errorMessage(error),
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
 }
 
 export async function it_executeTemplate(
@@ -154,6 +220,13 @@ export async function it_executeTemplate(
 ): Promise<ItTemplateExecutionResult> {
   const { runtime } = options;
   const variables = { ...(options.variables || {}) };
+  const startedAt = Date.now();
+  it_traceTemplateExecutor(options.onTrace, "run", "start", {
+    templateId: runtime.template.id,
+    templateCategory: runtime.template.category,
+    environment: runtime.environment,
+  });
+
   await it_injectTemplateSecrets(runtime, variables);
 
   const ctx: ItTemplateRenderContext = {
@@ -179,7 +252,15 @@ export async function it_executeTemplate(
   const renderedBody = await it_renderTemplateValue(request.body, ctx);
 
   if (ctx.missing.size) {
-    throw new Error(`模板变量缺失: ${Array.from(ctx.missing).join(", ")}`);
+    const missing = Array.from(ctx.missing);
+    it_traceTemplateExecutor(options.onTrace, "run", "error", {
+      templateId: runtime.template.id,
+      environment: runtime.environment,
+      error: "missing_template_variables",
+      missingCount: missing.length,
+      durationMs: Date.now() - startedAt,
+    });
+    throw new Error(`模板变量缺失: ${missing.join(", ")}`);
   }
   const url = it_appendQuery(String(renderedUrl || ""), renderedQuery || {});
   const headers: Record<string, string> = {};
@@ -202,8 +283,25 @@ export async function it_executeTemplate(
   let lastError: unknown = undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     if (options.abortSignal?.aborted) {
+      it_traceTemplateExecutor(options.onTrace, "run", "aborted", {
+        templateId: runtime.template.id,
+        environment: runtime.environment,
+        attempt: attempt + 1,
+        maxAttempts: maxRetries + 1,
+        durationMs: Date.now() - startedAt,
+      });
       throw new Error("request aborted");
     }
+
+    const attemptStart = Date.now();
+    it_traceTemplateExecutor(options.onTrace, "attempt", "start", {
+      templateId: runtime.template.id,
+      environment: runtime.environment,
+      attempt: attempt + 1,
+      maxAttempts: maxRetries + 1,
+      expectStream,
+    });
+
     try {
       const response = await axios.request({
         method: String(request.method || "POST").toUpperCase(),
@@ -213,36 +311,84 @@ export async function it_executeTemplate(
         timeout: timeoutSec > 0 ? timeoutSec * 1000 : undefined,
         responseType: expectStream ? "stream" : "json",
       });
+
       if (expectStream) {
-        const text = await it_consumeTemplateSse(
+        const streamText = await it_consumeTemplateSse(
           response.data,
           runtime.template.streaming,
           runtime.template.response,
           options.onDelta,
           options.abortSignal,
         );
+        it_traceTemplateExecutor(options.onTrace, "attempt", "success", {
+          templateId: runtime.template.id,
+          environment: runtime.environment,
+          attempt: attempt + 1,
+          statusCode: response.status,
+          durationMs: Date.now() - attemptStart,
+        });
+        it_traceTemplateExecutor(options.onTrace, "run", "success", {
+          templateId: runtime.template.id,
+          environment: runtime.environment,
+          attempt: attempt + 1,
+          statusCode: response.status,
+          durationMs: Date.now() - startedAt,
+        });
         return {
-          raw: text,
-          text,
-          value: text,
+          raw: streamText,
+          text: streamText,
+          value: streamText,
           status: response.status,
           headers: response.headers as Record<string, string>,
         };
       }
+
       const data = response.data;
       const value = it_extractResponseValue(data, runtime.template.response);
-      const text = typeof value === "string" ? value : undefined;
+      const resolvedText = typeof value === "string" ? value : undefined;
+      it_traceTemplateExecutor(options.onTrace, "attempt", "success", {
+        templateId: runtime.template.id,
+        environment: runtime.environment,
+        attempt: attempt + 1,
+        statusCode: response.status,
+        durationMs: Date.now() - attemptStart,
+      });
+      it_traceTemplateExecutor(options.onTrace, "run", "success", {
+        templateId: runtime.template.id,
+        environment: runtime.environment,
+        attempt: attempt + 1,
+        statusCode: response.status,
+        durationMs: Date.now() - startedAt,
+      });
       return {
         raw: data,
         value,
-        text,
+        text: resolvedText,
         status: response.status,
         headers: response.headers as Record<string, string>,
       };
-    } catch (err) {
-      lastError = err;
+    } catch (error) {
+      lastError = error;
+      it_traceTemplateExecutor(options.onTrace, "attempt", "error", {
+        templateId: runtime.template.id,
+        environment: runtime.environment,
+        attempt: attempt + 1,
+        maxAttempts: maxRetries + 1,
+        statusCode: it_statusFromError(error),
+        error: it_errorMessage(error),
+        durationMs: Date.now() - attemptStart,
+      });
     }
   }
+
+  it_traceTemplateExecutor(options.onTrace, "run", "error", {
+    templateId: runtime.template.id,
+    environment: runtime.environment,
+    maxAttempts: maxRetries + 1,
+    statusCode: it_statusFromError(lastError),
+    error: it_errorMessage(lastError),
+    durationMs: Date.now() - startedAt,
+  });
   throw lastError instanceof Error ? lastError : new Error("Template request failed.");
 }
 
@@ -255,6 +401,7 @@ export async function it_executeLlmTemplate(
     timeoutSec?: number;
     stream?: boolean;
     onDelta?: (delta: string, full: string) => void;
+    onTrace?: ItTemplateExecutorTrace;
     abortSignal?: { aborted: boolean };
   },
 ): Promise<string> {
@@ -272,6 +419,7 @@ export async function it_executeLlmTemplate(
     timeoutSec: options?.timeoutSec,
     stream: options?.stream,
     onDelta: options?.onDelta,
+    onTrace: options?.onTrace,
     abortSignal: options?.abortSignal,
   });
   if (typeof result.text === "string") {

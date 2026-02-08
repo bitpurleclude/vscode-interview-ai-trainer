@@ -10,6 +10,7 @@ export type ItEnvironmentConfigContext = {
   configService: ItConfigService;
   refreshConfigSnapshot: () => Promise<ItConfigSnapshot>;
   buildConfigSnapshot: (apiConfig: ItApiConfig) => ItConfigSnapshot;
+  logTrace?: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 export type ItEnvironmentConfigResult<T = ItConfigSnapshot> = {
@@ -35,6 +36,80 @@ function it_toStringArray(value: unknown, limit: number): string[] {
     return [];
   }
   return value.map((item) => String(item || "")).slice(0, limit);
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function it_payloadSummary(payload: unknown): Record<string, unknown> {
+  if (payload === undefined) {
+    return { kind: "undefined" };
+  }
+  if (payload === null) {
+    return { kind: "null" };
+  }
+  if (typeof payload === "string") {
+    return { kind: "string", length: payload.length };
+  }
+  if (typeof payload === "number" || typeof payload === "boolean") {
+    return { kind: typeof payload };
+  }
+  if (Array.isArray(payload)) {
+    return { kind: "array", length: payload.length };
+  }
+  if (typeof payload === "object") {
+    const keys = Object.keys(payload as Record<string, unknown>);
+    return {
+      kind: "object",
+      keyCount: keys.length,
+      keys: keys.slice(0, 12),
+    };
+  }
+  return { kind: typeof payload };
+}
+
+function it_traceEnvironment(
+  context: ItEnvironmentConfigContext,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+): void {
+  context.logTrace?.("environment " + action + " " + status, {
+    event: "application.environment." + action,
+    status,
+    ...(detail || {}),
+  });
+}
+
+export async function it_runEnvironmentAction<T>(
+  context: ItEnvironmentConfigContext,
+  action: string,
+  payload: unknown,
+  run: () => Promise<ItEnvironmentConfigResult<T>>,
+): Promise<ItEnvironmentConfigResult<T>> {
+  const startedAt = Date.now();
+  it_traceEnvironment(context, action, "start", {
+    payload: it_payloadSummary(payload),
+  });
+
+  try {
+    const result = await run();
+    it_traceEnvironment(context, action, "success", {
+      activeEnvironment: result.configSnapshot.activeEnvironment,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    it_traceEnvironment(context, action, "error", {
+      error: it_errorMessage(error),
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
 }
 
 async function it_withRefreshedSnapshot(

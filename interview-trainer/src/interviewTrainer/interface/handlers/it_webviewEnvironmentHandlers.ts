@@ -4,6 +4,7 @@ import {
   it_deleteTemplateEnvironment,
   type ItEnvironmentConfigContext,
   type ItEnvironmentConfigResult,
+  it_runEnvironmentAction,
   it_saveLlmProfile,
   it_savePrompts,
   it_setActiveEnvironment,
@@ -22,18 +23,23 @@ function it_createEnvironmentContext(host: ItEnvironmentHandlersPort): ItEnviron
     configService: host.configService,
     refreshConfigSnapshot: host.refreshConfigSnapshot,
     buildConfigSnapshot: host.buildConfigSnapshot,
+    logTrace: host.logCorpusTrace,
   };
 }
 
 async function it_runEnvironmentUseCase<T>(
   host: ItEnvironmentHandlersPort,
+  action: string,
   useCase: (
     context: ItEnvironmentConfigContext,
     payload: unknown,
   ) => Promise<ItEnvironmentConfigResult<T>>,
   payload: unknown,
 ): Promise<T> {
-  const result = await useCase(it_createEnvironmentContext(host), payload);
+  const context = it_createEnvironmentContext(host);
+  const result = await it_runEnvironmentAction(context, action, payload, () =>
+    useCase(context, payload),
+  );
   host.configBundle = result.configBundle;
   host.configSnapshot = result.configSnapshot;
   host.webviewProtocol.send("it/configUpdate", result.configSnapshot);
@@ -49,7 +55,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.set_active",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_setActiveEnvironment, msg.data),
+      () => it_runEnvironmentUseCase(host, "set_active", it_setActiveEnvironment, msg.data),
     ),
   );
 
@@ -61,7 +67,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.create",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_createTemplateEnvironment, msg.data),
+      () => it_runEnvironmentUseCase(host, "create", it_createTemplateEnvironment, msg.data),
     ),
   );
 
@@ -73,7 +79,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.delete",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_deleteTemplateEnvironment, msg.data),
+      () => it_runEnvironmentUseCase(host, "delete", it_deleteTemplateEnvironment, msg.data),
     ),
   );
 
@@ -85,7 +91,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.update_topic_settings",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_updateTopicSettings, msg.data),
+      () => it_runEnvironmentUseCase(host, "update_topic_settings", it_updateTopicSettings, msg.data),
     ),
   );
 
@@ -97,7 +103,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.update_asr_settings",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_updateAsrSettings, msg.data),
+      () => it_runEnvironmentUseCase(host, "update_asr_settings", it_updateAsrSettings, msg.data),
     ),
   );
 
@@ -109,7 +115,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.update_llm_settings",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_updateLlmSettings, msg.data),
+      () => it_runEnvironmentUseCase(host, "update_llm_settings", it_updateLlmSettings, msg.data),
     ),
   );
 
@@ -121,7 +127,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.update_llm_task_profiles",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_updateLlmTaskProfiles, msg.data),
+      () => it_runEnvironmentUseCase(host, "update_llm_task_profiles", it_updateLlmTaskProfiles, msg.data),
     ),
   );
 
@@ -133,7 +139,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.save_llm_profile",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_saveLlmProfile, msg.data),
+      () => it_runEnvironmentUseCase(host, "save_llm_profile", it_saveLlmProfile, msg.data),
     ),
   );
 
@@ -145,7 +151,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.delete_llm_profile",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_deleteLlmProfile, msg.data),
+      () => it_runEnvironmentUseCase(host, "delete_llm_profile", it_deleteLlmProfile, msg.data),
     ),
   );
 
@@ -157,7 +163,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.save_prompts",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_savePrompts, msg.data),
+      () => it_runEnvironmentUseCase(host, "save_prompts", it_savePrompts, msg.data),
     ),
   );
 
@@ -169,7 +175,7 @@ export function it_registerEnvironmentHandlers(host: ItEnvironmentHandlersPort):
         event: "interface.environment.update_streaming_settings",
         payload: msg.data,
       },
-      () => it_runEnvironmentUseCase(host, it_updateStreamingSettings, msg.data),
+      () => it_runEnvironmentUseCase(host, "update_streaming_settings", it_updateStreamingSettings, msg.data),
     ),
   );
 }
