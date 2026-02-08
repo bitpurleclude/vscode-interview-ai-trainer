@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { on, request } from "../messenger";
+import { on, reportClientTrace, request } from "../messenger";
 import type { ItConfigSnapshot, ItState, ItTemplateBindings } from "../types";
 import type { RetrievalForm, StreamingSettings } from "../components/settings/settingsTypes";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "../constants/prompts";
@@ -19,6 +19,21 @@ type UseConfigSyncOptions = {
   setTemplateSecrets: React.Dispatch<React.SetStateAction<string[]>>;
   setRetrievalForm: React.Dispatch<React.SetStateAction<RetrievalForm>>;
 };
+
+function traceConfigSyncAction(
+  action: string,
+  status: string,
+  detail: Record<string, unknown> = {},
+  level: "debug" | "info" | "warn" | "error" = status === "error" ? "error" : "info",
+): void {
+  reportClientTrace({
+    level,
+    event: `webview.config_sync.${action}`,
+    status,
+    message: `config sync ${action} ${status}`,
+    detail,
+  });
+}
 
 export function useConfigSync({
   setItState,
@@ -65,13 +80,39 @@ export function useConfigSync({
 
   useEffect(() => {
     (window as any).__itReady = true;
-    request("it/getState", undefined).then((resp) => {
-      if (resp?.status === "success" && resp.content) {
-        setItState(resp.content);
-      }
-    });
+    traceConfigSyncAction("bootstrap", "start");
+    traceConfigSyncAction("bootstrap_get_state", "start");
+    request("it/getState", undefined)
+      .then((resp) => {
+        if (resp?.status === "success" && resp.content) {
+          setItState(resp.content);
+          traceConfigSyncAction("bootstrap_get_state", "success");
+          return;
+        }
+        traceConfigSyncAction(
+          "bootstrap_get_state",
+          "error",
+          { error: String(resp?.error || "status_not_success") },
+          "warn",
+        );
+      })
+      .catch((error) => {
+        traceConfigSyncAction(
+          "bootstrap_get_state",
+          "error",
+          { error: error instanceof Error ? error.message : String(error) },
+          "error",
+        );
+      });
+    traceConfigSyncAction("bootstrap_get_config", "start");
     request("it/getConfig", undefined).then((resp) => {
       if (resp?.status === "success" && resp.content) {
+        traceConfigSyncAction("bootstrap_get_config", "success", {
+          activeEnvironment: String(resp.content.activeEnvironment || ""),
+          templateCount: Array.isArray(resp.content.templates?.templates)
+            ? resp.content.templates.templates.length
+            : 0,
+        });
         setConfig(resp.content);
         applyRetrievalToForm(resp.content);
         setCustomPrompt(
@@ -85,6 +126,12 @@ export function useConfigSync({
           resp.content.prompts?.perQuestionDemoPrompts?.slice(0, 3) ?? ["", "", ""],
         );
       } else {
+        traceConfigSyncAction(
+          "bootstrap_get_config",
+          "error",
+          { error: String(resp?.error || "fallback_default_config") },
+          "warn",
+        );
         const fallbackConfig: ItConfigSnapshot = {
           activeEnvironment: "prod",
           envList: ["prod"],
@@ -204,13 +251,43 @@ export function useConfigSync({
           statusMessage: "配置加载失败，已使用默认配置",
         }));
       }
+   
+    })
+    .catch((error) => {
+      traceConfigSyncAction(
+        "bootstrap_get_config",
+        "error",
+        { error: error instanceof Error ? error.message : String(error) },
+        "error",
+      );
     });
-    request("it/listNativeInputs", undefined).then((resp) => {
-      if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
-        setNativeInputs(resp.content.inputs);
-        setSelectedInput(resp.content.inputs[0] || "");
-      }
-    });
+
+    traceConfigSyncAction("bootstrap_list_inputs", "start");
+    request("it/listNativeInputs", undefined)
+      .then((resp) => {
+        if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
+          setNativeInputs(resp.content.inputs);
+          setSelectedInput(resp.content.inputs[0] || "");
+          traceConfigSyncAction("bootstrap_list_inputs", "success", {
+            inputCount: resp.content.inputs.length,
+          });
+          return;
+        }
+        traceConfigSyncAction(
+          "bootstrap_list_inputs",
+          "error",
+          { error: String(resp?.error || "status_not_success") },
+          "warn",
+        );
+      })
+      .catch((error) => {
+        traceConfigSyncAction(
+          "bootstrap_list_inputs",
+          "error",
+          { error: error instanceof Error ? error.message : String(error) },
+          "error",
+        );
+      });
   }, [
     applyRetrievalToForm,
     setCustomPrompt,
@@ -222,6 +299,15 @@ export function useConfigSync({
 
   useEffect(() => {
     if (!config) return;
+    traceConfigSyncAction(
+      "apply_snapshot",
+      "success",
+      {
+        activeEnvironment: String(config.activeEnvironment || ""),
+        hasStreaming: Boolean(config.streaming),
+      },
+      "debug",
+    );
     applyRetrievalToForm(config);
     if (config.prompts) {
       setCustomPrompt(config.prompts.evaluationPrompt ?? STRICT_SYSTEM_PROMPT);
@@ -271,43 +357,88 @@ export function useConfigSync({
   ]);
 
   useEffect(() => {
+    traceConfigSyncAction("subscribe_updates", "start", {}, "debug");
     const disposeState = on("it/stateUpdate", (data) => {
       setItState(data);
+      traceConfigSyncAction("state_update", "success", {}, "debug");
     });
     const disposeConfig = on("it/configUpdate", (data) => {
       setConfig(data);
+      traceConfigSyncAction("config_update", "success", {}, "debug");
     });
     return () => {
       disposeState();
       disposeConfig();
+      traceConfigSyncAction("subscribe_updates", "disposed", {}, "debug");
     };
   }, [setItState]);
 
   const handleRefreshInputs = useCallback(async () => {
-    const resp = await request("it/listNativeInputs", { refresh: true });
-    if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
-      const inputs = resp.content.inputs;
-      setNativeInputs(inputs);
-      if (inputs.length && !inputs.includes(selectedInput)) {
-        setSelectedInput(inputs[0] || "");
+    traceConfigSyncAction("refresh_inputs", "start");
+    try {
+      const resp = await request("it/listNativeInputs", { refresh: true });
+      if (resp?.status === "success" && Array.isArray(resp.content?.inputs)) {
+        const inputs = resp.content.inputs;
+        setNativeInputs(inputs);
+        if (inputs.length && !inputs.includes(selectedInput)) {
+          setSelectedInput(inputs[0] || "");
+        }
+        traceConfigSyncAction("refresh_inputs", "success", { inputCount: inputs.length });
+        return;
       }
-      return;
+      traceConfigSyncAction(
+        "refresh_inputs",
+        "error",
+        { error: String(resp?.error || "status_not_success") },
+        "warn",
+      );
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
+      }));
+    } catch (error) {
+      traceConfigSyncAction(
+        "refresh_inputs",
+        "error",
+        { error: error instanceof Error ? error.message : String(error) },
+        "error",
+      );
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
+      }));
     }
-    setItState((prev) => ({
-      ...prev,
-      statusMessage: "刷新输入设备失败，请确认 ffmpeg 可用且麦克风权限已授权。",
-    }));
   }, [selectedInput, setItState]);
 
   const reloadConfig = useCallback(async () => {
-    const resp = await request("it/getConfig", undefined);
-    if (resp?.status === "success" && resp.content) {
-      setConfig(resp.content);
-      applyRetrievalToForm(resp.content);
-      setCustomPrompt(
-        resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
+    traceConfigSyncAction("reload_config", "start");
+    try {
+      const resp = await request("it/getConfig", undefined);
+      if (resp?.status === "success" && resp.content) {
+        setConfig(resp.content);
+        applyRetrievalToForm(resp.content);
+        setCustomPrompt(
+          resp.content.prompts?.evaluationPrompt ?? STRICT_SYSTEM_PROMPT,
+        );
+        setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
+        traceConfigSyncAction("reload_config", "success", {
+          activeEnvironment: String(resp.content.activeEnvironment || ""),
+        });
+        return;
+      }
+      traceConfigSyncAction(
+        "reload_config",
+        "error",
+        { error: String(resp?.error || "status_not_success") },
+        "warn",
       );
-      setDemoPrompt(resp.content.prompts?.demoPrompt ?? DEFAULT_DEMO_PROMPT);
+    } catch (error) {
+      traceConfigSyncAction(
+        "reload_config",
+        "error",
+        { error: error instanceof Error ? error.message : String(error) },
+        "error",
+      );
     }
   }, [applyRetrievalToForm, setCustomPrompt, setDemoPrompt]);
 

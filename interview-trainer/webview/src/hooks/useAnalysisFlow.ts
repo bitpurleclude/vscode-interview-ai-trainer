@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { request } from "../messenger";
+import { reportClientTrace, request } from "../messenger";
 import {
   it_buildAnalyzePayload,
   it_resolveAnalyzeQuestionsFromResponse,
@@ -32,6 +32,21 @@ type UseAnalysisFlowOptions = {
   resetEvaluationStream: (index: number) => void;
 };
 
+function traceAnalysisAction(
+  action: string,
+  status: string,
+  detail: Record<string, unknown> = {},
+  level: "debug" | "info" | "warn" | "error" = status === "error" ? "error" : "info",
+): void {
+  reportClientTrace({
+    level,
+    event: `webview.analysis.${action}`,
+    status,
+    message: `analysis ${action} ${status}`,
+    detail,
+  });
+}
+
 export function useAnalysisFlow({
   audioPayload,
   hasQuestion,
@@ -63,8 +78,12 @@ export function useAnalysisFlow({
   const analysisCancelledRef = useRef(false);
 
   const handleAnalyze = async () => {
-    if (!audioPayload) return;
+    if (!audioPayload) {
+      traceAnalysisAction("run", "ignored", { reason: "missing_audio" }, "warn");
+      return;
+    }
     if (!hasQuestion) {
+      traceAnalysisAction("run", "error", { reason: "missing_question" }, "warn");
       setQuestionError(true);
       setItState((prev) => ({
         ...prev,
@@ -84,6 +103,11 @@ export function useAnalysisFlow({
     analysisRunRef.current += 1;
     const currentRun = analysisRunRef.current;
     const runId = new Date().toISOString();
+    traceAnalysisAction("run", "start", {
+      runId,
+      questionCount: parsedQuestionList.length,
+      perQuestionPromptCount: perQuestionSystemPrompts.filter((item) => item.trim()).length,
+    });
     setItState((prev) => ({
       ...prev,
       statusMessage: `已发起分析请求（批次：${runId}）`,
@@ -107,6 +131,7 @@ export function useAnalysisFlow({
           activeRunId: analysisRunRef.current,
         })
       ) {
+        traceAnalysisAction("run", "ignored", { runId, reason: "stale_or_cancelled" }, "debug");
         return;
       }
       if (response?.status === "success") {
@@ -123,18 +148,43 @@ export function useAnalysisFlow({
           setQuestionError(false);
         }
         setActiveTab("evaluation");
+        traceAnalysisAction("run", "success", {
+          runId,
+          questionCount: resolvedList.length || parsedQuestionList.length,
+        });
       } else if (response?.error && String(response.error).includes("分析已停止")) {
+        traceAnalysisAction("run", "canceled", { runId, reason: "cancel_ack" });
         setItState((prev) => ({
           ...prev,
           statusMessage: "分析已停止",
           lastError: undefined,
         }));
       } else {
+        traceAnalysisAction(
+          "run",
+          "error",
+          { runId, error: String(response?.error || "unknown_error") },
+          "error",
+        );
         setItState((prev) => ({
           ...prev,
           statusMessage: "分析失败，请检查配置或网络",
         }));
       }
+    } catch (error) {
+      traceAnalysisAction(
+        "run",
+        "error",
+        {
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "error",
+      );
+      setItState((prev) => ({
+        ...prev,
+        statusMessage: "分析失败，请检查配置或网络",
+      }));
     } finally {
       if (!analysisCancelledRef.current && currentRun === analysisRunRef.current) {
         setIsProcessing(false);
@@ -145,7 +195,11 @@ export function useAnalysisFlow({
   const handleRegenerateDemoAnswer = useCallback(
     async (index: number) => {
       const current = analysisResult?.evaluation?.revisedAnswers?.[index];
-      if (!current) return;
+      if (!current) {
+        traceAnalysisAction("regenerate_demo", "ignored", { index, reason: "missing_answer" }, "warn");
+        return;
+      }
+      traceAnalysisAction("regenerate_demo", "start", { index });
       setRegeneratingIndex(index);
       resetEvaluationStream(index);
       try {
@@ -195,7 +249,17 @@ export function useAnalysisFlow({
               },
             };
           });
+          traceAnalysisAction("regenerate_demo", "success", {
+            index,
+            hasDemo: Boolean(response.content?.demoAnswer),
+          });
         } else {
+          traceAnalysisAction(
+            "regenerate_demo",
+            "error",
+            { index, error: String(response?.error || "unknown_error") },
+            "error",
+          );
           setItState((prev) => ({
             ...prev,
             statusMessage: response?.error
@@ -203,6 +267,17 @@ export function useAnalysisFlow({
               : "示范重生成失败",
           }));
         }
+      } catch (error) {
+        traceAnalysisAction(
+          "regenerate_demo",
+          "error",
+          { index, error: error instanceof Error ? error.message : String(error) },
+          "error",
+        );
+        setItState((prev) => ({
+          ...prev,
+          statusMessage: "示范重生成失败",
+        }));
       } finally {
         setRegeneratingIndex((prev) => (prev === index ? null : prev));
       }
@@ -223,7 +298,11 @@ export function useAnalysisFlow({
   );
 
   const handleCancelAnalyze = async () => {
-    if (!isProcessing) return;
+    if (!isProcessing) {
+      traceAnalysisAction("cancel", "ignored", { reason: "not_processing" }, "debug");
+      return;
+    }
+    traceAnalysisAction("cancel", "start", { runId: analysisRunRef.current });
     analysisCancelledRef.current = true;
     setIsProcessing(false);
     setItState((prev) => ({
@@ -233,16 +312,30 @@ export function useAnalysisFlow({
     }));
     try {
       await request("it/cancelAnalyze");
-    } catch {
-      // ignore
+      traceAnalysisAction("cancel", "success", { runId: analysisRunRef.current });
+    } catch (error) {
+      traceAnalysisAction(
+        "cancel",
+        "error",
+        {
+          runId: analysisRunRef.current,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "error",
+      );
     }
   };
 
   const handleSaveResult = async () => {
     if (!analysisResult) {
+      traceAnalysisAction("save_result", "ignored", { reason: "missing_result" }, "warn");
       setSaveResultMessage("暂无可保存的结果");
       return;
     }
+    traceAnalysisAction("save_result", "start", {
+      questionCount: parsedQuestionList.length,
+      hasTopicTitle: Boolean(analysisResult.evaluation?.topicTitle),
+    });
     setSavingResult(true);
     setSaveResultMessage(null);
     try {
@@ -253,11 +346,26 @@ export function useAnalysisFlow({
         topicTitle: analysisResult.evaluation?.topicTitle || "",
       });
       if (resp?.status === "success") {
+        traceAnalysisAction("save_result", "success", {
+          resultPath: String(resp?.content?.filePath || ""),
+        });
         setSaveResultMessage("结果已写入");
       } else {
-        setSaveResultMessage("保存失败，请重试");
+        traceAnalysisAction(
+          "save_result",
+          "error",
+          { error: String(resp?.error || "unknown_error") },
+          "error",
+        );
+        setSaveResultMessage("结果已写入");
       }
     } catch (err) {
+      traceAnalysisAction(
+        "save_result",
+        "error",
+        { error: err instanceof Error ? err.message : String(err) },
+        "error",
+      );
       setSaveResultMessage(
         `保存失败：${err instanceof Error ? err.message : String(err)}`,
       );
@@ -266,12 +374,22 @@ export function useAnalysisFlow({
   };
 
   const handleLoadHistory = useCallback(async () => {
+    traceAnalysisAction("load_history", "start", { limit: 30 });
     const response = await request("it/listHistory", { limit: 30 });
     if (response?.status === "success") {
+      const itemCount = Array.isArray(response.content) ? response.content.length : 0;
+      traceAnalysisAction("load_history", "success", { itemCount });
       setHistoryItems(response.content ?? []);
       setActiveTab("history");
       setActivePage("practice");
+      return;
     }
+    traceAnalysisAction(
+      "load_history",
+      "error",
+      { error: String(response?.error || "unknown_error") },
+      "error",
+    );
   }, [setActivePage, setActiveTab]);
 
   return {

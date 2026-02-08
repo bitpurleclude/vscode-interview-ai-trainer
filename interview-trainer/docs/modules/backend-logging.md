@@ -39,6 +39,8 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/application/useCases/it_environmentConfig.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewEnvironmentHandlers.ts`
 - `webview/src/hooks/useEnvironmentSettings.ts`
+- `webview/src/hooks/useAnalysisFlow.ts`
+- `webview/src/hooks/useConfigSync.ts`
 - `src/interviewTrainer/application/services/it_guardrails.ts`
 - `src/interviewTrainer/infra/api/it_templateExecutor.logging.test.ts`
 ## Structured Log Contract
@@ -287,3 +289,23 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `infra.template_executor.render_request`
   - `infra.template_executor.run`
   - `infra.template_executor.attempt`
+
+## Additional event families (P18)
+- Webview analysis action traces:
+  - `webview.analysis.run`
+  - `webview.analysis.regenerate_demo`
+  - `webview.analysis.cancel`
+  - `webview.analysis.save_result`
+  - `webview.analysis.load_history`
+- Webview config-sync traces:
+  - `webview.config_sync.bootstrap`
+  - `webview.config_sync.bootstrap_get_state`
+  - `webview.config_sync.bootstrap_get_config`
+  - `webview.config_sync.bootstrap_list_inputs`
+  - `webview.config_sync.apply_snapshot`
+  - `webview.config_sync.subscribe_updates`
+  - `webview.config_sync.state_update`
+  - `webview.config_sync.config_update`
+  - `webview.config_sync.refresh_inputs`
+  - `webview.config_sync.reload_config`
+

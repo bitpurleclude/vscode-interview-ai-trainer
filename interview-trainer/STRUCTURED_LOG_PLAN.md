@@ -25,6 +25,7 @@
 - [x] P15 core/test/guardrail clamp observability coverage
 - [x] P16 environment/template executor/client action observability coverage
 - [x] P17 guardrails normalization summary and executor trace regression tests
+- [x] P18 webview analysis/config-sync action trace coverage
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -174,6 +175,11 @@
 - Add config snapshot guardrails normalization summary event (`application.guardrails.normalization`) when malformed guardrail config requires fallback/clamp.
 - Add guardrail normalization issue collector in guardrails service for deterministic diagnostics and testability.
 - Add template executor trace regression tests to lock `render_request/run/attempt` lifecycle events.
+
+### P18 - Webview Analysis and Config Sync Coverage
+- Add webview analysis action traces (`run/cancel/save_result/load_history/regenerate_demo`) with start/success/error/ignored status.
+- Add webview config bootstrap traces for `getState/getConfig/listNativeInputs` with fallback diagnostics.
+- Add config snapshot apply and subscription traces (`apply_snapshot`, `state_update`, `config_update`) to improve UI-side diagnosis.
 
 ## 5. Impact
 - Positive:
