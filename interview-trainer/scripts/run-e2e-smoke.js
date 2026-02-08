@@ -4,6 +4,20 @@ const { runTests } = require("@vscode/test-electron");
 
 const E2E_DEFAULT_MAX_ATTEMPTS = 3;
 const E2E_DEFAULT_RETRY_DELAY_MS = 1200;
+const E2E_SMOKE_MODES = [
+  {
+    id: "workspace",
+    description: "workspace-attached host smoke",
+    openWorkspace: true,
+    requireWorkspace: true,
+  },
+  {
+    id: "no-workspace",
+    description: "no-workspace negative smoke",
+    openWorkspace: false,
+    requireWorkspace: true,
+  },
+];
 const RETRYABLE_HOST_ERROR_PATTERNS = [
   /ProcessSingleton/i,
   /already in use/i,
@@ -69,13 +83,33 @@ function isRetryableHostError(error) {
   return RETRYABLE_HOST_ERROR_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function withEnvVar(name, value, run) {
+  const previous = process.env[name];
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+  return Promise.resolve()
+    .then(run)
+    .finally(() => {
+      if (previous === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = previous;
+      }
+    });
+}
+
 async function runSmokeAttempt({
   extensionDevelopmentPath,
   extensionTestsPath,
+  workspaceFolderPath,
+  mode,
   attempt,
   maxAttempts,
 }) {
-  const runKey = `${Date.now()}-${Math.random().toString(16).slice(2)}-a${attempt}`;
+  const runKey = `${Date.now()}-${Math.random().toString(16).slice(2)}-${mode.id}-a${attempt}`;
   const profileRoot = path.resolve(
     extensionDevelopmentPath,
     ".vscode-test",
@@ -88,21 +122,69 @@ async function runSmokeAttempt({
   await fs.promises.mkdir(userDataDir, { recursive: true });
   await fs.promises.mkdir(extensionsDir, { recursive: true });
 
-  console.log(`[e2e-smoke] attempt ${attempt}/${maxAttempts}: launching VS Code host`);
+  const launchArgs = [
+    `--user-data-dir=${userDataDir}`,
+    `--extensions-dir=${extensionsDir}`,
+    "--disable-extensions",
+  ];
+  if (mode.openWorkspace) {
+    launchArgs.push(workspaceFolderPath);
+  }
+
+  console.log(
+    `[e2e-smoke:${mode.id}] attempt ${attempt}/${maxAttempts}: launching VS Code host (${mode.description})`,
+  );
 
   try {
     await runTests({
       extensionDevelopmentPath,
       extensionTestsPath,
-      launchArgs: [
-        `--user-data-dir=${userDataDir}`,
-        `--extensions-dir=${extensionsDir}`,
-        "--disable-extensions",
-      ],
+      launchArgs,
     });
   } finally {
     await removeDirQuiet(profileRoot);
   }
+}
+
+async function runSmokeModeWithRetry({
+  extensionDevelopmentPath,
+  extensionTestsPath,
+  workspaceFolderPath,
+  mode,
+  maxAttempts,
+  retryDelayMs,
+}) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await withEnvVar("IT_E2E_SMOKE_MODE", mode.id, () =>
+        withEnvVar("IT_E2E_REQUIRE_WORKSPACE", mode.requireWorkspace ? "1" : "0", () =>
+          runSmokeAttempt({
+            extensionDevelopmentPath,
+            extensionTestsPath,
+            workspaceFolderPath,
+            mode,
+            attempt,
+            maxAttempts,
+          }),
+        ),
+      );
+      console.log(`[e2e-smoke:${mode.id}] attempt ${attempt}/${maxAttempts}: passed`);
+      return;
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableHostError(error);
+      if (!retryable || attempt >= maxAttempts) {
+        throw error;
+      }
+      console.warn(
+        `[e2e-smoke:${mode.id}] transient host failure on attempt ${attempt}/${maxAttempts}, retry in ${retryDelayMs}ms: ${summarizeError(error)}`,
+      );
+      await delay(retryDelayMs);
+    }
+  }
+
+  throw lastError || new Error(`Unknown smoke failure in mode: ${mode.id}`);
 }
 
 async function main() {
@@ -111,6 +193,7 @@ async function main() {
   delete process.env.ELECTRON_RUN_AS_NODE;
 
   const extensionDevelopmentPath = path.resolve(__dirname, "..");
+  const workspaceFolderPath = path.resolve(extensionDevelopmentPath, "..");
   const extensionTestsPath = path.resolve(
     __dirname,
     "..",
@@ -133,32 +216,16 @@ async function main() {
   process.env.IT_E2E_ENABLE_TEST_COMMANDS = "1";
 
   try {
-    let lastError;
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        await runSmokeAttempt({
-          extensionDevelopmentPath,
-          extensionTestsPath,
-          attempt,
-          maxAttempts,
-        });
-        console.log(`[e2e-smoke] attempt ${attempt}/${maxAttempts}: passed`);
-        return;
-      } catch (error) {
-        lastError = error;
-        const retryable = isRetryableHostError(error);
-        if (!retryable || attempt >= maxAttempts) {
-          throw error;
-        }
-
-        console.warn(
-          `[e2e-smoke] transient host failure on attempt ${attempt}/${maxAttempts}, retry in ${retryDelayMs}ms: ${summarizeError(error)}`,
-        );
-        await delay(retryDelayMs);
-      }
+    for (const mode of E2E_SMOKE_MODES) {
+      await runSmokeModeWithRetry({
+        extensionDevelopmentPath,
+        extensionTestsPath,
+        workspaceFolderPath,
+        mode,
+        maxAttempts,
+        retryDelayMs,
+      });
     }
-
-    throw lastError || new Error("Unknown smoke failure");
   } finally {
     if (previousE2EFlag === undefined) {
       delete process.env.IT_E2E_ENABLE_TEST_COMMANDS;

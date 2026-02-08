@@ -224,6 +224,22 @@ function it_buildFixtureAnalyzeRequest(workspaceRoot: string): ItAnalyzeRequest 
   };
 }
 
+
+function it_shouldRequireWorkspaceInE2E(): boolean {
+  return process.env.IT_E2E_REQUIRE_WORKSPACE === "1";
+}
+
+function it_resolveE2EWorkspaceRoot(context: vscode.ExtensionContext): string {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (workspaceRoot) {
+    return workspaceRoot;
+  }
+  if (it_shouldRequireWorkspaceInE2E()) {
+    throw new Error("workspace not found");
+  }
+  return path.resolve(context.extensionPath, "..");
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const viewProvider = new InterviewTrainerWebviewViewProvider(context);
   context.subscriptions.push(
@@ -416,11 +432,19 @@ export function activate(context: vscode.ExtensionContext) {
         } satisfies ItE2EUiAutomationResult;
       }
 
-      const workspaceRoot =
-        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ||
-        path.resolve(context.extensionPath, "..");
-      const fixtureRequest = it_buildFixtureAnalyzeRequest(workspaceRoot);
-      const webviewPayload = it_buildFixtureWebviewAnalyzePayload(workspaceRoot);
+      let fixtureRequest: ItAnalyzeRequest;
+      let webviewPayload: ReturnType<typeof it_buildFixtureWebviewAnalyzePayload>;
+      try {
+        const workspaceRoot = it_resolveE2EWorkspaceRoot(context);
+        fixtureRequest = it_buildFixtureAnalyzeRequest(workspaceRoot);
+        webviewPayload = it_buildFixtureWebviewAnalyzePayload(workspaceRoot);
+      } catch (error) {
+        return {
+          runId,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        } satisfies ItE2EUiAutomationResult;
+      }
       const restoreConfig = it_applyE2ETestConfigBundle(
         trainer,
         fixtureRequest.questionList?.join("\n") || fixtureRequest.questionText || "e2e transcript",
@@ -495,10 +519,18 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
       vscode.commands.registerCommand(IT_E2E_FIXTURE_ANALYZE_COMMAND, async () => {
-        const workspaceRoot =
-          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ||
-          path.resolve(context.extensionPath, "..");
-        const request = it_buildFixtureAnalyzeRequest(workspaceRoot);
+        let request: ItAnalyzeRequest;
+        try {
+          const workspaceRoot = it_resolveE2EWorkspaceRoot(context);
+          request = it_buildFixtureAnalyzeRequest(workspaceRoot);
+        } catch (error) {
+          return {
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+            stateError: trainer.state.lastError?.reason || "",
+          };
+        }
+
         const restoreConfig = it_applyE2ETestConfigBundle(
           trainer,
           request.questionList?.join("\n") || request.questionText || "e2e transcript",

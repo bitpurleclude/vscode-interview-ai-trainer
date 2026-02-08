@@ -9,6 +9,8 @@ const WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyz
 const WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelFlow";
 const WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
 
+const SMOKE_MODE = String(process.env.IT_E2E_SMOKE_MODE || "workspace").toLowerCase();
+
 function withTimeout(promise, timeoutMs, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -19,6 +21,18 @@ function withTimeout(promise, timeoutMs, label) {
   return Promise.race([promise, timeout]).finally(() => {
     clearTimeout(timer);
   });
+}
+
+function isWorkspaceErrorMessage(value) {
+  const text = String(value || "");
+  return /workspace not found/i.test(text) || /打开工作区/.test(text);
+}
+
+function assertNoWorkspaceError(value, label) {
+  assert.ok(
+    !isWorkspaceErrorMessage(value),
+    `${label} should not fail due to missing workspace: ${String(value || "")}`,
+  );
 }
 
 async function activateExtension() {
@@ -79,7 +93,8 @@ async function assertFixtureFilesReachable(extension) {
   assert.ok(audioStat.size > 1024, "Audio fixture should be larger than 1KB");
 }
 
-function assertFixtureAnalyzeResult(result) {
+function assertFixtureAnalyzeResult(result, options = {}) {
+  const { forbidWorkspaceError = false } = options;
   assert.ok(result && typeof result === "object", "Fixture analyze result should be an object");
   assert.ok(
     result.status === "success" || result.status === "error",
@@ -102,6 +117,10 @@ function assertFixtureAnalyzeResult(result) {
     typeof result.error === "string" && result.error.length > 0,
     "Fixture analyze error should include readable message",
   );
+  if (forbidWorkspaceError) {
+    assertNoWorkspaceError(result.error, "Fixture analyze");
+    assertNoWorkspaceError(result.stateError, "Fixture analyze stateError");
+  }
 }
 
 function assertWebviewUiFlowResult(result) {
@@ -123,7 +142,8 @@ function assertWebviewUiFlowResult(result) {
   assert.strictEqual(result.activePage, "practice", "Webview UI flow should end on practice page");
 }
 
-function assertWebviewAnalyzeFlowResult(result) {
+function assertWebviewAnalyzeFlowResult(result, options = {}) {
+  const { forbidWorkspaceError = false } = options;
   assert.ok(result && typeof result === "object", "Webview analyze flow result should be an object");
   assert.ok(
     result.status === "success" || result.status === "error",
@@ -157,6 +177,9 @@ function assertWebviewAnalyzeFlowResult(result) {
     typeof result.error === "string" && result.error.length > 0,
     "Webview analyze error should include readable message",
   );
+  if (forbidWorkspaceError) {
+    assertNoWorkspaceError(result.error, "Webview analyze");
+  }
 }
 
 function assertWebviewCancelFlowResult(result) {
@@ -212,9 +235,7 @@ function assertWebviewSaveFlowResult(result) {
   );
 }
 
-
-async function runSmoke(extension) {
-  const allCommands = await vscode.commands.getCommands(true);
+function assertExpectedCommandsPresent(allCommands) {
   [
     "itInterviewTrainer.open",
     "itInterviewTrainer.openSettings",
@@ -229,7 +250,9 @@ async function runSmoke(extension) {
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
+}
 
+async function runWorkspaceSmoke(extension) {
   await assertFixtureFilesReachable(extension);
 
   await executeCommandAndAssert("itInterviewTrainer.mainView.focus");
@@ -242,7 +265,7 @@ async function runSmoke(extension) {
     FIXTURE_ANALYZE_COMMAND,
     120_000,
   );
-  assertFixtureAnalyzeResult(fixtureAnalyzeResult);
+  assertFixtureAnalyzeResult(fixtureAnalyzeResult, { forbidWorkspaceError: true });
 
   const webviewUiFlowResult = await executeCommandAndAssert(
     WEBVIEW_UI_FLOW_COMMAND,
@@ -254,7 +277,7 @@ async function runSmoke(extension) {
     WEBVIEW_ANALYZE_FLOW_COMMAND,
     120_000,
   );
-  assertWebviewAnalyzeFlowResult(webviewAnalyzeFlowResult);
+  assertWebviewAnalyzeFlowResult(webviewAnalyzeFlowResult, { forbidWorkspaceError: true });
 
   const webviewCancelFlowResult = await executeCommandAndAssert(
     WEBVIEW_CANCEL_FLOW_COMMAND,
@@ -267,6 +290,50 @@ async function runSmoke(extension) {
     120_000,
   );
   assertWebviewSaveFlowResult(webviewSaveFlowResult);
+}
+
+async function runNoWorkspaceSmoke() {
+  await executeCommandAndAssert("itInterviewTrainer.mainView.focus");
+  await executeCommandAndAssert("itInterviewTrainer.open");
+
+  const fixtureAnalyzeResult = await executeCommandAndAssert(
+    FIXTURE_ANALYZE_COMMAND,
+    30_000,
+  );
+  assert.strictEqual(
+    fixtureAnalyzeResult?.status,
+    "error",
+    `No-workspace smoke should return error for fixture analyze: ${JSON.stringify(fixtureAnalyzeResult)}`,
+  );
+  assert.ok(
+    isWorkspaceErrorMessage(fixtureAnalyzeResult?.error),
+    `No-workspace fixture analyze should expose workspace error: ${JSON.stringify(fixtureAnalyzeResult)}`,
+  );
+
+  const webviewAnalyzeFlowResult = await executeCommandAndAssert(
+    WEBVIEW_ANALYZE_FLOW_COMMAND,
+    30_000,
+  );
+  assert.strictEqual(
+    webviewAnalyzeFlowResult?.status,
+    "error",
+    `No-workspace smoke should return error for webview analyze: ${JSON.stringify(webviewAnalyzeFlowResult)}`,
+  );
+  assert.ok(
+    isWorkspaceErrorMessage(webviewAnalyzeFlowResult?.error),
+    `No-workspace webview analyze should expose workspace error: ${JSON.stringify(webviewAnalyzeFlowResult)}`,
+  );
+}
+
+async function runSmoke(extension) {
+  const allCommands = await vscode.commands.getCommands(true);
+  assertExpectedCommandsPresent(allCommands);
+
+  if (SMOKE_MODE === "no-workspace") {
+    await runNoWorkspaceSmoke();
+  } else {
+    await runWorkspaceSmoke(extension);
+  }
 
   assert.strictEqual(extension.isActive, true, "Extension became inactive during smoke commands");
 }

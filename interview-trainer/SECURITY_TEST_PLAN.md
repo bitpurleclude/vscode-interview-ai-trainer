@@ -18,7 +18,7 @@
 - No dynamic malware behavior analysis (covered by runtime hardening, not unit tests).
 
 
-## Progress (2026-02-07)
+## Progress (2026-02-08)
 - [x] P0-1 Analyze payload poisoning tests + request-shape guard in `it_resultActions.ts`.
 - [x] P0-2 Retrieval numeric poisoning tests + clamp logic in `it_retrievalActions.ts`.
 - [x] P0-3 Warmup concurrency abuse tests + safe bound logic in `it_embeddingWarmup.ts`.
@@ -51,6 +51,7 @@
 - [x] P2-30 Host smoke flaky retry strategy in `scripts/run-e2e-smoke.js` (transient mutex/lock/startup failures now auto-retry with isolated profiles).
 - [x] P2-31 Real Webview cancel-lifecycle smoke command (`itInterviewTrainer.__test.runWebviewCancelFlow`).
 - [x] P2-32 Real Webview save-result feedback smoke command (`itInterviewTrainer.__test.runWebviewSaveResultFlow`).
+- [x] P2-33 Dual-mode workspace smoke assertions: `workspace` mode forbids workspace-missing failures; `no-workspace` mode must return explicit workspace errors.
 - [x] P2 suites pending items in current scope are cleared.
 
 ## Analyze Full-Flow Fault Matrix (new)
