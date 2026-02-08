@@ -63,3 +63,43 @@ retrieval:
 
   # If one embedding request payload exceeds this size, split into sub-requests.
   embedding_request_split_threshold: 64
+
+logging:
+  # Structured log guardrails to keep output stable and machine-parseable.
+  limits:
+    # purpose: cap one log message text size before serialization.
+    # unit: UTF-8 characters.
+    # trigger behavior: truncate message and append a truncation marker when exceeded.
+    # risk when too large: huge lines increase output latency and make troubleshooting noisy.
+    message_max_chars: 4000
+
+    # purpose: cap serialized detail payload size to avoid output channel flooding.
+    # unit: UTF-8 characters after JSON serialization.
+    # trigger behavior: detail is truncated with metadata about original length.
+    # risk when too large: large payloads can freeze extension host output processing.
+    detail_max_chars: 12000
+
+    # purpose: bound recursive object traversal while sanitizing log details.
+    # unit: nesting depth.
+    # trigger behavior: deeper nodes are replaced with a depth-limit marker.
+    # risk when too large: deep payloads raise CPU cost and may cause stack pressure.
+    detail_max_depth: 6
+
+    # purpose: cap object key count per level in structured detail payloads.
+    # unit: number of keys.
+    # trigger behavior: extra keys are dropped and count is recorded.
+    # risk when too large: oversized objects reduce readability and increase memory overhead.
+    detail_max_keys_per_object: 128
+
+    # purpose: cap array item count per level in structured detail payloads.
+    # unit: number of items.
+    # trigger behavior: extra items are dropped and count is recorded.
+    # risk when too large: long arrays create high-volume logs and hide critical signals.
+    detail_max_items_per_array: 64
+
+  policy:
+    # purpose: keep critical diagnostics visible when trace log toggle is disabled.
+    # unit: boolean flag.
+    # trigger behavior: emit error-level events even when trace/info logs are off.
+    # risk when too large: if disabled, production failures may become invisible during smoke tests.
+    emit_error_when_trace_disabled: true
