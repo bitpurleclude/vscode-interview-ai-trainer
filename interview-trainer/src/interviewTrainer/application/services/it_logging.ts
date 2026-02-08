@@ -19,6 +19,16 @@ export type ItLogHost = {
   };
 };
 
+export type ItInternalLogEvent = {
+  level: "debug" | "info" | "warn" | "error";
+  event: string;
+  module: string;
+  message: string;
+  status?: string;
+  errorCode?: string;
+  detail?: Record<string, unknown>;
+};
+
 function it_createHostLogger(host: ItLogHost) {
   const guardrails = it_getLoggingGuardrailsFromConfig(host.configBundle?.guardrails as any);
   return it_createStructuredLogger({
@@ -54,6 +64,32 @@ function it_toErrorDetail(error: unknown): Record<string, unknown> {
   }
 
   return detail;
+}
+
+export function it_logInternalEvent(host: ItLogHost, event: ItInternalLogEvent): void {
+  const logger = it_createHostLogger(host);
+  const payload = {
+    event: event.event,
+    layer: "application" as const,
+    module: event.module,
+    status: event.status,
+    errorCode: event.errorCode,
+    message: event.message,
+    detail: event.detail,
+  };
+  if (event.level === "debug") {
+    logger.debug(payload);
+    return;
+  }
+  if (event.level === "warn") {
+    logger.warn(payload);
+    return;
+  }
+  if (event.level === "error") {
+    logger.error(payload);
+    return;
+  }
+  logger.info(payload);
 }
 
 export function it_logEmbeddingTestFailure(host: ItLogHost, error: unknown): void {

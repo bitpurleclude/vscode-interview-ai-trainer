@@ -11,6 +11,7 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/infra/logging/it_outputChannelLogSink.ts`
 - `src/interviewTrainer/infra/logging/it_traceLogger.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewHandlerLogging.ts`
+- `src/webview/WebviewProtocol.ts`
 
 ## Structured Log Contract
 Each line emitted to the output channel is a JSON object with stable fields:
@@ -55,3 +56,14 @@ Current logging guardrails:
   - `config/guardrails.yaml`
   - `it_guardrails.ts`
   - relevant tests and docs
+
+## Protocol anomaly events
+When protocol-level guardrails are hit, logs emit stable error/warn events:
+- `protocol.webview.request_unhandled`
+- `protocol.webview.request_error`
+- `protocol.webview.broadcast_handler_error`
+- `protocol.webview.send_error`
+- `protocol.webview.invalid_message`
+- `protocol.webview.send_without_webview`
+
+Unknown request messages with `messageId` now return a structured error payload (`errorCode=handler_not_found`) instead of hanging the pending request promise.

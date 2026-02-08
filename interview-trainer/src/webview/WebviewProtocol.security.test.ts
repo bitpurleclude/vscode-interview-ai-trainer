@@ -54,6 +54,28 @@ describe("WebviewProtocol security", () => {
     });
   });
 
+  it("returns handler_not_found for unknown request with messageId", async () => {
+    const protocol = new WebviewProtocol();
+    const webview = new FakeWebview();
+    protocol.webview = webview as any;
+
+    await webview.emit({
+      messageType: "it/not-registered",
+      messageId: "msg-404",
+      data: { payload: true },
+    });
+
+    expect(webview.posted).toHaveLength(1);
+    expect(webview.posted[0]).toMatchObject({
+      messageType: "it/not-registered",
+      messageId: "msg-404",
+      data: {
+        status: "error",
+        errorCode: "handler_not_found",
+      },
+    });
+  });
+
   it("isolates broadcast handler failures", async () => {
     const protocol = new WebviewProtocol();
     const webview = new FakeWebview();

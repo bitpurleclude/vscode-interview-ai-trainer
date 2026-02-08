@@ -13,7 +13,7 @@ import {
 import { ItApiConfig, ItConfigBundle } from "./infra/api/it_apiConfig";
 import { ItConfigService } from "./infra/api/it_configService";
 import type { ItLlmConfig } from "./application/services/it_llmGateway";
-import { WebviewProtocol } from "../webview/WebviewProtocol";
+import { WebviewProtocol, type WebviewProtocolEvent } from "../webview/WebviewProtocol";
 import {
   it_buildConfigSnapshot,
   it_normalizeWorkspaceKey,
@@ -27,6 +27,7 @@ import {
   it_logCorpusTrace,
   it_logEmbeddingTestFailure,
   it_logLlmTestFailure,
+  it_logInternalEvent,
 } from "./application/services/it_logging";
 import { IT_STATUS_INIT } from "./application/services/it_progress";
 import {
@@ -87,6 +88,104 @@ export class InterviewTrainerExtension implements vscode.Disposable {
   public corpusWatchers: vscode.FileSystemWatcher[] = [];
   public tokenService!: ItTokenService;
 
+  private handleWebviewProtocolEvent(event: WebviewProtocolEvent): void {
+    if (event.type === "request_no_handler") {
+      it_logInternalEvent(this, {
+        level: "error",
+        event: "protocol.webview.request_unhandled",
+        module: "InterviewTrainerExtension",
+        status: "error",
+        errorCode: "handler_not_found",
+        message: "Webview request has no registered handler",
+        detail: {
+          messageType: event.messageType,
+          messageId: event.messageId,
+        },
+      });
+      return;
+    }
+
+    if (event.type === "request_error") {
+      it_logInternalEvent(this, {
+        level: "error",
+        event: "protocol.webview.request_error",
+        module: "InterviewTrainerExtension",
+        status: "error",
+        errorCode: "handler_error",
+        message: "Webview request handler threw an error",
+        detail: {
+          messageType: event.messageType,
+          messageId: event.messageId,
+          error: event.error,
+        },
+      });
+      return;
+    }
+
+    if (event.type === "broadcast_handler_error") {
+      it_logInternalEvent(this, {
+        level: "error",
+        event: "protocol.webview.broadcast_handler_error",
+        module: "InterviewTrainerExtension",
+        status: "error",
+        errorCode: "handler_error",
+        message: "Webview broadcast handler threw an error",
+        detail: {
+          messageType: event.messageType,
+          handlerIndex: event.handlerIndex,
+          error: event.error,
+        },
+      });
+      return;
+    }
+
+    if (event.type === "send_error") {
+      it_logInternalEvent(this, {
+        level: "error",
+        event: "protocol.webview.send_error",
+        module: "InterviewTrainerExtension",
+        status: "error",
+        errorCode: "post_message_failed",
+        message: "Failed to post message to Webview",
+        detail: {
+          messageType: event.messageType,
+          messageId: event.messageId,
+          error: event.error,
+        },
+      });
+      return;
+    }
+
+    if (event.type === "invalid_message") {
+      it_logInternalEvent(this, {
+        level: "warn",
+        event: "protocol.webview.invalid_message",
+        module: "InterviewTrainerExtension",
+        status: "ignored",
+        message: "Ignored invalid Webview message",
+        detail: {
+          rawKind: event.rawKind,
+          hasMessageId: event.hasMessageId,
+        },
+      });
+      return;
+    }
+
+    if (event.type === "send_without_webview") {
+      it_logInternalEvent(this, {
+        level: "warn",
+        event: "protocol.webview.send_without_webview",
+        module: "InterviewTrainerExtension",
+        status: "ignored",
+        message: "Skip posting message before Webview is ready",
+        detail: {
+          messageType: event.messageType,
+          messageId: event.messageId,
+        },
+      });
+    }
+  }
+
   constructor(
     public readonly context: vscode.ExtensionContext,
     public readonly webviewProtocol: WebviewProtocol,
@@ -95,6 +194,10 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       createOutputChannel: (name) => vscode.window.createOutputChannel(name),
       createConfigService: (context) => new ItConfigService(context),
       createTokenService: (host) => new ItTokenService(host),
+    });
+
+    this.webviewProtocol.setObserver((event) => {
+      this.handleWebviewProtocolEvent(event);
     });
   }
 

@@ -19,6 +19,7 @@
 
 ## 关键调用链
 - `WebviewProtocol.on(...)` -> `interface/handlers/*` -> `application/useCases/*` -> `application/services/*Gateway` -> `infra/*`。
+- 对带 `messageId` 的未知请求，协议层会回包 `errorCode=handler_not_found`，避免前端请求悬挂。
 - 状态类返回（`configBundle/configSnapshot/state`）在 handler 层合并回 Host。
 
 ## 开发注意

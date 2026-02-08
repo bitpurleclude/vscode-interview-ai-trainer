@@ -13,6 +13,7 @@
 - [x] P3 interface-path adoption and tests (`it_webviewTestHelpers.ts`, logger tests)
 - [x] P4 docs sync and delivery checks (`build/test/e2e smoke/package`)
 - [x] P5 handler-wide boundary logging (`it_runLoggedHandler` applied to all Webview route handlers)
+- [x] P6 protocol anomaly logging (`WebviewProtocol` observer + `handler_not_found` request response)
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -93,6 +94,11 @@
 - Introduce shared handler wrapper to emit request/success/error logs on every Webview route.
 - Move interface event naming to stable `interface.<domain>.<action>` codes.
 - Extend ports so all handlers use the same `logCorpusTrace` contract.
+
+### P6 - Protocol Guard
+- Add protocol observer events for invalid messages, unhandled requests, handler runtime exceptions, and send failures.
+- Return structured `handler_not_found` error for unknown request messages with `messageId`.
+- Map protocol anomalies to structured error/warn logs in extension runtime.
 
 ## 5. Impact
 - Positive:
