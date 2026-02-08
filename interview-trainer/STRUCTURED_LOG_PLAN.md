@@ -20,6 +20,7 @@
 - [x] P10 remaining trace normalization for evaluation/cache/indexer observability
 - [x] P11 trace event promotion and template-trace schema unification
 - [x] P12 watcher/stream-drop/webview-runtime coverage
+- [x] P13 webview bridge handshake and workspace selection trace coverage
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -140,6 +141,12 @@
 - Add stream update drop/error diagnostics (`step` and `evaluation`) when streaming is disabled or send fails.
 - Add webview global runtime error capture (`window.error` / `unhandledrejection`) routed through `it/clientTrace`.
 - Add contract/unit tests for stream-drop logging and webview global trace reporter.
+
+### P13 - Webview Bridge and Workspace Selection Coverage
+- Add extension-side bridge lifecycle traces for webview resolve/send/automation-ready handshake and ack validation.
+- Promote protocol observer coverage for `handler_registered` and unhandled broadcast diagnostics.
+- Add workspace directory selection traces (`start/canceled/rejected/success`) with path normalization outcomes.
+- Extend contract/security tests to assert new bridge/workspace log events.
 
 ## 5. Impact
 - Positive:

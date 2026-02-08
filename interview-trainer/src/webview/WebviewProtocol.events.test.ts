@@ -29,6 +29,24 @@ class FakeWebview {
 }
 
 describe("WebviewProtocol observer events", () => {
+
+
+  it("emits handler_registered when handler is attached", () => {
+    const protocol = new WebviewProtocol();
+    const events: WebviewProtocolEvent[] = [];
+
+    protocol.setObserver((event) => {
+      events.push(event);
+    });
+
+    protocol.on("it/demo", () => ({ ok: true }));
+
+    expect(events).toContainEqual({
+      type: "handler_registered",
+      messageType: "it/demo",
+      handlerCount: 1,
+    });
+  });
   it("emits request_no_handler for unknown request", async () => {
     const protocol = new WebviewProtocol();
     const webview = new FakeWebview();

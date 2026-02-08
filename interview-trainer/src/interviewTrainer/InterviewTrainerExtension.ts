@@ -171,6 +171,35 @@ export class InterviewTrainerExtension implements vscode.Disposable {
       return;
     }
 
+    if (event.type === "handler_registered") {
+      it_logInternalEvent(this, {
+        level: "debug",
+        event: "protocol.webview.handler_registered",
+        module: "InterviewTrainerExtension",
+        status: "success",
+        message: "Webview handler registered",
+        detail: {
+          messageType: event.messageType,
+          handlerCount: event.handlerCount,
+        },
+      });
+      return;
+    }
+
+    if (event.type === "broadcast_no_handler") {
+      it_logInternalEvent(this, {
+        level: "debug",
+        event: "protocol.webview.broadcast_unhandled",
+        module: "InterviewTrainerExtension",
+        status: "ignored",
+        message: "Webview broadcast has no handler",
+        detail: {
+          messageType: event.messageType,
+        },
+      });
+      return;
+    }
+
     if (event.type === "send_without_webview") {
       it_logInternalEvent(this, {
         level: "warn",

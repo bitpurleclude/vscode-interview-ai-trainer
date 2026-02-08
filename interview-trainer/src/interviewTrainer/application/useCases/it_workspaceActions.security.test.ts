@@ -27,6 +27,7 @@ function createContext(workspaceRoot: string, selectedPath: string | null) {
     requireWorkspaceRoot: () => workspaceRoot,
     selectDirectory: vi.fn(async () => selectedPath),
     showWarning: vi.fn(),
+    logCorpusTrace: vi.fn(),
   };
 
   return { context, configBundle };
@@ -47,6 +48,14 @@ describe("it_workspaceActions security", () => {
     expect(context.showWarning).toHaveBeenCalledTimes(1);
     expect(context.configService.saveSkillConfig).not.toHaveBeenCalled();
     expect(configBundle.skill.workspace.notes_dir).toBe("inputs/notes");
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "workspace select_dir rejected",
+      expect.objectContaining({
+        event: "application.workspace.select_dir",
+        status: "rejected",
+        reason: "outside_workspace",
+      }),
+    );
   });
 
   it("stores normalized in-workspace path and removes legacy top-level key", async () => {
@@ -62,6 +71,14 @@ describe("it_workspaceActions security", () => {
     expect(result.value).toEqual({ kind: "notes", path: "inputs/notes/sec" });
     expect(configBundle.skill.workspace.notes_dir).toBe("inputs/notes/sec");
     expect(Object.prototype.hasOwnProperty.call(configBundle.skill, "notes_dir")).toBe(false);
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "workspace select_dir success",
+      expect.objectContaining({
+        event: "application.workspace.select_dir",
+        status: "success",
+        normalizedPath: "inputs/notes/sec",
+      }),
+    );
   });
 
   it("rejects sessions directory outside workspace root", async () => {
@@ -75,6 +92,14 @@ describe("it_workspaceActions security", () => {
     expect(context.showWarning).toHaveBeenCalledTimes(1);
     expect(context.configService.saveSkillConfig).not.toHaveBeenCalled();
     expect(configBundle.skill.sessions_dir).toBe("sessions");
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "workspace select_sessions_dir rejected",
+      expect.objectContaining({
+        event: "application.workspace.select_sessions_dir",
+        status: "rejected",
+        reason: "outside_workspace",
+      }),
+    );
   });
 
   it("accepts workspace root as sessions directory", async () => {
@@ -85,6 +110,14 @@ describe("it_workspaceActions security", () => {
 
     expect(result.value).toEqual({ sessionsDir: "." });
     expect(configBundle.skill.sessions_dir).toBe(".");
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "workspace select_sessions_dir success",
+      expect.objectContaining({
+        event: "application.workspace.select_sessions_dir",
+        status: "success",
+        normalizedPath: ".",
+      }),
+    );
   });
 
   it("normalizes sessions nested path with forward slashes", async () => {

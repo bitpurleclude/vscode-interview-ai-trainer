@@ -31,6 +31,7 @@ function it_createWorkspaceUseCaseContext(
     showWarning: (message) => {
       void vscode.window.showWarningMessage(message);
     },
+    logCorpusTrace: host.logCorpusTrace,
   };
 }
 

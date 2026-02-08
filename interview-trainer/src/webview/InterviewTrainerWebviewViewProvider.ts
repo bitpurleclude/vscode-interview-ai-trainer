@@ -2,13 +2,23 @@ import crypto from "crypto";
 import * as vscode from "vscode";
 import { WebviewProtocol } from "./WebviewProtocol";
 
+export type ItWebviewLifecycleEvent = {
+  type: "webview_resolved";
+  viewType: string;
+};
+
 export class InterviewTrainerWebviewViewProvider
   implements vscode.WebviewViewProvider
 {
   public static readonly viewType = "itInterviewTrainer.mainView";
   public readonly webviewProtocol = new WebviewProtocol();
+  private lifecycleObserver?: (event: ItWebviewLifecycleEvent) => void;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
+
+  public setLifecycleObserver(observer?: (event: ItWebviewLifecycleEvent) => void): void {
+    this.lifecycleObserver = observer;
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -17,6 +27,14 @@ export class InterviewTrainerWebviewViewProvider
   ): void {
     this.webviewProtocol.webview = webviewView.webview;
     webviewView.webview.html = this.getHtml(webviewView.webview);
+    try {
+      this.lifecycleObserver?.({
+        type: "webview_resolved",
+        viewType: InterviewTrainerWebviewViewProvider.viewType,
+      });
+    } catch {
+      // keep webview boot path stable when observer fails
+    }
   }
 
   private getHtml(webview: vscode.Webview): string {

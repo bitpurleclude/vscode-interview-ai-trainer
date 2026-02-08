@@ -5,7 +5,10 @@ import * as vscode from "vscode";
 import type { ItAnalyzeRequest } from "./protocol/interviewTrainer";
 import { InterviewTrainerExtension } from "./interviewTrainer/InterviewTrainerExtension";
 import { it_ensureConfigFiles, it_getUserConfigDir } from "./interviewTrainer/infra/api/it_apiConfig";
-import { InterviewTrainerWebviewViewProvider } from "./webview/InterviewTrainerWebviewViewProvider";
+import {
+  InterviewTrainerWebviewViewProvider,
+  type ItWebviewLifecycleEvent,
+} from "./webview/InterviewTrainerWebviewViewProvider";
 
 const IT_E2E_FIXTURE_AUDIO_MAX_BYTES = 256 * 1024;
 const IT_E2E_FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
@@ -118,6 +121,24 @@ async function it_runLoggedCommand<T>(
     });
     throw error;
   }
+}
+
+type ItBridgeLogLevel = "debug" | "info" | "warn" | "error";
+
+function it_logWebviewBridge(
+  trainer: InterviewTrainerExtension,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+  level: ItBridgeLogLevel = "info",
+): void {
+  trainer.logCorpusTrace(`webview bridge ${action} ${status}`, {
+    event: `extension.webview_bridge.${action}`,
+    status,
+    level,
+    module: "extension",
+    ...(detail || {}),
+  });
 }
 
 function it_findFixtureFile(
@@ -337,14 +358,71 @@ export function activate(context: vscode.ExtensionContext) {
   const trainer = new InterviewTrainerExtension(context, viewProvider.webviewProtocol);
   context.subscriptions.push(trainer);
 
+  viewProvider.setLifecycleObserver((event: ItWebviewLifecycleEvent) => {
+    if (event.type !== "webview_resolved") {
+      return;
+    }
+    it_logWebviewBridge(
+      trainer,
+      "resolve",
+      "success",
+      { viewType: event.viewType },
+      "debug",
+    );
+  });
+
   const sendToWebview = async (messageType: string, data?: any): Promise<boolean> => {
+    it_logWebviewBridge(
+      trainer,
+      "send",
+      "request",
+      {
+        messageType,
+        hasData: data !== undefined,
+      },
+      "debug",
+    );
     await vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
     await new Promise((resolve) => setTimeout(resolve, 150));
     if (!viewProvider.webviewProtocol.webview) {
+      it_logWebviewBridge(
+        trainer,
+        "send",
+        "skipped",
+        {
+          messageType,
+          reason: "webview_not_ready",
+        },
+        "warn",
+      );
       return false;
     }
-    viewProvider.webviewProtocol.send(messageType, data);
-    return true;
+    try {
+      viewProvider.webviewProtocol.send(messageType, data);
+      it_logWebviewBridge(
+        trainer,
+        "send",
+        "success",
+        {
+          messageType,
+        },
+        "debug",
+      );
+      return true;
+    } catch (error) {
+      it_logWebviewBridge(
+        trainer,
+        "send",
+        "error",
+        {
+          messageType,
+          errorCode: "webview_send_failed",
+          error: it_commandErrorMessage(error),
+        },
+        "error",
+      );
+      return false;
+    }
   };
 
   context.subscriptions.push(
@@ -450,22 +528,63 @@ export function activate(context: vscode.ExtensionContext) {
     let webviewUiBridgeReady = false;
 
     const ensureWebviewUiBridgeReady = async (): Promise<{ ready: boolean; reason?: string }> => {
-      const readyDeadline = Date.now() + 15_000;
+      const timeoutMs = 15_000;
+      const startedAt = Date.now();
+      const readyDeadline = startedAt + timeoutMs;
+      let focusAttempts = 0;
+      it_logWebviewBridge(
+        trainer,
+        "automation_ready",
+        "start",
+        { timeoutMs },
+        "debug",
+      );
       while (!webviewUiBridgeReady && Date.now() < readyDeadline) {
+        focusAttempts += 1;
         await vscode.commands.executeCommand("itInterviewTrainer.mainView.focus");
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
+      const waitMs = Date.now() - startedAt;
       if (!webviewUiBridgeReady) {
+        it_logWebviewBridge(
+          trainer,
+          "automation_ready",
+          "timeout",
+          {
+            timeoutMs,
+            waitMs,
+            focusAttempts,
+            reason: "bridge_ready_not_received",
+          },
+          "warn",
+        );
         return {
           ready: false,
           reason: "Webview UI automation bridge is not ready",
         };
       }
+      it_logWebviewBridge(
+        trainer,
+        "automation_ready",
+        "success",
+        {
+          waitMs,
+          focusAttempts,
+        },
+        "debug",
+      );
       return { ready: true };
     };
 
     viewProvider.webviewProtocol.on(IT_E2E_WEBVIEW_UI_READY, () => {
       webviewUiBridgeReady = true;
+      it_logWebviewBridge(
+        trainer,
+        "ready_signal",
+        "success",
+        { messageType: IT_E2E_WEBVIEW_UI_READY },
+        "debug",
+      );
       return { received: true };
     });
 
@@ -473,15 +592,48 @@ export function activate(context: vscode.ExtensionContext) {
       webviewUiBridgeReady = true;
       const runId = String(message.data?.runId || "");
       if (!runId) {
+        it_logWebviewBridge(
+          trainer,
+          "ui_ack",
+          "invalid",
+          {
+            reason: "missing_run_id",
+            messageType: IT_E2E_WEBVIEW_UI_ACK,
+          },
+          "warn",
+        );
         return { received: false, reason: "missing runId" };
       }
       const pending = pendingUiRuns.get(runId);
       if (!pending) {
+        it_logWebviewBridge(
+          trainer,
+          "ui_ack",
+          "invalid",
+          {
+            reason: "not_pending",
+            messageType: IT_E2E_WEBVIEW_UI_ACK,
+            runId,
+            pendingCount: pendingUiRuns.size,
+          },
+          "warn",
+        );
         return { received: false, reason: "not pending" };
       }
       clearTimeout(pending.timeout);
       pendingUiRuns.delete(runId);
       pending.resolve(message.data as ItE2EUiAutomationResult);
+      it_logWebviewBridge(
+        trainer,
+        "ui_ack",
+        "success",
+        {
+          messageType: IT_E2E_WEBVIEW_UI_ACK,
+          runId,
+          pendingCount: pendingUiRuns.size,
+        },
+        "debug",
+      );
       return { received: true };
     });
 
@@ -489,15 +641,48 @@ export function activate(context: vscode.ExtensionContext) {
       webviewUiBridgeReady = true;
       const runId = String(message.data?.runId || "");
       if (!runId) {
+        it_logWebviewBridge(
+          trainer,
+          "analyze_ack",
+          "invalid",
+          {
+            reason: "missing_run_id",
+            messageType: IT_E2E_WEBVIEW_ANALYZE_ACK,
+          },
+          "warn",
+        );
         return { received: false, reason: "missing runId" };
       }
       const pending = pendingAnalyzeRuns.get(runId);
       if (!pending) {
+        it_logWebviewBridge(
+          trainer,
+          "analyze_ack",
+          "invalid",
+          {
+            reason: "not_pending",
+            messageType: IT_E2E_WEBVIEW_ANALYZE_ACK,
+            runId,
+            pendingCount: pendingAnalyzeRuns.size,
+          },
+          "warn",
+        );
         return { received: false, reason: "not pending" };
       }
       clearTimeout(pending.timeout);
       pendingAnalyzeRuns.delete(runId);
       pending.resolve(message.data as ItE2EUiAutomationResult);
+      it_logWebviewBridge(
+        trainer,
+        "analyze_ack",
+        "success",
+        {
+          messageType: IT_E2E_WEBVIEW_ANALYZE_ACK,
+          runId,
+          pendingCount: pendingAnalyzeRuns.size,
+        },
+        "debug",
+      );
       return { received: true };
     });
 
@@ -505,15 +690,48 @@ export function activate(context: vscode.ExtensionContext) {
       webviewUiBridgeReady = true;
       const runId = String(message.data?.runId || "");
       if (!runId) {
+        it_logWebviewBridge(
+          trainer,
+          "protocol_ack",
+          "invalid",
+          {
+            reason: "missing_run_id",
+            messageType: IT_E2E_WEBVIEW_PROTOCOL_ACK,
+          },
+          "warn",
+        );
         return { received: false, reason: "missing runId" };
       }
       const pending = pendingProtocolRuns.get(runId);
       if (!pending) {
+        it_logWebviewBridge(
+          trainer,
+          "protocol_ack",
+          "invalid",
+          {
+            reason: "not_pending",
+            messageType: IT_E2E_WEBVIEW_PROTOCOL_ACK,
+            runId,
+            pendingCount: pendingProtocolRuns.size,
+          },
+          "warn",
+        );
         return { received: false, reason: "not pending" };
       }
       clearTimeout(pending.timeout);
       pendingProtocolRuns.delete(runId);
       pending.resolve(message.data as ItE2EUiAutomationResult);
+      it_logWebviewBridge(
+        trainer,
+        "protocol_ack",
+        "success",
+        {
+          messageType: IT_E2E_WEBVIEW_PROTOCOL_ACK,
+          runId,
+          pendingCount: pendingProtocolRuns.size,
+        },
+        "debug",
+      );
       return { received: true };
     });
 

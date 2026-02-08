@@ -173,3 +173,19 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `webview.runtime.window_error`
   - `webview.runtime.unhandled_rejection`
 
+
+## Additional event families (P13)
+- Webview bridge lifecycle events:
+  - `extension.webview_bridge.resolve`
+  - `extension.webview_bridge.send`
+  - `extension.webview_bridge.automation_ready`
+  - `extension.webview_bridge.ready_signal`
+  - `extension.webview_bridge.ui_ack`
+  - `extension.webview_bridge.analyze_ack`
+  - `extension.webview_bridge.protocol_ack`
+- Protocol observer extension events:
+  - `protocol.webview.handler_registered`
+  - `protocol.webview.broadcast_unhandled`
+- Workspace selection use-case events:
+  - `application.workspace.select_dir`
+  - `application.workspace.select_sessions_dir`
