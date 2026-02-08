@@ -117,6 +117,7 @@ export type ItConfigSnapshotHost = {
   corpusDirtyFiles: Set<string>;
   resolveApiConfigWithProviders: (apiConfig: ItApiConfig) => ItApiConfig;
   tokenService?: { getSnapshot: (env: string) => ItTokenStoreSnapshot; sync: () => void };
+  logCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 const IT_LEGACY_WORKSPACE_KEYS = [
@@ -131,6 +132,24 @@ type ItWorkspaceMigrationResult = {
   skill: Record<string, any>;
   changed: boolean;
 };
+
+type ItCorpusWatcherEventKind = "create" | "change" | "delete";
+
+function it_traceCorpusWatchers(
+  host: ItConfigSnapshotHost,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+  level: "debug" | "info" | "warn" | "error" = "info",
+): void {
+  host.logCorpusTrace?.(`corpus_watchers ${action} ${status}`, {
+    event: `application.corpus_watchers.${action}`,
+    module: "it_configSnapshot",
+    status,
+    level,
+    ...(detail || {}),
+  });
+}
 
 function it_migrateLegacyWorkspaceDirs(skill: Record<string, any>): ItWorkspaceMigrationResult {
   const nextSkill = { ...(skill || {}) };
@@ -383,12 +402,21 @@ export function it_buildConfigSnapshot(
 }
 
 export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
+  const disposedCount = host.corpusWatchers.length;
   host.corpusWatchers.forEach((watcher) => watcher.dispose());
   host.corpusWatchers = [];
+  it_traceCorpusWatchers(host, "reset", "success", {
+    disposedCount,
+  });
+
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
+    it_traceCorpusWatchers(host, "setup", "skipped", {
+      reason: "workspace_missing",
+    }, "warn");
     return;
   }
+
   const dirs = it_buildConfigSnapshot(host, host.configBundle.api).workspaceDirs;
   const targets = Array.from(
     new Set([
@@ -399,12 +427,27 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
       dirs.examplesDir,
     ].filter((value) => Boolean(value))),
   );
-  const markDirty = (uri?: vscode.Uri) => {
+
+  it_traceCorpusWatchers(host, "setup", "start", {
+    workspaceRoot,
+    targetCount: targets.length,
+    targets,
+  });
+
+  const markDirty = (kind: ItCorpusWatcherEventKind, uri?: vscode.Uri) => {
     host.corpusDirty = true;
+    let resolvedPath: string | undefined;
     if (uri?.fsPath) {
-      host.corpusDirtyFiles.add(path.resolve(uri.fsPath));
+      resolvedPath = path.resolve(uri.fsPath);
+      host.corpusDirtyFiles.add(resolvedPath);
     }
+    it_traceCorpusWatchers(host, "dirty_mark", "triggered", {
+      kind,
+      path: resolvedPath,
+      dirtyFileCount: host.corpusDirtyFiles.size,
+    }, "debug");
   };
+
   targets.forEach((dir) => {
     const normalized = String(dir || "").replace(/\\/g, "/");
     const pattern = new vscode.RelativePattern(
@@ -412,14 +455,20 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
       path.join(normalized, "**/*"),
     );
     const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-    watcher.onDidCreate((uri) => markDirty(uri));
-    watcher.onDidChange((uri) => markDirty(uri));
-    watcher.onDidDelete((uri) => markDirty(uri));
+    watcher.onDidCreate((uri) => markDirty("create", uri));
+    watcher.onDidChange((uri) => markDirty("change", uri));
+    watcher.onDidDelete((uri) => markDirty("delete", uri));
     host.context.subscriptions.push(watcher);
     host.corpusWatchers.push(watcher);
   });
+
   host.corpusDirty = true;
   host.corpusDirtyFiles.clear();
+  it_traceCorpusWatchers(host, "setup", "success", {
+    watcherCount: host.corpusWatchers.length,
+    corpusDirty: host.corpusDirty,
+    dirtyFileCount: host.corpusDirtyFiles.size,
+  });
 }
 
 export async function it_refreshConfigSnapshot(

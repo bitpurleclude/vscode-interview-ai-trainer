@@ -19,6 +19,7 @@
 - [x] P9 config/recording/persistence/cache/embedding observability (service write paths and cache maintenance)
 - [x] P10 remaining trace normalization for evaluation/cache/indexer observability
 - [x] P11 trace event promotion and template-trace schema unification
+- [x] P12 watcher/stream-drop/webview-runtime coverage
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -133,6 +134,12 @@
 - Keep `error` traces emitted when trace switch is off by auto mapping status/level.
 - Normalize trace logger template events to `infra.template.*` and `infra.llm_template.*` families.
 - Add unit tests for trace metadata promotion and trace-off error emission behavior.
+
+### P12 - Watcher, Stream-Drop, and Webview Runtime Coverage
+- Add corpus watcher lifecycle logs for reset/setup/dirty-mark in config snapshot service.
+- Add stream update drop/error diagnostics (`step` and `evaluation`) when streaming is disabled or send fails.
+- Add webview global runtime error capture (`window.error` / `unhandledrejection`) routed through `it/clientTrace`.
+- Add contract/unit tests for stream-drop logging and webview global trace reporter.
 
 ## 5. Impact
 - Positive:

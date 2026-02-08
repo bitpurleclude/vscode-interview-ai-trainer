@@ -192,4 +192,23 @@ describe("messenger contract", () => {
     );
     expect(traceEvents).toContain("webview.messenger.listener_error");
   });
+
+  it("exports reportClientTrace for global runtime errors", async () => {
+    const harness = installMessengerHarness();
+    const messenger = await import("./messenger");
+
+    messenger.reportClientTrace({
+      level: "error",
+      event: "webview.runtime.window_error",
+      status: "error",
+      message: "window error",
+      errorCode: "window_error",
+      detail: { source: "window.error" },
+    });
+
+    const tracePosts = getTracePosts(harness);
+    expect(tracePosts).toHaveLength(1);
+    expect((tracePosts[0].data as { event?: string }).event).toBe("webview.runtime.window_error");
+  });
+
 });

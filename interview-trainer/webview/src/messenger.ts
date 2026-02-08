@@ -49,6 +49,10 @@ function it_emitClientTrace(payload: ItClientTracePayload): void {
   }
 }
 
+export function reportClientTrace(payload: ItClientTracePayload): void {
+  it_emitClientTrace(payload);
+}
+
 window.addEventListener("message", (event) => {
   const msg = event.data;
   if (!msg || !msg.messageType) {

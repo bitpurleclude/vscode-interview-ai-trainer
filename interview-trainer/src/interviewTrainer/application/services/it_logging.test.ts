@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { it_logCorpusTrace, type ItLogHost } from "./it_logging";
+import {
+  it_emitEvaluationStreamUpdate,
+  it_emitStreamUpdate,
+  it_logCorpusTrace,
+  type ItLogHost,
+} from "./it_logging";
 
 function it_createHost(traceLogsEnabled: boolean): {
   host: ItLogHost;
@@ -94,3 +99,68 @@ describe("it_logCorpusTrace", () => {
     expect(lines).toHaveLength(0);
   });
 });
+
+describe("it_emitStreamUpdate", () => {
+  it("skips send when streaming is disabled", () => {
+    const { host, lines } = it_createHost(true);
+    host.configSnapshot = {
+      streaming: {
+        enabled: false,
+      },
+    } as any;
+
+    it_emitStreamUpdate(host, {
+      step: "asr",
+      text: "delta",
+    });
+
+    expect((host.webviewProtocol.send as any).mock.calls).toHaveLength(0);
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed.event).toBe("application.streaming.step_update");
+    expect(parsed.status).toBe("dropped");
+  });
+
+  it("logs and rethrows when send throws", () => {
+    const { host, lines } = it_createHost(true);
+    host.webviewProtocol.send = vi.fn(() => {
+      throw new Error("send-fail");
+    }) as any;
+
+    expect(() =>
+      it_emitStreamUpdate(host, {
+        step: "evaluation",
+        text: "delta",
+      }),
+    ).toThrow("send-fail");
+
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed.event).toBe("application.streaming.step_update");
+    expect(parsed.status).toBe("error");
+    expect(parsed.errorCode).toBe("webview_send_failed");
+  });
+});
+
+describe("it_emitEvaluationStreamUpdate", () => {
+  it("skips send when streaming is disabled", () => {
+    const { host, lines } = it_createHost(true);
+    host.configSnapshot = {
+      streaming: {
+        enabled: false,
+      },
+    } as any;
+
+    it_emitEvaluationStreamUpdate(host, {
+      questionIndex: 0,
+      text: "delta",
+    });
+
+    expect((host.webviewProtocol.send as any).mock.calls).toHaveLength(0);
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed.event).toBe("application.streaming.evaluation_update");
+    expect(parsed.status).toBe("dropped");
+  });
+});
+

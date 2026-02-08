@@ -10,6 +10,7 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/application/services/it_structuredLogger.ts`
 - `src/interviewTrainer/application/services/it_logSinkGateway.ts`
 - `src/interviewTrainer/application/services/it_extensionRecording.ts`
+- `src/interviewTrainer/application/services/it_configSnapshot.ts`
 - `src/interviewTrainer/application/services/it_analysisPersistence.ts`
 - `src/interviewTrainer/application/services/it_evaluationLlm.ts`
 - `src/interviewTrainer/application/useCases/it_saveCurrentResult.ts`
@@ -24,6 +25,7 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/infra/logging/it_traceLogger.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewHandlerLogging.ts`
 - `src/webview/WebviewProtocol.ts`
+- `webview/src/main.tsx`
 
 ## Structured Log Contract
 Each line emitted to the output channel is a JSON object with stable fields:
@@ -158,4 +160,16 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `infra.llm_template.request`
   - `infra.llm_template.response`
   - `infra.llm_template.error`
+
+## Additional event families (P12)
+- Corpus watcher lifecycle events:
+  - `application.corpus_watchers.reset`
+  - `application.corpus_watchers.setup`
+  - `application.corpus_watchers.dirty_mark`
+- Stream update diagnostics:
+  - `application.streaming.step_update`
+  - `application.streaming.evaluation_update`
+- Webview runtime global error events (via `it/clientTrace`):
+  - `webview.runtime.window_error`
+  - `webview.runtime.unhandled_rejection`
 

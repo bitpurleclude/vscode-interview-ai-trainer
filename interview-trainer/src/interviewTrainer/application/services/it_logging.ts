@@ -135,6 +135,13 @@ function it_extractTraceLogPayload(detail?: Record<string, unknown>): {
   };
 }
 
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 function it_toErrorDetail(error: unknown): Record<string, unknown> {
   const detail: Record<string, unknown> = {};
   const debug = (error as { itDebug?: unknown })?.itDebug;
@@ -263,9 +270,34 @@ export function it_emitStreamUpdate(
   update: ItStepStreamUpdate,
 ): void {
   if (host.configSnapshot?.streaming?.enabled === false) {
+    it_logCorpusTrace(host, "step stream update dropped", {
+      event: "application.streaming.step_update",
+      module: "it_logging",
+      status: "dropped",
+      level: "debug",
+      reason: "streaming_disabled",
+      step: update.step,
+      done: Boolean(update.done),
+      reset: Boolean(update.reset),
+      textLength: update.text.length,
+    });
     return;
   }
-  host.webviewProtocol.send("it/stepStreamUpdate", update);
+
+  try {
+    host.webviewProtocol.send("it/stepStreamUpdate", update);
+  } catch (error) {
+    it_logCorpusTrace(host, "step stream update send failed", {
+      event: "application.streaming.step_update",
+      module: "it_logging",
+      status: "error",
+      level: "error",
+      errorCode: "webview_send_failed",
+      step: update.step,
+      error: it_errorMessage(error),
+    });
+    throw error;
+  }
 }
 
 export function it_emitEvaluationStreamUpdate(
@@ -273,7 +305,32 @@ export function it_emitEvaluationStreamUpdate(
   update: ItEvaluationStreamUpdate,
 ): void {
   if (host.configSnapshot?.streaming?.enabled === false) {
+    it_logCorpusTrace(host, "evaluation stream update dropped", {
+      event: "application.streaming.evaluation_update",
+      module: "it_logging",
+      status: "dropped",
+      level: "debug",
+      reason: "streaming_disabled",
+      questionIndex: update.questionIndex,
+      done: Boolean(update.done),
+      reset: Boolean(update.reset),
+      textLength: update.text.length,
+    });
     return;
   }
-  host.webviewProtocol.send("it/evaluationStreamUpdate", update);
+
+  try {
+    host.webviewProtocol.send("it/evaluationStreamUpdate", update);
+  } catch (error) {
+    it_logCorpusTrace(host, "evaluation stream update send failed", {
+      event: "application.streaming.evaluation_update",
+      module: "it_logging",
+      status: "error",
+      level: "error",
+      errorCode: "webview_send_failed",
+      questionIndex: update.questionIndex,
+      error: it_errorMessage(error),
+    });
+    throw error;
+  }
 }
