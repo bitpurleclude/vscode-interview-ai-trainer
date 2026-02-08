@@ -24,6 +24,7 @@
 - [x] P14 template/result/provider/recording and analysis-stage coverage
 - [x] P15 core/test/guardrail clamp observability coverage
 - [x] P16 environment/template executor/client action observability coverage
+- [x] P17 guardrails normalization summary and executor trace regression tests
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -168,6 +169,11 @@
 - Add application-level environment action logs around all environment settings use-cases with payload summary and duration.
 - Add template executor internal logs for render/run/attempt lifecycle and retry diagnostics (`statusCode`, `attempt`, `durationMs`).
 - Add environment-settings UI action traces in webview (`set_active/create/delete/save_prompts/save_topic_settings/save_streaming_settings`).
+
+### P17 - Guardrails Summary and Trace Regression Tests
+- Add config snapshot guardrails normalization summary event (`application.guardrails.normalization`) when malformed guardrail config requires fallback/clamp.
+- Add guardrail normalization issue collector in guardrails service for deterministic diagnostics and testability.
+- Add template executor trace regression tests to lock `render_request/run/attempt` lifecycle events.
 
 ## 5. Impact
 - Positive:

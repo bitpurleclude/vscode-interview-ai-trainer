@@ -39,6 +39,8 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 - `src/interviewTrainer/application/useCases/it_environmentConfig.ts`
 - `src/interviewTrainer/interface/handlers/it_webviewEnvironmentHandlers.ts`
 - `webview/src/hooks/useEnvironmentSettings.ts`
+- `src/interviewTrainer/application/services/it_guardrails.ts`
+- `src/interviewTrainer/infra/api/it_templateExecutor.logging.test.ts`
 ## Structured Log Contract
 Each line emitted to the output channel is a JSON object with stable fields:
 - `ts`
@@ -278,3 +280,10 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `webview.environment.save_topic_settings`
   - `webview.environment.save_streaming_settings`
 
+## Additional event families (P17)
+- Guardrails normalization summary event:
+  - `application.guardrails.normalization`
+- Added regression test coverage for template executor trace events:
+  - `infra.template_executor.render_request`
+  - `infra.template_executor.run`
+  - `infra.template_executor.attempt`

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   it_clampFloat,
   it_clampInteger,
+  it_collectGuardrailNormalizationIssues,
   it_getLoggingGuardrailsFromConfig,
   it_getRetrievalGuardrailsFromConfig,
 } from "./it_guardrails";
@@ -72,4 +73,74 @@ describe("it_guardrails security", () => {
     expect(logging.limits.detailMaxItemsPerArray).toBe(64);
     expect(logging.policy.emitErrorWhenTraceDisabled).toBe(false);
   });
+
+  it("collects guardrail normalization issues for malformed inputs", () => {
+    const issues = it_collectGuardrailNormalizationIssues({
+      version: 1,
+      retrieval: {
+        limits: {
+          top_k: {
+            min: "bad" as any,
+          },
+          query_window_size: { min: 20, max: 8 },
+        },
+        defaults: {
+          query_window_size: 999,
+        },
+        embedding_request_split_threshold: 999,
+      },
+      logging: {
+        limits: {
+          message_max_chars: 1,
+        },
+        policy: {
+          emit_error_when_trace_disabled: "unknown" as any,
+        },
+      },
+    });
+
+    const paths = issues.map((item) => item.path);
+    expect(paths).toContain("retrieval.limits.top_k.min");
+    expect(paths).toContain("retrieval.limits.query_window_size.max");
+    expect(paths).toContain("retrieval.defaults.query_window_size");
+    expect(paths).toContain("retrieval.embedding_request_split_threshold");
+    expect(paths).toContain("logging.limits.message_max_chars");
+    expect(paths).toContain("logging.policy.emit_error_when_trace_disabled");
+  });
+
+  it("returns empty issues when values are already normalized", () => {
+    const issues = it_collectGuardrailNormalizationIssues({
+      version: 1,
+      retrieval: {
+        limits: {
+          top_k: { min: 1, max: 50 },
+          vector_batch_size: { min: 1, max: 256 },
+          query_window_size: { min: 1, max: 64 },
+          question_max_concurrency: { min: 1, max: 16 },
+          kind_max_concurrency: { min: 1, max: 4 },
+        },
+        defaults: {
+          query_window_size: 8,
+          question_max_concurrency: 3,
+          kind_max_concurrency: 2,
+        },
+        embedding_request_split_threshold: 64,
+      },
+      logging: {
+        limits: {
+          message_max_chars: 4000,
+          detail_max_chars: 12000,
+          detail_max_depth: 6,
+          detail_max_keys_per_object: 128,
+          detail_max_items_per_array: 64,
+        },
+        policy: {
+          emit_error_when_trace_disabled: true,
+        },
+      },
+    });
+
+    expect(issues).toHaveLength(0);
+  });
+
 });

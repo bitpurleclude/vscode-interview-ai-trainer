@@ -14,6 +14,7 @@ import {
   ItTemplatesSnapshot,
 } from "../../../protocol/interviewTrainer";
 import { it_hashText } from "./it_textGateway";
+import { it_collectGuardrailNormalizationIssues } from "./it_guardrails";
 
 const IT_TEMPLATE_VAR_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 
@@ -148,6 +149,20 @@ function it_traceCorpusWatchers(
     status,
     level,
     ...(detail || {}),
+  });
+}
+
+function it_traceGuardrails(host: ItConfigSnapshotHost): void {
+  const issues = it_collectGuardrailNormalizationIssues(host.configBundle.guardrails);
+  if (!issues.length) {
+    return;
+  }
+  host.logCorpusTrace?.("guardrails normalization detected", {
+    event: "application.guardrails.normalization",
+    module: "it_configSnapshot",
+    status: "warn",
+    issueCount: issues.length,
+    issues: issues.slice(0, 20),
   });
 }
 
@@ -484,6 +499,7 @@ export async function it_refreshConfigSnapshot(
   host.configBundle = await host.configService.ensureTemplatesConfig(host.configBundle);
   host.tokenService?.sync();
   host.configBundle.api = host.resolveApiConfigWithProviders(host.configBundle.api);
+  it_traceGuardrails(host);
   host.configSnapshot = it_buildConfigSnapshot(host, host.configBundle.api);
   it_updateCorpusWatchers(host);
   return host.configSnapshot;

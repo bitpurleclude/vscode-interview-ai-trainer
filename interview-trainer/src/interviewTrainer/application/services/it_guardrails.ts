@@ -37,6 +37,12 @@ export type ItLoggingGuardrails = {
   };
 };
 
+export type ItGuardrailNormalizationIssue = {
+  path: string;
+  rawValue: unknown;
+  normalizedValue: number | boolean;
+};
+
 const IT_RETRIEVAL_GUARDRAILS_DEFAULTS: ItRetrievalGuardrails = {
   topK: { min: 1, max: 50 },
   maxConcurrency: { min: 1, max: 1024 },
@@ -92,6 +98,40 @@ function it_toBoolean(value: unknown, fallback: boolean): boolean {
     }
   }
   return fallback;
+}
+
+function it_readNestedValue(source: unknown, path: string[]): unknown {
+  let current: unknown = source;
+  for (const key of path) {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function it_toComparableValue(raw: unknown): unknown {
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : raw;
+  }
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  if (typeof raw === "boolean") {
+    return raw;
+  }
+  return raw;
 }
 
 function it_normalizeRange(raw: unknown, fallback: ItNumericRange): ItNumericRange {
@@ -251,6 +291,149 @@ export function it_getLoggingGuardrailsFromConfig(
       ),
     },
   };
+}
+
+export function it_collectGuardrailNormalizationIssues(
+  guardrailsConfig: ItGuardrailsConfig | undefined,
+): ItGuardrailNormalizationIssue[] {
+  const issues: ItGuardrailNormalizationIssue[] = [];
+  const retrieval = it_getRetrievalGuardrailsFromConfig(guardrailsConfig);
+  const logging = it_getLoggingGuardrailsFromConfig(guardrailsConfig);
+
+  const pairs: Array<{ path: string[]; normalized: number | boolean }> = [
+    { path: ["retrieval", "limits", "top_k", "min"], normalized: retrieval.topK.min },
+    { path: ["retrieval", "limits", "top_k", "max"], normalized: retrieval.topK.max },
+    {
+      path: ["retrieval", "limits", "max_concurrency", "min"],
+      normalized: retrieval.maxConcurrency.min,
+    },
+    {
+      path: ["retrieval", "limits", "max_concurrency", "max"],
+      normalized: retrieval.maxConcurrency.max,
+    },
+    {
+      path: ["retrieval", "limits", "embedding_max_concurrency", "min"],
+      normalized: retrieval.embeddingMaxConcurrency.min,
+    },
+    {
+      path: ["retrieval", "limits", "embedding_max_concurrency", "max"],
+      normalized: retrieval.embeddingMaxConcurrency.max,
+    },
+    {
+      path: ["retrieval", "limits", "warmup_concurrency", "min"],
+      normalized: retrieval.warmupConcurrency.min,
+    },
+    {
+      path: ["retrieval", "limits", "warmup_concurrency", "max"],
+      normalized: retrieval.warmupConcurrency.max,
+    },
+    {
+      path: ["retrieval", "limits", "min_score", "min"],
+      normalized: retrieval.minScore.min,
+    },
+    {
+      path: ["retrieval", "limits", "min_score", "max"],
+      normalized: retrieval.minScore.max,
+    },
+    {
+      path: ["retrieval", "limits", "vector_batch_size", "min"],
+      normalized: retrieval.vectorBatchSize.min,
+    },
+    {
+      path: ["retrieval", "limits", "vector_batch_size", "max"],
+      normalized: retrieval.vectorBatchSize.max,
+    },
+    {
+      path: ["retrieval", "limits", "vector_query_max_chars", "min"],
+      normalized: retrieval.vectorQueryMaxChars.min,
+    },
+    {
+      path: ["retrieval", "limits", "vector_query_max_chars", "max"],
+      normalized: retrieval.vectorQueryMaxChars.max,
+    },
+    {
+      path: ["retrieval", "limits", "query_window_size", "min"],
+      normalized: retrieval.queryWindowSize.min,
+    },
+    {
+      path: ["retrieval", "limits", "query_window_size", "max"],
+      normalized: retrieval.queryWindowSize.max,
+    },
+    {
+      path: ["retrieval", "limits", "question_max_concurrency", "min"],
+      normalized: retrieval.questionMaxConcurrency.min,
+    },
+    {
+      path: ["retrieval", "limits", "question_max_concurrency", "max"],
+      normalized: retrieval.questionMaxConcurrency.max,
+    },
+    {
+      path: ["retrieval", "limits", "kind_max_concurrency", "min"],
+      normalized: retrieval.kindMaxConcurrency.min,
+    },
+    {
+      path: ["retrieval", "limits", "kind_max_concurrency", "max"],
+      normalized: retrieval.kindMaxConcurrency.max,
+    },
+    {
+      path: ["retrieval", "defaults", "query_window_size"],
+      normalized: retrieval.defaults.queryWindowSize,
+    },
+    {
+      path: ["retrieval", "defaults", "question_max_concurrency"],
+      normalized: retrieval.defaults.questionMaxConcurrency,
+    },
+    {
+      path: ["retrieval", "defaults", "kind_max_concurrency"],
+      normalized: retrieval.defaults.kindMaxConcurrency,
+    },
+    {
+      path: ["retrieval", "embedding_request_split_threshold"],
+      normalized: retrieval.embeddingRequestSplitThreshold,
+    },
+    {
+      path: ["logging", "limits", "message_max_chars"],
+      normalized: logging.limits.messageMaxChars,
+    },
+    {
+      path: ["logging", "limits", "detail_max_chars"],
+      normalized: logging.limits.detailMaxChars,
+    },
+    {
+      path: ["logging", "limits", "detail_max_depth"],
+      normalized: logging.limits.detailMaxDepth,
+    },
+    {
+      path: ["logging", "limits", "detail_max_keys_per_object"],
+      normalized: logging.limits.detailMaxKeysPerObject,
+    },
+    {
+      path: ["logging", "limits", "detail_max_items_per_array"],
+      normalized: logging.limits.detailMaxItemsPerArray,
+    },
+    {
+      path: ["logging", "policy", "emit_error_when_trace_disabled"],
+      normalized: logging.policy.emitErrorWhenTraceDisabled,
+    },
+  ];
+
+  pairs.forEach((pair) => {
+    const rawValue = it_readNestedValue(guardrailsConfig, pair.path);
+    if (rawValue === undefined) {
+      return;
+    }
+    const comparable = it_toComparableValue(rawValue);
+    if (comparable === pair.normalized) {
+      return;
+    }
+    issues.push({
+      path: pair.path.join("."),
+      rawValue,
+      normalizedValue: pair.normalized,
+    });
+  });
+
+  return issues;
 }
 
 export function it_getRetrievalGuardrails(
