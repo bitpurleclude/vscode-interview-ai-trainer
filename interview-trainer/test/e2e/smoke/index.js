@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 
+const FIXTURE_ANALYZE_COMMAND = "itInterviewTrainer.__test.runFixtureAnalyze";
+
 function withTimeout(promise, timeoutMs, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -26,8 +28,8 @@ async function activateExtension() {
   return extension;
 }
 
-async function executeCommandAndAssert(commandId) {
-  await withTimeout(vscode.commands.executeCommand(commandId), 10_000, commandId);
+async function executeCommandAndAssert(commandId, timeoutMs = 10_000) {
+  return await withTimeout(vscode.commands.executeCommand(commandId), timeoutMs, commandId);
 }
 
 function resolveFixtureFile(fixtureDir, matcher, label) {
@@ -73,6 +75,31 @@ async function assertFixtureFilesReachable(extension) {
   assert.ok(audioStat.size > 1024, "Audio fixture should be larger than 1KB");
 }
 
+function assertFixtureAnalyzeResult(result) {
+  assert.ok(result && typeof result === "object", "Fixture analyze result should be an object");
+  assert.ok(
+    result.status === "success" || result.status === "error",
+    `Unexpected fixture analyze status: ${String(result.status)}`,
+  );
+
+  if (result.status === "success") {
+    assert.ok(
+      typeof result.questionCount === "number" && result.questionCount > 0,
+      "Fixture analyze success should include positive questionCount",
+    );
+    assert.ok(
+      typeof result.reportPath === "string" && result.reportPath.length > 0,
+      "Fixture analyze success should include reportPath",
+    );
+    return;
+  }
+
+  assert.ok(
+    typeof result.error === "string" && result.error.length > 0,
+    "Fixture analyze error should include readable message",
+  );
+}
+
 async function runSmoke(extension) {
   const allCommands = await vscode.commands.getCommands(true);
   [
@@ -81,6 +108,7 @@ async function runSmoke(extension) {
     "itInterviewTrainer.openHistory",
     "itInterviewTrainer.analyzeAudioFile",
     "itInterviewTrainer.mainView.focus",
+    FIXTURE_ANALYZE_COMMAND,
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
@@ -92,6 +120,12 @@ async function runSmoke(extension) {
   await executeCommandAndAssert("itInterviewTrainer.openSettings");
   await executeCommandAndAssert("itInterviewTrainer.openHistory");
   await executeCommandAndAssert("itInterviewTrainer.open");
+
+  const fixtureAnalyzeResult = await executeCommandAndAssert(
+    FIXTURE_ANALYZE_COMMAND,
+    120_000,
+  );
+  assertFixtureAnalyzeResult(fixtureAnalyzeResult);
 
   assert.strictEqual(extension.isActive, true, "Extension became inactive during smoke commands");
 }

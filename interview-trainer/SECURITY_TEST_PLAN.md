@@ -45,7 +45,8 @@
 - [x] P2-24 Host smoke fixture availability assertions for markdown/audio corpus (`test/e2e/smoke/index.js`).
 - [x] P2-25 Fixture-driven analyze request roundtrip assertions at use-case boundary (`it_analysisFlow.integration.test.ts`).
 - [x] P2-26 Interface handler + protocol + host use-case fixture roundtrip tests (`it_webviewResultHandlers.integration.test.ts`).
-- [ ] P2 suites pending (real extension activation with end-to-end analyze UI automation).
+- [x] P2-27 Real extension activation fixture-analyze smoke command (`itInterviewTrainer.__test.runFixtureAnalyze`).
+- [ ] P2 suites pending (real UI click automation for full analyze lifecycle in Webview).
 
 ## Analyze Full-Flow Fault Matrix (new)
 
