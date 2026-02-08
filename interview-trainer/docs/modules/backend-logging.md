@@ -1,16 +1,55 @@
-# 日志与实时输出（backend-logging）
+# Backend Logging Module
 
-## 模块定位与职责
-统一日志输出与实时流式更新，便于排查模板与请求问题。
+## Scope
+The backend logging module provides structured runtime diagnostics for extension workflows.
+It is used by analysis, template execution traces, test helpers, and host-level failures.
 
-## 目录与关键文件
-- `src/interviewTrainer/application/services/it_logging.ts`：日志输出与 Webview stream 更新
-- `src/interviewTrainer/infra/logging/it_traceLogger.ts`：trace 日志封装
+## Key Files
+- `src/interviewTrainer/application/services/it_logging.ts`
+- `src/interviewTrainer/application/services/it_structuredLogger.ts`
+- `src/interviewTrainer/application/services/it_logSinkGateway.ts`
+- `src/interviewTrainer/infra/logging/it_outputChannelLogSink.ts`
+- `src/interviewTrainer/infra/logging/it_traceLogger.ts`
 
-## 关键调用链
-- 模板测试失败：`it_webviewTestHandlers.ts` → `it_logging.ts`
-- 分析流程：`application/useCases/it_analysisFlow.ts` → `it_logging.ts` → Webview
+## Structured Log Contract
+Each line emitted to the output channel is a JSON object with stable fields:
+- `ts`
+- `level`
+- `event`
+- `layer`
+- `module`
+- `runId` (optional)
+- `requestId` (optional)
+- `stage` (optional)
+- `status` (optional)
+- `errorCode` (optional)
+- `message`
+- `detail` (optional, sanitized and size-limited)
 
-## 注意事项
-- 输出面板：`Interview Trainer`
-- 日志开关默认关闭，仅设置页开启后打印
+## Guardrails
+Logging limits and policy come from `config/guardrails.yaml` under `logging`.
+Runtime parsing and clamping are centralized in:
+- `src/interviewTrainer/application/services/it_guardrails.ts`
+
+Current logging guardrails:
+- `message_max_chars`
+- `detail_max_chars`
+- `detail_max_depth`
+- `detail_max_keys_per_object`
+- `detail_max_items_per_array`
+- `emit_error_when_trace_disabled`
+
+## Runtime Policy
+- Trace switch enabled: emit `debug/info/warn/error`.
+- Trace switch disabled: emit `error` only (controlled by guardrail policy).
+- Sensitive keys (`api_key`, `token`, `authorization`, etc.) are masked.
+- Binary payload-like fields (`audio`, `base64`, `speech`, etc.) are summarized by length.
+
+## Notes for Contributors
+- Do not call `outputChannel.appendLine` directly for business logs.
+- Emit logs through application-level structured logger utilities.
+- When adding a new event family, keep `event` names stable for test assertions.
+- Any logging-limit change must update:
+  - `config/guardrails.yaml`
+  - `it_guardrails.ts`
+  - relevant tests and docs

@@ -30,7 +30,7 @@
   - related use-cases/flows/tests
   - architecture/config documentation
 
-## Guardrails Currently Wired (Retrieval Path)
+## Guardrails Currently Wired
 - TopK caps
 - Query concurrency caps
 - Embedding concurrency caps (retrieval + warmup)
@@ -39,3 +39,12 @@
 - Query window size for auto-batching
 - Question-level and kind-level concurrency caps
 - Embedding request split threshold (auto-split when exceeded)
+
+
+## Guardrails Currently Wired (Logging Path)
+- Message max character cap
+- Detail serialized max character cap
+- Detail max recursion depth
+- Detail max keys per object
+- Detail max items per array
+- Policy: emit error logs when trace switch is disabled

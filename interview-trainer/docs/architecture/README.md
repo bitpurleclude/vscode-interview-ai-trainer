@@ -27,6 +27,7 @@ This directory tracks the layered architecture, call chains, and refactor status
 ## Current Focus
 - Analysis pipeline is stable under `application/useCases` + `application/flows`.
 - Interface now uses capability ports in `it_webviewHandlerPorts.ts`.
+- Structured logging now follows one pipeline: `it_structuredLogger.ts` -> `it_logSinkGateway.ts` -> `infra/logging/it_outputChannelLogSink.ts`.
 - Next iteration continues to reduce responsibilities in `InterviewTrainerExtension`.
 
 ## References

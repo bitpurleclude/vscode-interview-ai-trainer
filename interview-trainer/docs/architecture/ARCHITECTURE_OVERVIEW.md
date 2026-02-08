@@ -44,6 +44,13 @@
 - Backend: `application/services/it_logging.ts` -> `it/evaluationStreamUpdate` / `it/stepStreamUpdate`
 - Frontend: `webview/src/hooks/useStreaming.ts` -> `StepsList` / `StreamCard`
 
+### 3.5 Structured Logging Pipeline
+- Log DTO and emission policy: `application/services/it_structuredLogger.ts`
+- Application logging facade: `application/services/it_logging.ts`
+- Sink gateway: `application/services/it_logSinkGateway.ts`
+- Output sink implementation: `infra/logging/it_outputChannelLogSink.ts`
+- Template trace builder: `infra/logging/it_traceLogger.ts`
+
 ## 4. Config and Template System
 - YAML defaults: `config/*.yaml`
 - Runtime config service: `application/services/it_configGateway.ts` -> `infra/api/it_configService.ts`
@@ -58,7 +65,7 @@
 
 ## 6. Guardrails (Upper-Bound Controls)
 - Single source of truth: `config/guardrails.yaml`.
-- Any hard limit (concurrency, batch, split threshold, query window, char cap) must be defined in guardrails config.
+- Any hard limit (concurrency, batch, split threshold, query window, char cap, logging caps) must be defined in guardrails config.
 - Runtime clamp/parsing entry: `src/interviewTrainer/application/services/it_guardrails.ts`.
 - Retrieval stack currently reads guardrails in:
   - `src/interviewTrainer/application/useCases/it_retrievalActions.ts`

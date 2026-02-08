@@ -43,6 +43,7 @@ export type ItCoreHandlersPort =
     traceLogsEnabled: boolean;
     state: ItState;
     scheduleEmbeddingWarmup: (reason: string, delayMs?: number) => void;
+    logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
   };
 
 export type ItEnvironmentHandlersPort =
@@ -137,6 +138,10 @@ export type ItLlmTestHandlerPort =
   & {
     logLlmTestFailure: (error: unknown, detail?: Record<string, unknown>) => void;
     outputChannel: vscode.OutputChannel;
+    traceLogsEnabled: boolean;
+    configBundle?: {
+      guardrails?: unknown;
+    };
   };
 
 export type ItConfigHandlersPort =

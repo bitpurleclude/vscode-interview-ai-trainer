@@ -5,31 +5,67 @@ import type {
   ItStepStreamUpdate,
   ItWebviewPort,
 } from "./it_webviewPort";
+import { it_getLoggingGuardrailsFromConfig } from "./it_guardrails";
+import { it_createOutputChannelLogSink } from "./it_logSinkGateway";
+import { it_createStructuredLogger } from "./it_structuredLogger";
 
 export type ItLogHost = {
   outputChannel: vscode.OutputChannel;
   traceLogsEnabled: boolean;
   webviewProtocol: ItWebviewPort;
   configSnapshot: ItConfigSnapshot;
+  configBundle?: {
+    guardrails?: unknown;
+  };
 };
 
-export function it_logEmbeddingTestFailure(host: ItLogHost, error: unknown): void {
-  const stamp = new Date().toISOString();
-  host.outputChannel.appendLine(`[${stamp}] Embedding test failed.`);
+function it_createHostLogger(host: ItLogHost) {
+  const guardrails = it_getLoggingGuardrailsFromConfig(host.configBundle?.guardrails as any);
+  return it_createStructuredLogger({
+    sink: it_createOutputChannelLogSink(host.outputChannel),
+    traceLogsEnabled: host.traceLogsEnabled,
+    guardrails,
+  });
+}
+
+function it_toErrorDetail(error: unknown): Record<string, unknown> {
+  const detail: Record<string, unknown> = {};
   const debug = (error as { itDebug?: unknown })?.itDebug;
-  if (debug) {
-    host.outputChannel.appendLine("Request/Response:");
-    try {
-      host.outputChannel.appendLine(JSON.stringify(debug, null, 2));
-    } catch {
-      host.outputChannel.appendLine(String(debug));
-    }
+  if (debug !== undefined) {
+    detail.debug = debug;
   }
+
+  const response = (error as { response?: { status?: number; data?: unknown } })?.response;
+  if (response) {
+    detail.response = {
+      status: response.status,
+      data: response.data,
+    };
+  }
+
   if (error instanceof Error) {
-    host.outputChannel.appendLine(`Message: ${error.message}`);
-  } else if (error) {
-    host.outputChannel.appendLine(`Message: ${String(error)}`);
+    detail.error = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  } else if (error !== undefined) {
+    detail.error = String(error);
   }
+
+  return detail;
+}
+
+export function it_logEmbeddingTestFailure(host: ItLogHost, error: unknown): void {
+  const logger = it_createHostLogger(host);
+  logger.error({
+    event: "test.embedding.failure",
+    layer: "application",
+    module: "it_logging",
+    status: "failed",
+    message: "Embedding test failed",
+    detail: it_toErrorDetail(error),
+  });
   host.outputChannel.show(true);
 }
 
@@ -38,46 +74,18 @@ export function it_logLlmTestFailure(
   error: unknown,
   detail?: Record<string, unknown>,
 ): void {
-  const stamp = new Date().toISOString();
-  host.outputChannel.appendLine(`[${stamp}] LLM test failed.`);
-  if (detail) {
-    try {
-      host.outputChannel.appendLine(JSON.stringify(detail, null, 2));
-    } catch {
-      host.outputChannel.appendLine(String(detail));
-    }
-  }
-  const debug = (error as { itDebug?: unknown })?.itDebug;
-  if (debug) {
-    host.outputChannel.appendLine("Request/Response:");
-    try {
-      host.outputChannel.appendLine(JSON.stringify(debug, null, 2));
-    } catch {
-      host.outputChannel.appendLine(String(debug));
-    }
-  }
-  const response = (error as any)?.response;
-  if (response?.status || response?.data) {
-    try {
-      host.outputChannel.appendLine(
-        JSON.stringify(
-          {
-            status: response?.status,
-            data: response?.data,
-          },
-          null,
-          2,
-        ),
-      );
-    } catch {
-      host.outputChannel.appendLine(String(response?.status ?? ""));
-    }
-  }
-  if (error instanceof Error) {
-    host.outputChannel.appendLine(`Message: ${error.message}`);
-  } else if (error) {
-    host.outputChannel.appendLine(`Message: ${String(error)}`);
-  }
+  const logger = it_createHostLogger(host);
+  logger.error({
+    event: "test.llm.failure",
+    layer: "application",
+    module: "it_logging",
+    status: "failed",
+    message: "LLM test failed",
+    detail: {
+      ...(detail || {}),
+      ...it_toErrorDetail(error),
+    },
+  });
   host.outputChannel.show(true);
 }
 
@@ -86,17 +94,14 @@ export function it_logCorpusTrace(
   message: string,
   detail?: Record<string, unknown>,
 ): void {
-  if (!host.traceLogsEnabled) {
-    return;
-  }
-  const stamp = new Date().toISOString();
-  if (detail && Object.keys(detail).length) {
-    host.outputChannel.appendLine(
-      `[${stamp}] ${message} ${JSON.stringify(detail)}`,
-    );
-  } else {
-    host.outputChannel.appendLine(`[${stamp}] ${message}`);
-  }
+  const logger = it_createHostLogger(host);
+  logger.info({
+    event: "trace.corpus",
+    layer: "application",
+    module: "it_logging",
+    message: message || "trace event",
+    detail,
+  });
 }
 
 export function it_emitStreamUpdate(

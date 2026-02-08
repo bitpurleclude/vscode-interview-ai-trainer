@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   it_clampFloat,
   it_clampInteger,
+  it_getLoggingGuardrailsFromConfig,
   it_getRetrievalGuardrailsFromConfig,
 } from "./it_guardrails";
 
@@ -45,5 +46,30 @@ describe("it_guardrails security", () => {
     expect(it_clampFloat(Number.NaN, 0.3, { min: 0, max: 1 })).toBe(0.3);
     expect(it_clampFloat(-10, 0.3, { min: 0, max: 1 })).toBe(0);
     expect(it_clampFloat(10, 0.3, { min: 0, max: 1 })).toBe(1);
+  });
+
+  it("normalizes logging guardrails and policy", () => {
+    const logging = it_getLoggingGuardrailsFromConfig({
+      version: 1,
+      logging: {
+        limits: {
+          message_max_chars: 1,
+          detail_max_chars: 999999,
+          detail_max_depth: -3,
+          detail_max_keys_per_object: 4096,
+          detail_max_items_per_array: Number.NaN,
+        },
+        policy: {
+          emit_error_when_trace_disabled: false,
+        },
+      },
+    });
+
+    expect(logging.limits.messageMaxChars).toBe(128);
+    expect(logging.limits.detailMaxChars).toBe(200000);
+    expect(logging.limits.detailMaxDepth).toBe(1);
+    expect(logging.limits.detailMaxKeysPerObject).toBe(1024);
+    expect(logging.limits.detailMaxItemsPerArray).toBe(64);
+    expect(logging.policy.emitErrorWhenTraceDisabled).toBe(false);
   });
 });

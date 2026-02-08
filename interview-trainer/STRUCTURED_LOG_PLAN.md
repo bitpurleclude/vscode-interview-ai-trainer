@@ -6,6 +6,13 @@
 - When trace logging is disabled, still emit `error` level logs for internal diagnosis.
 - Keep all logging limits in `config/guardrails.yaml`; do not hardcode limits in business logic.
 
+## 1.1 Progress (2026-02-08)
+- [x] P0 planning document and logging guardrails section
+- [x] P1 structured logger foundation (`it_structuredLogger.ts`, sink gateway, output sink)
+- [x] P2 key adoption in host logging (`it_logging.ts`, trace logger event normalization)
+- [x] P3 interface-path adoption and tests (`it_webviewTestHelpers.ts`, logger tests)
+- [x] P4 docs sync and delivery checks (`build/test/e2e smoke/package`)
+
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
 - Output formats are inconsistent: plain text, semi-structured detail, and trace payloads are mixed.

@@ -26,10 +26,9 @@ function it_createCoreUseCaseContext(host: ItCoreHandlersPort): ItCoreUseCaseCon
     showOutput: () => {
       host.outputChannel.show(true);
     },
-    appendOutputLine: (line) => {
-      host.outputChannel.appendLine(line);
+    logTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
     },
-    nowIso: () => new Date().toISOString(),
     platform: process.platform,
     openFile: async (filePath) => {
       await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(filePath));

@@ -31,3 +31,5 @@ Application service layer (cross-use-case reuse).
   - `it_analysisRunConfig.ts`: analysis-run config/dependency builder (config reload + env merge + flow deps).
   - `it_analysisErrors.ts`: analysis cancel/error semantics constants and user-error builder.
   - `it_analysisHostPorts.ts`: shared host port contracts for analysis use-case/session/run-config delegation boundaries.
+  - `it_structuredLogger.ts`: canonical structured JSON-line logger with masking and guardrail-aware truncation.
+  - `it_logSinkGateway.ts`: gateway for structured log sink adapters.

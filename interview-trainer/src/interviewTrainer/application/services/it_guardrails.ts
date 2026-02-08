@@ -24,6 +24,19 @@ export type ItRetrievalGuardrails = {
   embeddingRequestSplitThreshold: number;
 };
 
+export type ItLoggingGuardrails = {
+  limits: {
+    messageMaxChars: number;
+    detailMaxChars: number;
+    detailMaxDepth: number;
+    detailMaxKeysPerObject: number;
+    detailMaxItemsPerArray: number;
+  };
+  policy: {
+    emitErrorWhenTraceDisabled: boolean;
+  };
+};
+
 const IT_RETRIEVAL_GUARDRAILS_DEFAULTS: ItRetrievalGuardrails = {
   topK: { min: 1, max: 50 },
   maxConcurrency: { min: 1, max: 1024 },
@@ -43,6 +56,19 @@ const IT_RETRIEVAL_GUARDRAILS_DEFAULTS: ItRetrievalGuardrails = {
   embeddingRequestSplitThreshold: 64,
 };
 
+const IT_LOGGING_GUARDRAILS_DEFAULTS: ItLoggingGuardrails = {
+  limits: {
+    messageMaxChars: 4000,
+    detailMaxChars: 12000,
+    detailMaxDepth: 6,
+    detailMaxKeysPerObject: 128,
+    detailMaxItemsPerArray: 64,
+  },
+  policy: {
+    emitErrorWhenTraceDisabled: true,
+  },
+};
+
 function it_asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -50,6 +76,22 @@ function it_asRecord(value: unknown): Record<string, unknown> {
 function it_toNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function it_toBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return fallback;
 }
 
 function it_normalizeRange(raw: unknown, fallback: ItNumericRange): ItNumericRange {
@@ -166,8 +208,59 @@ export function it_getRetrievalGuardrailsFromConfig(
   };
 }
 
+export function it_getLoggingGuardrailsFromConfig(
+  guardrailsConfig: ItGuardrailsConfig | undefined,
+): ItLoggingGuardrails {
+  const guardrails = it_asRecord(guardrailsConfig);
+  const logging = it_asRecord(guardrails.logging);
+  const limits = it_asRecord(logging.limits);
+  const policy = it_asRecord(logging.policy);
+
+  return {
+    limits: {
+      messageMaxChars: it_clampInteger(
+        limits.message_max_chars,
+        IT_LOGGING_GUARDRAILS_DEFAULTS.limits.messageMaxChars,
+        { min: 128, max: 100_000 },
+      ),
+      detailMaxChars: it_clampInteger(
+        limits.detail_max_chars,
+        IT_LOGGING_GUARDRAILS_DEFAULTS.limits.detailMaxChars,
+        { min: 256, max: 200_000 },
+      ),
+      detailMaxDepth: it_clampInteger(
+        limits.detail_max_depth,
+        IT_LOGGING_GUARDRAILS_DEFAULTS.limits.detailMaxDepth,
+        { min: 1, max: 16 },
+      ),
+      detailMaxKeysPerObject: it_clampInteger(
+        limits.detail_max_keys_per_object,
+        IT_LOGGING_GUARDRAILS_DEFAULTS.limits.detailMaxKeysPerObject,
+        { min: 4, max: 1024 },
+      ),
+      detailMaxItemsPerArray: it_clampInteger(
+        limits.detail_max_items_per_array,
+        IT_LOGGING_GUARDRAILS_DEFAULTS.limits.detailMaxItemsPerArray,
+        { min: 4, max: 2048 },
+      ),
+    },
+    policy: {
+      emitErrorWhenTraceDisabled: it_toBoolean(
+        policy.emit_error_when_trace_disabled,
+        IT_LOGGING_GUARDRAILS_DEFAULTS.policy.emitErrorWhenTraceDisabled,
+      ),
+    },
+  };
+}
+
 export function it_getRetrievalGuardrails(
   configBundle: Pick<ItConfigBundle, "guardrails">,
 ): ItRetrievalGuardrails {
   return it_getRetrievalGuardrailsFromConfig(configBundle.guardrails);
+}
+
+export function it_getLoggingGuardrails(
+  configBundle: Pick<ItConfigBundle, "guardrails">,
+): ItLoggingGuardrails {
+  return it_getLoggingGuardrailsFromConfig(configBundle.guardrails);
 }

@@ -41,6 +41,18 @@ export interface ItGuardrailsConfig {
     };
     embedding_request_split_threshold?: number;
   };
+  logging?: {
+    limits?: {
+      message_max_chars?: number;
+      detail_max_chars?: number;
+      detail_max_depth?: number;
+      detail_max_keys_per_object?: number;
+      detail_max_items_per_array?: number;
+    };
+    policy?: {
+      emit_error_when_trace_disabled?: boolean;
+    };
+  };
 }
 
 export interface ItConfigBundle {

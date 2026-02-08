@@ -20,8 +20,7 @@ export type ItCoreUseCaseContext = {
   requireWorkspaceRoot: () => string;
   setTraceLogsEnabled: (enabled: boolean) => void;
   showOutput: () => void;
-  appendOutputLine: (line: string) => void;
-  nowIso: () => string;
+  logTrace: (message: string, detail?: Record<string, unknown>) => void;
   platform: NodeJS.Platform;
   openFile: (filePath: string) => Promise<void>;
   openExternal: (uri: string) => Promise<void>;
@@ -61,9 +60,10 @@ export function it_enableTraceLogsFromWebview(params: {
 }): ItCoreResult<{ enabled: true }> {
   params.context.setTraceLogsEnabled(true);
   params.context.showOutput();
-  params.context.appendOutputLine(
-    `[${params.context.nowIso()}] 已开启日志输出（Interview Trainer）`,
-  );
+  params.context.logTrace("trace logging enabled", {
+    event: "config.trace.enabled",
+    source: "webview",
+  });
   return {
     value: { enabled: true },
   };

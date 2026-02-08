@@ -157,9 +157,15 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
   };
 
   return {
-    logTemplateRequest: async (stage: string, runtime: ItTemplateRuntime, variables: Record<string, unknown>, options?: { stream?: boolean; timeoutSec?: number }) => {
+    logTemplateRequest: async (
+      stage: string,
+      runtime: ItTemplateRuntime,
+      variables: Record<string, unknown>,
+      options?: { stream?: boolean; timeoutSec?: number },
+    ) => {
       const request = await it_buildTemplateRequest(runtime, variables, options?.stream, options?.timeoutSec);
-      emit(`${stage} ??`, {
+      emit(`${stage} request`, {
+        event: "template.request",
         stage,
         type: "request",
         template: it_buildTemplateInfo(runtime.template),
@@ -167,8 +173,19 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
         request,
       });
     },
-    logTemplateResponse: (stage: string, runtime: ItTemplateRuntime, response: { text?: string; value?: unknown; status?: number; headers?: Record<string, string>; raw?: unknown }) => {
-      emit(`${stage} ??`, {
+    logTemplateResponse: (
+      stage: string,
+      runtime: ItTemplateRuntime,
+      response: {
+        text?: string;
+        value?: unknown;
+        status?: number;
+        headers?: Record<string, string>;
+        raw?: unknown;
+      },
+    ) => {
+      emit(`${stage} response`, {
+        event: "template.response",
         stage,
         type: "response",
         template: it_buildTemplateInfo(runtime.template),
@@ -176,8 +193,14 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
         response,
       });
     },
-    logTemplateError: (stage: string, runtime: ItTemplateRuntime | null, error: unknown, detail?: Record<string, unknown>) => {
-      emit(`${stage} ??`, {
+    logTemplateError: (
+      stage: string,
+      runtime: ItTemplateRuntime | null,
+      error: unknown,
+      detail?: Record<string, unknown>,
+    ) => {
+      emit(`${stage} error`, {
+        event: "template.error",
         stage,
         type: "error",
         template: it_buildTemplateInfo(runtime?.template || undefined),
@@ -186,7 +209,12 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
         ...(detail || {}),
       });
     },
-    logLlmTemplateRequest: async (stage: string, cfg: ItLlmConfig, messages: ItLlmMessage[], streamEnabled?: boolean) => {
+    logLlmTemplateRequest: async (
+      stage: string,
+      cfg: ItLlmConfig,
+      messages: ItLlmMessage[],
+      streamEnabled?: boolean,
+    ) => {
       if (!cfg.template || !cfg.templateContext || !cfg.templateEnv) {
         return;
       }
@@ -197,7 +225,8 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
       };
       const variables = it_buildLlmVariables(cfg, messages, streamEnabled ?? cfg.stream ?? true);
       const request = await it_buildTemplateRequest(runtime, variables, streamEnabled ?? cfg.stream, cfg.timeoutSec);
-      emit(`${stage} ??`, {
+      emit(`${stage} request`, {
+        event: "llm.template.request",
         stage,
         type: "request",
         template: it_buildTemplateInfo(runtime.template),
@@ -209,7 +238,8 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
       if (!cfg.template || !cfg.templateEnv) {
         return;
       }
-      emit(`${stage} ??`, {
+      emit(`${stage} response`, {
+        event: "llm.template.response",
         stage,
         type: "response",
         template: it_buildTemplateInfo(cfg.template),
@@ -221,7 +251,8 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
       if (!cfg?.template || !cfg.templateEnv) {
         return;
       }
-      emit(`${stage} ??`, {
+      emit(`${stage} error`, {
+        event: "llm.template.error",
         stage,
         type: "error",
         template: it_buildTemplateInfo(cfg.template),
