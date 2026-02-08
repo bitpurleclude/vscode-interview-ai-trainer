@@ -21,7 +21,7 @@ const IT_E2E_WEBVIEW_ANALYZE_ACK = "it/test/webviewAnalyzeFlowAck";
 const IT_E2E_WEBVIEW_UI_TIMEOUT_MS = 20_000;
 const IT_E2E_WEBVIEW_ANALYZE_TIMEOUT_MS = 90_000;
 const IT_E2E_WORKSPACE_ERROR_CODE = "workspace_not_found";
-const IT_E2E_WORKSPACE_ERROR_MESSAGE = "?????????????????";
+const IT_E2E_WORKSPACE_ERROR_MESSAGE = "Please open a workspace folder before running analysis.";
 
 type ItE2EUiAutomationResult = {
   runId: string;
