@@ -18,6 +18,7 @@
 - [x] P8 command/token/messenger observability (extension command boundary, token lifecycle, webview messenger telemetry)
 - [x] P9 config/recording/persistence/cache/embedding observability (service write paths and cache maintenance)
 - [x] P10 remaining trace normalization for evaluation/cache/indexer observability
+- [x] P11 trace event promotion and template-trace schema unification
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -126,6 +127,12 @@
 - Normalize embedding cache read/write/split tracing to `infra.embedding_cache.*` events.
 - Normalize embedding warmup lifecycle tracing to `infra.embedding_warmup.prepare`.
 - Normalize incremental index fallback tracing to `infra.corpus_index.incremental_fallback`.
+
+### P11 - Trace Event Promotion and Template Schema Unification
+- Promote `detail.event/status/layer/module/*` from `logCorpusTrace` into top-level structured log fields.
+- Keep `error` traces emitted when trace switch is off by auto mapping status/level.
+- Normalize trace logger template events to `infra.template.*` and `infra.llm_template.*` families.
+- Add unit tests for trace metadata promotion and trace-off error emission behavior.
 
 ## 5. Impact
 - Positive:

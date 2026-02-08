@@ -6,6 +6,7 @@ It is used by analysis, template execution traces, test helpers, and host-level 
 
 ## Key Files
 - `src/interviewTrainer/application/services/it_logging.ts`
+- `src/interviewTrainer/application/services/it_logging.test.ts`
 - `src/interviewTrainer/application/services/it_structuredLogger.ts`
 - `src/interviewTrainer/application/services/it_logSinkGateway.ts`
 - `src/interviewTrainer/application/services/it_extensionRecording.ts`
@@ -54,7 +55,7 @@ Current logging guardrails:
 
 ## Runtime Policy
 - Trace switch enabled: emit `debug/info/warn/error`.
-- Trace switch disabled: emit `error` only (controlled by guardrail policy).
+- Trace switch disabled: emit `error` only (controlled by guardrail policy); `logCorpusTrace` auto-promotes `status=error` into `error` level.
 - Sensitive keys (`api_key`, `token`, `authorization`, etc.) are masked.
 - Binary payload-like fields (`audio`, `base64`, `speech`, etc.) are summarized by length.
 
@@ -146,4 +147,15 @@ Unknown request messages with `messageId` now return a structured error payload 
   - `infra.embedding_warmup.prepare`
 - Incremental index fallback normalization event:
   - `infra.corpus_index.incremental_fallback`
+
+## Additional event families (P11)
+- Trace event promotion (top-level fields from detail metadata):
+  - `event/status/layer/module/stage/runId/requestId/errorCode` are promoted when provided in trace detail.
+- Template trace schema unification events:
+  - `infra.template.request`
+  - `infra.template.response`
+  - `infra.template.error`
+  - `infra.llm_template.request`
+  - `infra.llm_template.response`
+  - `infra.llm_template.error`
 

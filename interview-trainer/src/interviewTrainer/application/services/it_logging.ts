@@ -38,6 +38,103 @@ function it_createHostLogger(host: ItLogHost) {
   });
 }
 
+
+const IT_TRACE_META_KEYS = new Set([
+  "event",
+  "layer",
+  "module",
+  "status",
+  "errorCode",
+  "stage",
+  "runId",
+  "requestId",
+  "level",
+]);
+
+function it_pickString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function it_resolveTraceLayer(event: string, layer?: string): string {
+  if (layer) {
+    return layer;
+  }
+  if (event.startsWith("interface.")) {
+    return "interface";
+  }
+  if (event.startsWith("infra.")) {
+    return "infra";
+  }
+  if (event.startsWith("domain.")) {
+    return "domain";
+  }
+  return "application";
+}
+
+function it_resolveTraceLevel(
+  status: string | undefined,
+  level: unknown,
+): "debug" | "info" | "warn" | "error" {
+  const normalizedLevel = String(level || "").toLowerCase();
+  if (
+    normalizedLevel === "debug" ||
+    normalizedLevel === "info" ||
+    normalizedLevel === "warn" ||
+    normalizedLevel === "error"
+  ) {
+    return normalizedLevel;
+  }
+  const normalizedStatus = String(status || "").toLowerCase();
+  if (normalizedStatus === "error") {
+    return "error";
+  }
+  if (normalizedStatus === "warn" || normalizedStatus === "warning") {
+    return "warn";
+  }
+  return "info";
+}
+
+function it_extractTraceLogPayload(detail?: Record<string, unknown>): {
+  event: string;
+  layer: string;
+  module: string;
+  status?: string;
+  errorCode?: string;
+  stage?: string;
+  runId?: string;
+  requestId?: string;
+  level: "debug" | "info" | "warn" | "error";
+  detail?: Record<string, unknown>;
+} {
+  const source = detail || {};
+  const event = it_pickString(source.event) || "trace.corpus";
+  const status = it_pickString(source.status);
+  const layer = it_resolveTraceLayer(event, it_pickString(source.layer));
+  const module = it_pickString(source.module) || "it_logging";
+  const errorCode = it_pickString(source.errorCode);
+  const stage = it_pickString(source.stage);
+  const runId = it_pickString(source.runId);
+  const requestId = it_pickString(source.requestId);
+  const level = it_resolveTraceLevel(status, source.level);
+
+  const payload = Object.fromEntries(
+    Object.entries(source).filter(([key]) => !IT_TRACE_META_KEYS.has(key)),
+  ) as Record<string, unknown>;
+
+  return {
+    event,
+    layer,
+    module,
+    status,
+    errorCode,
+    stage,
+    runId,
+    requestId,
+    level,
+    detail: Object.keys(payload).length ? payload : undefined,
+  };
+}
+
 function it_toErrorDetail(error: unknown): Record<string, unknown> {
   const detail: Record<string, unknown> = {};
   const debug = (error as { itDebug?: unknown })?.itDebug;
@@ -131,13 +228,34 @@ export function it_logCorpusTrace(
   detail?: Record<string, unknown>,
 ): void {
   const logger = it_createHostLogger(host);
-  logger.info({
-    event: "trace.corpus",
-    layer: "application",
-    module: "it_logging",
-    message: message || "trace event",
-    detail,
-  });
+  const payload = it_extractTraceLogPayload(detail);
+  const resolvedMessage = message || `${payload.event}${payload.status ? ` ${payload.status}` : ""}`;
+  const input = {
+    event: payload.event,
+    layer: payload.layer,
+    module: payload.module,
+    status: payload.status,
+    errorCode: payload.errorCode,
+    stage: payload.stage,
+    runId: payload.runId,
+    requestId: payload.requestId,
+    message: resolvedMessage,
+    detail: payload.detail,
+  };
+
+  if (payload.level === "debug") {
+    logger.debug(input);
+    return;
+  }
+  if (payload.level === "warn") {
+    logger.warn(input);
+    return;
+  }
+  if (payload.level === "error") {
+    logger.error(input);
+    return;
+  }
+  logger.info(input);
 }
 
 export function it_emitStreamUpdate(

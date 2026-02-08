@@ -165,7 +165,10 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
     ) => {
       const request = await it_buildTemplateRequest(runtime, variables, options?.stream, options?.timeoutSec);
       emit(`${stage} request`, {
-        event: "template.request",
+        event: "infra.template.request",
+        layer: "infra",
+        module: "it_traceLogger",
+        status: "request",
         stage,
         type: "request",
         template: it_buildTemplateInfo(runtime.template),
@@ -185,7 +188,10 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
       },
     ) => {
       emit(`${stage} response`, {
-        event: "template.response",
+        event: "infra.template.response",
+        layer: "infra",
+        module: "it_traceLogger",
+        status: "success",
         stage,
         type: "response",
         template: it_buildTemplateInfo(runtime.template),
@@ -200,7 +206,10 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
       detail?: Record<string, unknown>,
     ) => {
       emit(`${stage} error`, {
-        event: "template.error",
+        event: "infra.template.error",
+        layer: "infra",
+        module: "it_traceLogger",
+        status: "error",
         stage,
         type: "error",
         template: it_buildTemplateInfo(runtime?.template || undefined),
@@ -226,7 +235,10 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
       const variables = it_buildLlmVariables(cfg, messages, streamEnabled ?? cfg.stream ?? true);
       const request = await it_buildTemplateRequest(runtime, variables, streamEnabled ?? cfg.stream, cfg.timeoutSec);
       emit(`${stage} request`, {
-        event: "llm.template.request",
+        event: "infra.llm_template.request",
+        layer: "infra",
+        module: "it_traceLogger",
+        status: "request",
         stage,
         type: "request",
         template: it_buildTemplateInfo(runtime.template),
@@ -239,7 +251,10 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
         return;
       }
       emit(`${stage} response`, {
-        event: "llm.template.response",
+        event: "infra.llm_template.response",
+        layer: "infra",
+        module: "it_traceLogger",
+        status: "success",
         stage,
         type: "response",
         template: it_buildTemplateInfo(cfg.template),
@@ -252,7 +267,10 @@ export function it_createTraceLogger(sink?: ItTraceSink) {
         return;
       }
       emit(`${stage} error`, {
-        event: "llm.template.error",
+        event: "infra.llm_template.error",
+        layer: "infra",
+        module: "it_traceLogger",
+        status: "error",
         stage,
         type: "error",
         template: it_buildTemplateInfo(cfg.template),
