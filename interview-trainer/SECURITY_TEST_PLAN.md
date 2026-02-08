@@ -53,6 +53,7 @@
 - [x] P2-32 Real Webview save-result feedback smoke command (`itInterviewTrainer.__test.runWebviewSaveResultFlow`).
 - [x] P2-33 Dual-mode workspace smoke assertions: `workspace` mode forbids workspace-missing failures; `no-workspace` mode must return explicit workspace errors.
 - [x] P2-34 No-workspace path returns structured error contract (`errorCode=workspace_not_found` + userMessage) and smoke asserts it.
+- [x] P2-35 Workspace-mode smoke rejects API/template binding failures to avoid false-green results.
 - [x] P2 suites pending items in current scope are cleared.
 
 ## Analyze Full-Flow Fault Matrix (new)

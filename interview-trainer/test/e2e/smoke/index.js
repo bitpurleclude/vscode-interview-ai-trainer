@@ -36,6 +36,29 @@ function assertNoWorkspaceError(value, label) {
   );
 }
 
+function isApiBindingErrorMessage(value) {
+  const text = String(value || "").toLowerCase();
+  if (!text) {
+    return false;
+  }
+  return (
+    text.includes("?????") ||
+    text.includes("template not bound") ||
+    text.includes("missing template") ||
+    text.includes("api???") ||
+    text.includes("api key") ||
+    text.includes("apikey") ||
+    text.includes("???")
+  );
+}
+
+function assertNoApiBindingError(value, label) {
+  assert.ok(
+    !isApiBindingErrorMessage(value),
+    `${label} should not fail due to API/template binding issue: ${String(value || "")}`,
+  );
+}
+
 function assertWorkspaceErrorPayload(payload, label) {
   assert.ok(payload && typeof payload === "object", `${label} should return an object payload`);
   assert.strictEqual(
@@ -138,6 +161,8 @@ function assertFixtureAnalyzeResult(result, options = {}) {
   if (forbidWorkspaceError) {
     assertNoWorkspaceError(result.error, "Fixture analyze");
     assertNoWorkspaceError(result.stateError, "Fixture analyze stateError");
+    assertNoApiBindingError(result.error, "Fixture analyze");
+    assertNoApiBindingError(result.stateError, "Fixture analyze stateError");
     assert.notStrictEqual(
       result.errorCode,
       WORKSPACE_ERROR_CODE,
@@ -202,6 +227,7 @@ function assertWebviewAnalyzeFlowResult(result, options = {}) {
   );
   if (forbidWorkspaceError) {
     assertNoWorkspaceError(result.error, "Webview analyze");
+    assertNoApiBindingError(result.error, "Webview analyze");
     assert.notStrictEqual(
       result.errorCode,
       WORKSPACE_ERROR_CODE,
