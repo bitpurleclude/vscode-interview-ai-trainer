@@ -189,3 +189,33 @@ Unknown request messages with `messageId` now return a structured error payload 
 - Workspace selection use-case events:
   - `application.workspace.select_dir`
   - `application.workspace.select_sessions_dir`
+
+## Additional event families (P14)
+- Template secret and token action events:
+  - `application.template_secret.save`
+  - `application.template_secret.delete`
+  - `application.template_token.refresh`
+  - `application.template_token.refresh_all`
+  - `application.template_token.set_auto_refresh`
+- Result action entry events:
+  - `application.result.open_file`
+  - `application.result.analyze_audio`
+  - `application.result.cancel_analyze`
+- Provider action events:
+  - `application.provider.create_config`
+  - `application.provider.save_config`
+  - `application.provider.open_config`
+- Recording action events:
+  - `application.recording.start_native`
+  - `application.recording.stop_native`
+  - `application.recording.list_inputs`
+  - `application.recording.convert_audio`
+- Analysis run and stage events:
+  - `application.analysis_run.handle`
+  - `application.analysis_run.prepare_deps`
+  - `application.analysis_flow.run`
+  - `application.analysis_flow.audio_stage`
+  - `application.analysis_flow.segment_stage`
+  - `application.analysis_flow.retrieval_stage`
+  - `application.analysis_flow.evaluation_stage`
+  - `application.analysis_flow.persist_stage`

@@ -22,6 +22,7 @@ function it_createTemplateUseCaseContext(
     configService: host.configService,
     refreshConfigSnapshot: host.refreshConfigSnapshot,
     tokenService: host.tokenService,
+    logCorpusTrace: host.logCorpusTrace,
   };
 }
 

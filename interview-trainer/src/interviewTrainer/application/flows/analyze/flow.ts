@@ -28,6 +28,13 @@ import { it_runSegmentStage } from "./flow_segmentStage";
 import { it_runRetrievalStage } from "./flow_retrievalStage";
 import type { ItAnalyzeDeps, ItAnalyzeProgress } from "./flow_types";
 
+function it_flowErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export async function it_runAnalysis(
   deps: ItAnalyzeDeps,
   request: ItAnalyzeRequest,
@@ -50,6 +57,34 @@ export async function it_runAnalysis(
       status,
     });
   };
+  const flowStartedAt = Date.now();
+  const runId = request.runId || "";
+  const it_traceFlow = (
+    action: string,
+    status: string,
+    detail?: Record<string, unknown>,
+    level: "debug" | "info" | "warn" | "error" = "info",
+  ) => {
+    deps.onCorpusTrace?.(`analysis flow ${action} ${status}`, {
+      event: `application.analysis_flow.${action}`,
+      status,
+      level,
+      module: "flow",
+      runId,
+      ...(detail || {}),
+    });
+  };
+  it_traceFlow(
+    "run",
+    "start",
+    {
+      questionTextLength: String(request.questionText || "").length,
+      questionCount: Array.isArray(request.questionList) ? request.questionList.length : 0,
+      audioFormat: request.audio?.format || "",
+      audioByteLength: Number(request.audio?.byteLength || 0),
+    },
+    "debug",
+  );
   const env = deps.apiConfig.active?.environment || "prod";
   const templatesConfig = deps.templatesConfig || { version: 1, environments: {} };
   const questionParseTemplate = it_resolveBindingTemplate(
@@ -198,13 +233,43 @@ export async function it_runAnalysis(
   }
 
   const asrCfg = deps.skillConfig.asr ?? {};
-  const audioResult = await it_runAudioStage({
-    deps,
-    request,
-    asrCfg,
-    asrRuntime,
-    reportProgress,
-  });
+  const audioStageStartedAt = Date.now();
+  it_traceFlow(
+    "audio_stage",
+    "start",
+    {
+      provider: String(asrCfg.provider || ""),
+      timeoutSec: Number(asrCfg.timeout_sec || 0),
+    },
+    "debug",
+  );
+  let audioResult: Awaited<ReturnType<typeof it_runAudioStage>>;
+  try {
+    audioResult = await it_runAudioStage({
+      deps,
+      request,
+      asrCfg,
+      asrRuntime,
+      reportProgress,
+    });
+    it_traceFlow("audio_stage", "success", {
+      durationMs: Date.now() - audioStageStartedAt,
+      transcriptLength: String(audioResult.transcript || "").length,
+      segmentCount: Array.isArray(audioResult.audioSegments) ? audioResult.audioSegments.length : 0,
+    });
+  } catch (error) {
+    it_traceFlow(
+      "audio_stage",
+      "error",
+      {
+        durationMs: Date.now() - audioStageStartedAt,
+        errorCode: "audio_stage_failed",
+        error: it_flowErrorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
   const { transcript, acoustic, detailedTranscript, audioSegments } = audioResult;
   ensureNotAborted();
   if (retrievalEnabled) {
@@ -241,6 +306,14 @@ export async function it_runAnalysis(
     reportProgress("segment", 5, "多题分段 5% · 准备中", "running");
   } else {
     reportProgress("segment", 100, "多题分段 跳过 · 单题", "success");
+    it_traceFlow(
+      "segment_stage",
+      "skipped",
+      {
+        reason: "single_question",
+      },
+      "debug",
+    );
   }
 
   let questionTimings: ItQuestionTiming[] = [];
@@ -250,19 +323,51 @@ export async function it_runAnalysis(
   let llmTimingFailed = false;
 
   if (multiQuestion && segmentLlmConfig) {
-    const segmentResult = await it_runSegmentStage({
-      deps,
-      segmentLlmConfig,
-      questionList,
-      transcript,
-      audioSegments,
-      reportProgress,
-    });
-    questionTimings = segmentResult.questionTimings;
-    questionTimingNote = segmentResult.questionTimingNote;
-    questionAnswers = segmentResult.questionAnswers;
-    llmTimingAttempted = segmentResult.llmTimingAttempted;
-    llmTimingFailed = segmentResult.llmTimingFailed;
+    const segmentStageStartedAt = Date.now();
+    it_traceFlow(
+      "segment_stage",
+      "start",
+      {
+        questionCount: questionList.length,
+      },
+      "debug",
+    );
+    try {
+      const segmentResult = await it_runSegmentStage({
+        deps,
+        segmentLlmConfig,
+        questionList,
+        transcript,
+        audioSegments,
+        reportProgress,
+      });
+      questionTimings = segmentResult.questionTimings;
+      questionTimingNote = segmentResult.questionTimingNote;
+      questionAnswers = segmentResult.questionAnswers;
+      llmTimingAttempted = segmentResult.llmTimingAttempted;
+      llmTimingFailed = segmentResult.llmTimingFailed;
+      it_traceFlow(
+        "segment_stage",
+        "success",
+        {
+          durationMs: Date.now() - segmentStageStartedAt,
+          questionTimingCount: questionTimings.length,
+          llmTimingFailed,
+        },
+      );
+    } catch (error) {
+      it_traceFlow(
+        "segment_stage",
+        "error",
+        {
+          durationMs: Date.now() - segmentStageStartedAt,
+          errorCode: "segment_stage_failed",
+          error: it_flowErrorMessage(error),
+        },
+        "error",
+      );
+      throw error;
+    }
   } else if (questionList.length === 1 && !questionAnswers) {
     questionAnswers = [{ question: questionList[0], answer: transcript }];
   }
@@ -281,22 +386,57 @@ export async function it_runAnalysis(
     );
   }
 
-  const retrievalResult = await it_runRetrievalStage({
-    deps,
-    cacheRoot,
-    retrievalEnabled,
-    retrievalMode,
-    retrievalCfg,
-    embeddingRuntime,
-    questionList,
-    questionText,
-    questionAnswers,
-    questionTimings,
-    audioSegments,
-    transcript,
-    corpusPromise,
-    reportProgress,
-  });
+  const retrievalStageStartedAt = Date.now();
+  it_traceFlow(
+    "retrieval_stage",
+    "start",
+    {
+      retrievalEnabled,
+      retrievalMode,
+      questionCount: questionList.length,
+    },
+    "debug",
+  );
+  let retrievalResult: Awaited<ReturnType<typeof it_runRetrievalStage>>;
+  try {
+    retrievalResult = await it_runRetrievalStage({
+      deps,
+      cacheRoot,
+      retrievalEnabled,
+      retrievalMode,
+      retrievalCfg,
+      embeddingRuntime,
+      questionList,
+      questionText,
+      questionAnswers,
+      questionTimings,
+      audioSegments,
+      transcript,
+      corpusPromise,
+      reportProgress,
+    });
+    it_traceFlow(
+      "retrieval_stage",
+      "success",
+      {
+        durationMs: Date.now() - retrievalStageStartedAt,
+        notesCount: retrievalResult.notes.length,
+        notesGroupCount: retrievalResult.notesByQuestion.length,
+      },
+    );
+  } catch (error) {
+    it_traceFlow(
+      "retrieval_stage",
+      "error",
+      {
+        durationMs: Date.now() - retrievalStageStartedAt,
+        errorCode: "retrieval_stage_failed",
+        error: it_flowErrorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
   const notes = retrievalResult.notes;
   const notesByQuestion = retrievalResult.notesByQuestion;
   deps.onPartial?.({ notes });
@@ -439,7 +579,18 @@ export async function it_runAnalysis(
   );
   const evaluations: ItEvaluation[] = [];
   const streamEnabled = Boolean(deps.onStream || deps.onEvalStream);
-  if (streamEnabled) {
+  const evaluationStageStartedAt = Date.now();
+  it_traceFlow(
+    "evaluation_stage",
+    "start",
+    {
+      questionCount: evalQuestions.length,
+      streamEnabled,
+    },
+    "debug",
+  );
+  try {
+    if (streamEnabled) {
     const tasks = evalQuestions.map((question, idx) =>
       (async () => {
         const streamHandler =
@@ -554,6 +705,21 @@ export async function it_runAnalysis(
       ),
     );
   }
+  } catch (error) {
+    it_traceFlow(
+      "evaluation_stage",
+      "error",
+      {
+        durationMs: Date.now() - evaluationStageStartedAt,
+        questionCount: evalQuestions.length,
+        streamEnabled,
+        errorCode: "evaluation_stage_failed",
+        error: it_flowErrorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
 
   const evaluation: ItEvaluation = it_mergeEvaluations({
     topicTitle: questionText || topicTitle,
@@ -566,6 +732,15 @@ export async function it_runAnalysis(
   reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
   deps.onPartial?.({ evaluation });
   ensureNotAborted();
+  it_traceFlow(
+    "evaluation_stage",
+    "success",
+    {
+      durationMs: Date.now() - evaluationStageStartedAt,
+      questionCount: evalQuestions.length,
+      streamEnabled,
+    },
+  );
 
   const response: ItAnalyzeResponse = {
     transcript,
@@ -583,17 +758,66 @@ export async function it_runAnalysis(
     audioPath: storedAudioPath,
   };
 
-  await it_persistAnalysis({
-    questionText,
-    questionList,
-    topicTitle,
-    topicDir,
-    reportPath,
-    attemptIndex,
-    response,
-    reportProgress,
-    onTrace: deps.onCorpusTrace,
-  });
+  const persistStageStartedAt = Date.now();
+  it_traceFlow(
+    "persist_stage",
+    "start",
+    {
+      reportPath,
+      topicDir,
+      attemptIndex,
+    },
+    "debug",
+  );
+  try {
+    await it_persistAnalysis({
+      questionText,
+      questionList,
+      topicTitle,
+      topicDir,
+      reportPath,
+      attemptIndex,
+      response,
+      reportProgress,
+      onTrace: deps.onCorpusTrace,
+    });
+    it_traceFlow(
+      "persist_stage",
+      "success",
+      {
+        durationMs: Date.now() - persistStageStartedAt,
+        reportPath,
+        topicDir,
+        attemptIndex,
+      },
+    );
+  } catch (error) {
+    it_traceFlow(
+      "persist_stage",
+      "error",
+      {
+        durationMs: Date.now() - persistStageStartedAt,
+        reportPath,
+        topicDir,
+        attemptIndex,
+        errorCode: "persist_stage_failed",
+        error: it_flowErrorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
+
+  it_traceFlow(
+    "run",
+    "success",
+    {
+      durationMs: Date.now() - flowStartedAt,
+      reportPath,
+      topicDir,
+      questionCount: questionList.length,
+    },
+  );
 
   return response;
 }

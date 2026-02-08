@@ -1,35 +1,49 @@
 import { describe, expect, it, vi } from "vitest";
 import { it_analyzeAudioFromWebview, it_cancelAnalyzeFromWebview } from "./it_resultActions";
 
+function createBaseContext(overrides?: Record<string, unknown>) {
+  const context: any = {
+    analyzeAudio: vi.fn(),
+    openFile: async () => {},
+    getAnalysisAbort: () => null,
+    getState: () => ({ steps: [] } as any),
+    updateState: () => {},
+    logCorpusTrace: vi.fn(),
+    ...(overrides || {}),
+  };
+  return context;
+}
+
 describe("it_resultActions security", () => {
   it("rejects non-object analyze payload", async () => {
     const analyzeAudio = vi.fn();
+    const context = createBaseContext({ analyzeAudio });
+
     await expect(
       it_analyzeAudioFromWebview({
-        context: {
-          analyzeAudio,
-          openFile: async () => {},
-          getAnalysisAbort: () => null,
-          getState: () => ({ steps: [] } as any),
-          updateState: () => {},
-        },
+        context,
         payload: null,
       }),
     ).rejects.toThrow(/invalid analyze request/i);
+
     expect(analyzeAudio).not.toHaveBeenCalled();
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "result analyze_audio error",
+      expect.objectContaining({
+        event: "application.result.analyze_audio",
+        errorCode: "invalid_analyze_payload",
+        reason: "payload_not_object",
+      }),
+    );
   });
 
   it("rejects analyze payload with invalid audio", async () => {
     const analyzeAudio = vi.fn();
+    const context = createBaseContext({ analyzeAudio });
+
     await expect(
       it_analyzeAudioFromWebview({
-        context: {
-          analyzeAudio,
-          openFile: async () => {},
-          getAnalysisAbort: () => null,
-          getState: () => ({ steps: [] } as any),
-          updateState: () => {},
-        },
+        context,
         payload: {
           questionText: "q",
           audio: {
@@ -41,21 +55,26 @@ describe("it_resultActions security", () => {
         },
       }),
     ).rejects.toThrow(/invalid analyze request/i);
+
     expect(analyzeAudio).not.toHaveBeenCalled();
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "result analyze_audio error",
+      expect.objectContaining({
+        event: "application.result.analyze_audio",
+        errorCode: "invalid_analyze_payload",
+        reason: "audio_base64_missing",
+      }),
+    );
   });
 
   it("accepts valid analyze payload", async () => {
-    const result = { transcript: "ok" } as any;
+    const result = { transcript: "ok", questionList: ["q1"] } as any;
     const analyzeAudio = vi.fn(async () => result);
+    const context = createBaseContext({ analyzeAudio });
+
     await expect(
       it_analyzeAudioFromWebview({
-        context: {
-          analyzeAudio,
-          openFile: async () => {},
-          getAnalysisAbort: () => null,
-          getState: () => ({ steps: [] } as any),
-          updateState: () => {},
-        },
+        context,
         payload: {
           questionText: "q",
           audio: {
@@ -67,7 +86,15 @@ describe("it_resultActions security", () => {
         },
       }),
     ).resolves.toBe(result);
+
     expect(analyzeAudio).toHaveBeenCalledTimes(1);
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "result analyze_audio success",
+      expect.objectContaining({
+        event: "application.result.analyze_audio",
+        status: "success",
+      }),
+    );
   });
 
   it("handles cancel in start-cancel-start style without cross-run crash", () => {
@@ -94,6 +121,7 @@ describe("it_resultActions security", () => {
       getAnalysisAbort: () => currentAbort,
       getState: () => state,
       updateState,
+      logCorpusTrace: vi.fn(),
     };
 
     const first = it_cancelAnalyzeFromWebview({ context });
@@ -112,6 +140,12 @@ describe("it_resultActions security", () => {
     expect(secondAbort.aborted).toBe(true);
     expect(state.steps[0].status).toBe("error");
     expect(updateState).toHaveBeenCalledTimes(2);
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "result cancel_analyze success",
+      expect.objectContaining({
+        event: "application.result.cancel_analyze",
+        status: "success",
+      }),
+    );
   });
-
 });

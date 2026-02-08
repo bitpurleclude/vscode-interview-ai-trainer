@@ -23,6 +23,7 @@ function it_createResultUseCaseContext(host: ItResultHandlersPort): ItResultUseC
     updateState: (next) => {
       host.updateState(next);
     },
+    logCorpusTrace: host.logCorpusTrace,
   };
 }
 

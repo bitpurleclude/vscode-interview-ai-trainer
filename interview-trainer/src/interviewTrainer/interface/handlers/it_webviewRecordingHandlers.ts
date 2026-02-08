@@ -20,6 +20,7 @@ function it_createRecordingUseCaseContext(
       host.availableInputs = null;
       host.detectedInput = null;
     },
+    logCorpusTrace: host.logCorpusTrace,
   };
 }
 

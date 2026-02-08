@@ -17,6 +17,7 @@ function it_createProviderUseCaseContext(host: ItProviderHandlersPort): ItProvid
     openFile: async (filePath) => {
       await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(filePath));
     },
+    logCorpusTrace: host.logCorpusTrace,
   };
 }
 

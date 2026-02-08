@@ -21,6 +21,7 @@
 - [x] P11 trace event promotion and template-trace schema unification
 - [x] P12 watcher/stream-drop/webview-runtime coverage
 - [x] P13 webview bridge handshake and workspace selection trace coverage
+- [x] P14 template/result/provider/recording and analysis-stage coverage
 
 ## 2. Current Gaps
 - Logging entry points are scattered across `it_logging.ts`, `it_traceLogger.ts`, and direct `appendLine` calls.
@@ -147,6 +148,13 @@
 - Promote protocol observer coverage for `handler_registered` and unhandled broadcast diagnostics.
 - Add workspace directory selection traces (`start/canceled/rejected/success`) with path normalization outcomes.
 - Extend contract/security tests to assert new bridge/workspace log events.
+
+### P14 - Template, Result, Provider, Recording, and Analysis Stage Coverage
+- Add structured lifecycle logs for template secret save/delete and token refresh actions.
+- Add result entry diagnostics for analyze payload validation and cancel requests.
+- Add provider config create/save/open action logs without leaking secret profile values.
+- Add recording action logs for start/stop/list/convert flows and ffmpeg-missing failures.
+- Add analysis run/stage diagnostics for run/deps/audio/segment/retrieval/evaluation/persist durations and outcomes.
 
 ## 5. Impact
 - Positive:

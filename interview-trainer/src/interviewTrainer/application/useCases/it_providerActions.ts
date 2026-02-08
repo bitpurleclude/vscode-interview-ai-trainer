@@ -12,6 +12,7 @@ export type ItProviderUseCaseContext = {
   configService: ItConfigService;
   buildConfigSnapshot: (apiConfig: ItConfigBundle["api"]) => ItConfigSnapshot;
   openFile: (filePath: string) => Promise<void>;
+  logCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
 };
 
 export type ItProviderConfigResult<T> = {
@@ -20,8 +21,34 @@ export type ItProviderConfigResult<T> = {
   value: T;
 };
 
+type ItProviderTraceLevel = "debug" | "info" | "warn" | "error";
+
 function it_asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function it_errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function it_traceProvider(
+  context: ItProviderUseCaseContext,
+  event: string,
+  action: string,
+  status: string,
+  detail?: Record<string, unknown>,
+  level: ItProviderTraceLevel = "info",
+): void {
+  context.logCorpusTrace?.(`provider ${action} ${status}`, {
+    event,
+    status,
+    level,
+    module: "it_providerActions",
+    ...(detail || {}),
+  });
 }
 
 function it_validateProviderId(providerId: string): void {
@@ -83,18 +110,53 @@ export async function it_createProviderConfigFromWebview(params: {
 }): Promise<ItProviderConfigResult<ItConfigSnapshot>> {
   const payload = it_asRecord(params.payload);
   const providerId = String(payload.providerId || "").trim();
-  it_validateProviderId(providerId);
-
-  const configBundle = params.context.configService.loadBundle();
-  if (configBundle.providers?.[providerId]) {
-    throw new Error("Provider 已存在");
-  }
   const displayName = String(payload.displayName || "").trim();
-  const profile = it_buildDefaultProviderProfile(providerId, displayName);
 
-  params.context.configService.saveProviderConfig(providerId, profile);
-  const nextBundle = params.context.configService.loadBundle();
-  return it_buildConfigResult(params.context, nextBundle);
+  it_traceProvider(
+    params.context,
+    "application.provider.create_config",
+    "create_config",
+    "start",
+    { providerId, hasDisplayName: Boolean(displayName) },
+  );
+
+  try {
+    it_validateProviderId(providerId);
+
+    const configBundle = params.context.configService.loadBundle();
+    if (configBundle.providers?.[providerId]) {
+      throw new Error("Provider 已存在");
+    }
+    const profile = it_buildDefaultProviderProfile(providerId, displayName);
+
+    params.context.configService.saveProviderConfig(providerId, profile);
+    const nextBundle = params.context.configService.loadBundle();
+    const result = it_buildConfigResult(params.context, nextBundle);
+
+    it_traceProvider(
+      params.context,
+      "application.provider.create_config",
+      "create_config",
+      "success",
+      { providerId, hasDisplayName: Boolean(displayName) },
+    );
+
+    return result;
+  } catch (error) {
+    it_traceProvider(
+      params.context,
+      "application.provider.create_config",
+      "create_config",
+      "error",
+      {
+        providerId,
+        hasDisplayName: Boolean(displayName),
+        error: it_errorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
 }
 
 export async function it_saveProviderConfigFromWebview(params: {
@@ -104,33 +166,83 @@ export async function it_saveProviderConfigFromWebview(params: {
   const payload = it_asRecord(params.payload);
   const providerId = String(payload.providerId || "").trim();
   if (!providerId) {
+    it_traceProvider(
+      params.context,
+      "application.provider.save_config",
+      "save_config",
+      "error",
+      { reason: "missing_provider_id" },
+      "error",
+    );
     throw new Error("missing providerId");
   }
 
   const incoming = it_asRecord(payload.profile);
-  const configBundle = params.context.configService.loadBundle();
-  const existing = it_asRecord(configBundle.providers?.[providerId] || { provider: providerId });
-  const next = {
-    ...existing,
-    ...incoming,
-    provider: providerId,
-    llm: {
-      ...it_asRecord(existing.llm),
-      ...it_asRecord(incoming.llm),
+  it_traceProvider(
+    params.context,
+    "application.provider.save_config",
+    "save_config",
+    "start",
+    {
+      providerId,
+      incomingKeyCount: Object.keys(incoming).length,
+      hasLlm: Boolean(incoming.llm),
+      hasEmbedding: Boolean(incoming.embedding),
+      hasAsr: Boolean(incoming.asr),
     },
-    embedding: {
-      ...it_asRecord(existing.embedding),
-      ...it_asRecord(incoming.embedding),
-    },
-    asr: {
-      ...it_asRecord(existing.asr),
-      ...it_asRecord(incoming.asr),
-    },
-  };
+  );
 
-  params.context.configService.saveProviderConfig(providerId, next);
-  const nextBundle = params.context.configService.loadBundle();
-  return it_buildConfigResult(params.context, nextBundle);
+  try {
+    const configBundle = params.context.configService.loadBundle();
+    const existing = it_asRecord(configBundle.providers?.[providerId] || { provider: providerId });
+    const next = {
+      ...existing,
+      ...incoming,
+      provider: providerId,
+      llm: {
+        ...it_asRecord(existing.llm),
+        ...it_asRecord(incoming.llm),
+      },
+      embedding: {
+        ...it_asRecord(existing.embedding),
+        ...it_asRecord(incoming.embedding),
+      },
+      asr: {
+        ...it_asRecord(existing.asr),
+        ...it_asRecord(incoming.asr),
+      },
+    };
+
+    params.context.configService.saveProviderConfig(providerId, next);
+    const nextBundle = params.context.configService.loadBundle();
+    const result = it_buildConfigResult(params.context, nextBundle);
+
+    it_traceProvider(
+      params.context,
+      "application.provider.save_config",
+      "save_config",
+      "success",
+      {
+        providerId,
+        incomingKeyCount: Object.keys(incoming).length,
+      },
+    );
+
+    return result;
+  } catch (error) {
+    it_traceProvider(
+      params.context,
+      "application.provider.save_config",
+      "save_config",
+      "error",
+      {
+        providerId,
+        error: it_errorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
 }
 
 export async function it_openProviderConfigFromWebview(params: {
@@ -140,11 +252,50 @@ export async function it_openProviderConfigFromWebview(params: {
   const payload = it_asRecord(params.payload);
   const providerId = String(payload.providerId || "").trim();
   if (!providerId) {
+    it_traceProvider(
+      params.context,
+      "application.provider.open_config",
+      "open_config",
+      "skipped",
+      { reason: "missing_provider_id" },
+      "warn",
+    );
     return { opened: false };
   }
 
   const providerDir = it_getUserProviderDir(params.context.extensionContext);
   const target = path.join(providerDir, `${providerId}.yaml`);
-  await params.context.openFile(target);
-  return { opened: true, path: target };
+  it_traceProvider(
+    params.context,
+    "application.provider.open_config",
+    "open_config",
+    "start",
+    { providerId, path: target },
+  );
+
+  try {
+    await params.context.openFile(target);
+    it_traceProvider(
+      params.context,
+      "application.provider.open_config",
+      "open_config",
+      "success",
+      { providerId, path: target },
+    );
+    return { opened: true, path: target };
+  } catch (error) {
+    it_traceProvider(
+      params.context,
+      "application.provider.open_config",
+      "open_config",
+      "error",
+      {
+        providerId,
+        path: target,
+        error: it_errorMessage(error),
+      },
+      "error",
+    );
+    throw error;
+  }
 }
