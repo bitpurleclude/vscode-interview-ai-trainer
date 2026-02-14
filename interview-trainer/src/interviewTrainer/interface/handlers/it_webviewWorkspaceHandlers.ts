@@ -13,8 +13,8 @@ function it_createWorkspaceUseCaseContext(
 ): ItWorkspaceUseCaseContext {
   return {
     configService: host.configService,
-    refreshConfigSnapshot: host.refreshConfigSnapshot,
-    requireWorkspaceRoot: host.requireWorkspaceRoot,
+    refreshConfigSnapshot: () => host.refreshConfigSnapshot(),
+    requireWorkspaceRoot: () => host.requireWorkspaceRoot(),
     selectDirectory: async (options) => {
       const selection = await vscode.window.showOpenDialog({
         canSelectFiles: false,
@@ -31,7 +31,9 @@ function it_createWorkspaceUseCaseContext(
     showWarning: (message) => {
       void vscode.window.showWarningMessage(message);
     },
-    logCorpusTrace: host.logCorpusTrace,
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 

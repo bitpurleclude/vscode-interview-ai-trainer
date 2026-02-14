@@ -21,9 +21,11 @@ function it_createEnvironmentContext(host: ItEnvironmentHandlersPort): ItEnviron
   return {
     configBundle: host.configBundle,
     configService: host.configService,
-    refreshConfigSnapshot: host.refreshConfigSnapshot,
-    buildConfigSnapshot: host.buildConfigSnapshot,
-    logTrace: host.logCorpusTrace,
+    refreshConfigSnapshot: () => host.refreshConfigSnapshot(),
+    buildConfigSnapshot: (apiConfig) => host.buildConfigSnapshot(apiConfig),
+    logTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 

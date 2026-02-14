@@ -14,7 +14,9 @@ export function it_registerAsrTestHandler(host: ItAsrTestHandlerPort): void {
       () =>
         it_testAsr({
           payload: msg.data,
-          onTrace: host.logCorpusTrace,
+          onTrace: (message, detail) => {
+            host.logCorpusTrace(message, detail);
+          },
         }),
     );
   });

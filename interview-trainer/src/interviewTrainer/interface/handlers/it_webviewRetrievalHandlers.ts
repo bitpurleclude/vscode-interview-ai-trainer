@@ -16,12 +16,18 @@ function it_createRetrievalUseCaseContext(
   return {
     extensionContext: host.context,
     configService: host.configService,
-    refreshConfigSnapshot: host.refreshConfigSnapshot,
-    requireWorkspaceRoot: host.requireWorkspaceRoot,
-    normalizeWorkspaceKey: host.normalizeWorkspaceKey,
-    scheduleEmbeddingWarmup: host.scheduleEmbeddingWarmup,
-    updateEmbeddingWarmup: host.updateEmbeddingWarmup,
-    logCorpusTrace: host.logCorpusTrace,
+    refreshConfigSnapshot: () => host.refreshConfigSnapshot(),
+    requireWorkspaceRoot: () => host.requireWorkspaceRoot(),
+    normalizeWorkspaceKey: (root) => host.normalizeWorkspaceKey(root),
+    scheduleEmbeddingWarmup: (reason, delayMs) => {
+      host.scheduleEmbeddingWarmup(reason, delayMs);
+    },
+    updateEmbeddingWarmup: (next) => {
+      host.updateEmbeddingWarmup(next);
+    },
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 

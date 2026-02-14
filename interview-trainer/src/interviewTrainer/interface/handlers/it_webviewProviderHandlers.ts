@@ -13,11 +13,13 @@ function it_createProviderUseCaseContext(host: ItProviderHandlersPort): ItProvid
   return {
     extensionContext: host.context,
     configService: host.configService,
-    buildConfigSnapshot: host.buildConfigSnapshot,
+    buildConfigSnapshot: (apiConfig) => host.buildConfigSnapshot(apiConfig),
     openFile: async (filePath) => {
       await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(filePath));
     },
-    logCorpusTrace: host.logCorpusTrace,
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 

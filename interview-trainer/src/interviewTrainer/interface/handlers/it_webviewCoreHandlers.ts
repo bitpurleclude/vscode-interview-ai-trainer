@@ -18,9 +18,11 @@ function it_createCoreUseCaseContext(host: ItCoreHandlersPort): ItCoreUseCaseCon
     extensionContext: host.context,
     state: host.state,
     configService: host.configService,
-    refreshConfigSnapshot: host.refreshConfigSnapshot,
-    scheduleEmbeddingWarmup: host.scheduleEmbeddingWarmup,
-    requireWorkspaceRoot: host.requireWorkspaceRoot,
+    refreshConfigSnapshot: () => host.refreshConfigSnapshot(),
+    scheduleEmbeddingWarmup: (reason, delayMs) => {
+      host.scheduleEmbeddingWarmup(reason, delayMs);
+    },
+    requireWorkspaceRoot: () => host.requireWorkspaceRoot(),
     setTraceLogsEnabled: (enabled) => {
       host.traceLogsEnabled = enabled;
     },

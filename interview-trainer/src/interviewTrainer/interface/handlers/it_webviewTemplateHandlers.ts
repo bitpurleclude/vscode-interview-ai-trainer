@@ -20,9 +20,11 @@ function it_createTemplateUseCaseContext(
   return {
     extensionContext: host.context,
     configService: host.configService,
-    refreshConfigSnapshot: host.refreshConfigSnapshot,
+    refreshConfigSnapshot: () => host.refreshConfigSnapshot(),
     tokenService: host.tokenService,
-    logCorpusTrace: host.logCorpusTrace,
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 

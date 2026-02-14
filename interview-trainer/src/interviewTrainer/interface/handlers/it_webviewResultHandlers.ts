@@ -23,7 +23,9 @@ function it_createResultUseCaseContext(host: ItResultHandlersPort): ItResultUseC
     updateState: (next) => {
       host.updateState(next);
     },
-    logCorpusTrace: host.logCorpusTrace,
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 
@@ -73,7 +75,9 @@ export function it_registerResultHandlers(host: ItResultHandlersPort): void {
           payload: (msg.data || {}) as ItSaveCurrentResultPayload,
           configBundle: host.configBundle,
           requireWorkspaceRoot: () => host.requireWorkspaceRoot(),
-          onTrace: host.logCorpusTrace,
+          onTrace: (message, detail) => {
+            host.logCorpusTrace(message, detail);
+          },
         }),
     ),
   );

@@ -12,15 +12,17 @@ function it_createRecordingUseCaseContext(
   host: ItRecordingHandlersPort,
 ): ItRecordingUseCaseContext {
   return {
-    findFfmpeg: host.it_findFfmpeg,
-    listInputs: host.it_listInputs,
-    startNativeRecording: host.it_startNativeRecording,
-    stopNativeRecording: host.it_stopNativeRecording,
+    findFfmpeg: () => host.it_findFfmpeg(),
+    listInputs: (ffmpeg) => host.it_listInputs(ffmpeg),
+    startNativeRecording: (device) => host.it_startNativeRecording(device),
+    stopNativeRecording: () => host.it_stopNativeRecording(),
     resetNativeInputs: () => {
       host.availableInputs = null;
       host.detectedInput = null;
     },
-    logCorpusTrace: host.logCorpusTrace,
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 

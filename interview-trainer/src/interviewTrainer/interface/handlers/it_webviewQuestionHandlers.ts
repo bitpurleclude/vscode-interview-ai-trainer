@@ -10,8 +10,10 @@ function it_createQuestionUseCaseContext(host: ItQuestionHandlersPort): ItQuesti
   return {
     extensionContext: host.context,
     configService: host.configService,
-    resolveApiConfigWithProviders: host.resolveApiConfigWithProviders,
-    logCorpusTrace: host.logCorpusTrace,
+    resolveApiConfigWithProviders: (apiConfig) => host.resolveApiConfigWithProviders(apiConfig),
+    logCorpusTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
     isStreamingEnabled: () => host.configSnapshot?.streaming?.enabled !== false,
     emitEvaluationStreamUpdate: (update) => {
       host.webviewProtocol.send("it/evaluationStreamUpdate", update);

@@ -20,7 +20,9 @@ function it_createTemplateTestUseCaseContext(
         full,
       });
     },
-    logTrace: host.logCorpusTrace,
+    logTrace: (message, detail) => {
+      host.logCorpusTrace(message, detail);
+    },
   };
 }
 
