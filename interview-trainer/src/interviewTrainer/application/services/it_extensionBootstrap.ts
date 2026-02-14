@@ -42,7 +42,11 @@ export function it_bootstrapExtensionHost(
   host.outputChannel = deps.createOutputChannel("Interview Trainer");
   host.configService = deps.createConfigService(host.context);
   host.configService.setTraceSink?.((message, detail) => {
-    host.logCorpusTrace?.(message, detail);
+    try {
+      host.logCorpusTrace?.(message, detail);
+    } catch {
+      // ignore trace sink failures during config operations
+    }
   });
   host.configBundle = host.configService.loadBundle();
   host.tokenService = deps.createTokenService(host);

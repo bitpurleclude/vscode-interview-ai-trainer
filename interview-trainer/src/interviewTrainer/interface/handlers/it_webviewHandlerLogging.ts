@@ -2,6 +2,18 @@ type ItHandlerLogPort = {
   logCorpusTrace: (message: string, detail?: Record<string, unknown>) => void;
 };
 
+function it_safeLog(
+  host: ItHandlerLogPort,
+  message: string,
+  detail?: Record<string, unknown>,
+): void {
+  try {
+    host.logCorpusTrace(message, detail);
+  } catch {
+    // ignore logging failures to avoid interrupting handler requests
+  }
+}
+
 function it_errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -45,7 +57,7 @@ export async function it_runLoggedHandler<T>(
   },
   run: () => Promise<T> | T,
 ): Promise<T> {
-  host.logCorpusTrace(`${options.request} request`, {
+  it_safeLog(host, `${options.request} request`, {
     event: options.event,
     status: "request",
     payload: it_payloadSummary(options.payload),
@@ -53,13 +65,13 @@ export async function it_runLoggedHandler<T>(
 
   try {
     const value = await run();
-    host.logCorpusTrace(`${options.request} success`, {
+    it_safeLog(host, `${options.request} success`, {
       event: options.event,
       status: "success",
     });
     return value;
   } catch (error) {
-    host.logCorpusTrace(`${options.request} error`, {
+    it_safeLog(host, `${options.request} error`, {
       event: options.event,
       status: "error",
       error: it_errorMessage(error),

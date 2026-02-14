@@ -219,6 +219,36 @@ export class InterviewTrainerExtension implements vscode.Disposable {
     public readonly context: vscode.ExtensionContext,
     public readonly webviewProtocol: WebviewProtocol,
   ) {
+    this.logEmbeddingTestFailure = this.logEmbeddingTestFailure.bind(this);
+    this.logLlmTestFailure = this.logLlmTestFailure.bind(this);
+    this.logCorpusTrace = this.logCorpusTrace.bind(this);
+    this.emitStreamUpdate = this.emitStreamUpdate.bind(this);
+    this.emitEvaluationStreamUpdate = this.emitEvaluationStreamUpdate.bind(this);
+    this.requireWorkspaceRoot = this.requireWorkspaceRoot.bind(this);
+    this.buildConfigSnapshot = this.buildConfigSnapshot.bind(this);
+    this.updateCorpusWatchers = this.updateCorpusWatchers.bind(this);
+    this.refreshConfigSnapshot = this.refreshConfigSnapshot.bind(this);
+    this.it_getLlmConfig = this.it_getLlmConfig.bind(this);
+    this.updateState = this.updateState.bind(this);
+    this.updateEmbeddingWarmup = this.updateEmbeddingWarmup.bind(this);
+    this.isIdleForWarmup = this.isIdleForWarmup.bind(this);
+    this.scheduleEmbeddingWarmup = this.scheduleEmbeddingWarmup.bind(this);
+    this.runEmbeddingWarmup = this.runEmbeddingWarmup.bind(this);
+    this.resolveApiConfigWithProviders = this.resolveApiConfigWithProviders.bind(this);
+    this.buildRunSteps = this.buildRunSteps.bind(this);
+    this.computeOverallProgress = this.computeOverallProgress.bind(this);
+    this.updateProgress = this.updateProgress.bind(this);
+    this.it_firstNonEmpty = this.it_firstNonEmpty.bind(this);
+    this.normalizeWorkspaceKey = this.normalizeWorkspaceKey.bind(this);
+    this.registerHandlers = this.registerHandlers.bind(this);
+    this.it_findFfmpeg = this.it_findFfmpeg.bind(this);
+    this.it_detectDefaultInput = this.it_detectDefaultInput.bind(this);
+    this.it_runFfmpegProbe = this.it_runFfmpegProbe.bind(this);
+    this.it_listInputs = this.it_listInputs.bind(this);
+    this.it_startNativeRecording = this.it_startNativeRecording.bind(this);
+    this.it_stopNativeRecording = this.it_stopNativeRecording.bind(this);
+    this.handleAnalyze = this.handleAnalyze.bind(this);
+
     it_bootstrapExtensionHost(this, {
       createOutputChannel: (name) => vscode.window.createOutputChannel(name),
       createConfigService: (context) => new ItConfigService(context),
