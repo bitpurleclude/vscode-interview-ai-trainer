@@ -15,6 +15,10 @@ import {
 } from "../../../protocol/interviewTrainer";
 import { it_hashText } from "./it_textGateway";
 import { it_collectGuardrailNormalizationIssues } from "./it_guardrails";
+import {
+  it_getWorkspaceDirConfigMap,
+  it_resolveWorkspaceDirPaths,
+} from "./it_workspaceDirs";
 
 const IT_TEMPLATE_VAR_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 
@@ -248,7 +252,7 @@ export function it_buildConfigSnapshot(
   const llmDefaultBase = isDoubao
     ? "https://ark.cn-beijing.volces.com"
     : "https://qianfan.baidubce.com/v2";
-  const workspace = host.configBundle.skill.workspace ?? {};
+  const workspaceConfigMap = it_getWorkspaceDirConfigMap(host.configBundle.skill || {});
   const retrieval = host.configBundle.skill.retrieval ?? {};
   const llmTasks = host.configBundle.skill.llm_tasks ?? {};
   const vector = retrieval.vector ?? {};
@@ -407,11 +411,11 @@ export function it_buildConfigSnapshot(
       maxConcurrency,
     },
     workspaceDirs: {
-      notesDir: workspace.notes_dir || "inputs/notes",
-      promptsDir: workspace.prompts_dir || "inputs/prompts/guangdong",
-      rubricsDir: workspace.rubrics_dir || "inputs/rubrics",
-      knowledgeDir: workspace.knowledge_dir || "inputs/knowledge",
-      examplesDir: workspace.examples_dir || "inputs/examples",
+      notesDir: workspaceConfigMap.notes,
+      promptsDir: workspaceConfigMap.prompts,
+      rubricsDir: workspaceConfigMap.rubrics,
+      knowledgeDir: workspaceConfigMap.knowledge,
+      examplesDir: workspaceConfigMap.examples,
     },
   };
 }
@@ -432,15 +436,22 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
     return;
   }
 
-  const dirs = it_buildConfigSnapshot(host, host.configBundle.api).workspaceDirs;
+  const resolvedDirs = it_resolveWorkspaceDirPaths(
+    workspaceRoot,
+    (host.configBundle.skill || {}) as Record<string, unknown>,
+  );
   const targets = Array.from(
-    new Set([
-      dirs.notesDir,
-      dirs.promptsDir,
-      dirs.rubricsDir,
-      dirs.knowledgeDir,
-      dirs.examplesDir,
-    ].filter((value) => Boolean(value))),
+    new Set(
+      [
+        resolvedDirs.notes,
+        resolvedDirs.prompts,
+        resolvedDirs.rubrics,
+        resolvedDirs.knowledge,
+        resolvedDirs.examples,
+      ]
+        .filter((value) => Boolean(String(value || "").trim()))
+        .map((value) => path.normalize(String(value))),
+    ),
   );
 
   it_traceCorpusWatchers(host, "setup", "start", {
@@ -464,11 +475,7 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
   };
 
   targets.forEach((dir) => {
-    const normalized = String(dir || "").replace(/\\/g, "/");
-    const pattern = new vscode.RelativePattern(
-      workspaceRoot,
-      path.join(normalized, "**/*"),
-    );
+    const pattern = new vscode.RelativePattern(dir, "**/*");
     const watcher = vscode.workspace.createFileSystemWatcher(pattern);
     watcher.onDidCreate((uri) => markDirty("create", uri));
     watcher.onDidChange((uri) => markDirty("change", uri));

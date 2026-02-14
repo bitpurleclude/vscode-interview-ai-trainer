@@ -3,6 +3,7 @@ import { it_resolveBindingTemplate } from "../services/it_templateGateway";
 import { it_buildCorpusAsync, it_prepareEmbeddingCache } from "../services/it_notesGateway";
 import { it_hashText } from "../services/it_textGateway";
 import { it_normalizeWorkspaceKey } from "../services/it_configSnapshot";
+import { it_resolveWorkspaceDirPaths } from "../services/it_workspaceDirs";
 import {
   it_clampInteger,
   it_getRetrievalGuardrails,
@@ -144,26 +145,14 @@ export async function it_runEmbeddingWarmup(
   const corpusCacheBytes = Number.isFinite(corpusCacheMb)
     ? Math.max(0, corpusCacheMb) * 1024 * 1024
     : undefined;
-  const workspaceCfg = host.configBundle.skill.workspace ?? {};
+  const workspaceDirs = it_resolveWorkspaceDirPaths(workspaceRoot, host.configBundle.skill);
   const skipMtimeCheck = !host.corpusDirty;
   const corpus = await it_buildCorpusAsync({
-    notes: path.join(workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
-    prompts: path.join(
-      workspaceRoot,
-      workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
-    ),
-    rubrics: path.join(
-      workspaceRoot,
-      workspaceCfg.rubrics_dir || "inputs/rubrics",
-    ),
-    knowledge: path.join(
-      workspaceRoot,
-      workspaceCfg.knowledge_dir || "inputs/knowledge",
-    ),
-    examples: path.join(
-      workspaceRoot,
-      workspaceCfg.examples_dir || "inputs/examples",
-    ),
+    notes: workspaceDirs.notes,
+    prompts: workspaceDirs.prompts,
+    rubrics: workspaceDirs.rubrics,
+    knowledge: workspaceDirs.knowledge,
+    examples: workspaceDirs.examples,
   }, {
     cacheDir: cacheRoot,
     maxCacheBytes: corpusCacheBytes,

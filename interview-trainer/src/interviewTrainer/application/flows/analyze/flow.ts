@@ -21,6 +21,7 @@ import { it_buildAcousticForTiming, it_mergeEvaluations } from "../../../domain/
 import { it_deriveTopicTitle } from "../../../domain/analyze/result";
 import { it_generateTopicTitleWithLlm } from "../../services/it_topicTitle";
 import { it_persistAnalysis } from "../../services/it_analysisPersistence";
+import { it_resolveWorkspaceDirPaths } from "../../services/it_workspaceDirs";
 import { it_buildTemplateLlmConfig, it_buildTemplateRuntime, it_splitFallbackQuestions } from "./flow_helpers";
 import { it_runAudioStage } from "./flow_audioStage";
 import { it_prepareQuestionParseStage } from "./flow_questionStage";
@@ -162,7 +163,7 @@ export async function it_runAnalysis(
   questionText = questionState.text;
   questionList = questionState.list;
 
-  const workspaceCfg = deps.skillConfig.workspace ?? {};
+  const workspaceDirs = it_resolveWorkspaceDirPaths(deps.workspaceRoot, deps.skillConfig);
   const retrievalCfg = deps.skillConfig.retrieval ?? {};
   const retrievalEnabled = retrievalCfg.enabled !== false;
   const retrievalMode = String(retrievalCfg.mode || "vector");
@@ -194,23 +195,11 @@ export async function it_runAnalysis(
     );
     corpusPromise = it_buildCorpusAsync(
       {
-        notes: path.join(deps.workspaceRoot, workspaceCfg.notes_dir || "inputs/notes"),
-        prompts: path.join(
-          deps.workspaceRoot,
-          workspaceCfg.prompts_dir || "inputs/prompts/guangdong",
-        ),
-        rubrics: path.join(
-          deps.workspaceRoot,
-          workspaceCfg.rubrics_dir || "inputs/rubrics",
-        ),
-        knowledge: path.join(
-          deps.workspaceRoot,
-          workspaceCfg.knowledge_dir || "inputs/knowledge",
-        ),
-        examples: path.join(
-          deps.workspaceRoot,
-          workspaceCfg.examples_dir || "inputs/examples",
-        ),
+        notes: workspaceDirs.notes,
+        prompts: workspaceDirs.prompts,
+        rubrics: workspaceDirs.rubrics,
+        knowledge: workspaceDirs.knowledge,
+        examples: workspaceDirs.examples,
       },
       {
         cacheDir: cacheRoot,

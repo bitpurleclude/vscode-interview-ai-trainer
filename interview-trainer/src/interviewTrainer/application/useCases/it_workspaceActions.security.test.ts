@@ -34,7 +34,7 @@ function createContext(workspaceRoot: string, selectedPath: string | null) {
 }
 
 describe("it_workspaceActions security", () => {
-  it("rejects directories outside workspace root", async () => {
+  it("accepts directories outside workspace root and stores absolute path", async () => {
     const workspaceRoot = path.resolve(process.cwd(), "workspace-root");
     const selectedPath = path.resolve(workspaceRoot, "..", "outside");
     const { context, configBundle } = createContext(workspaceRoot, selectedPath);
@@ -44,16 +44,17 @@ describe("it_workspaceActions security", () => {
       payload: { kind: "notes" },
     });
 
-    expect(result.value).toEqual({ canceled: true });
+    const expected = path.resolve(selectedPath).split(path.sep).join("/");
+    expect(result.value).toEqual({ kind: "notes", path: expected });
     expect(context.showWarning).toHaveBeenCalledTimes(1);
-    expect(context.configService.saveSkillConfig).not.toHaveBeenCalled();
-    expect(configBundle.skill.workspace.notes_dir).toBe("inputs/notes");
+    expect(context.configService.saveSkillConfig).toHaveBeenCalledTimes(1);
+    expect(configBundle.skill.workspace.notes_dir).toBe(expected);
     expect(context.logCorpusTrace).toHaveBeenCalledWith(
-      "workspace select_dir rejected",
+      "workspace select_dir success",
       expect.objectContaining({
         event: "application.workspace.select_dir",
-        status: "rejected",
-        reason: "outside_workspace",
+        status: "success",
+        outsideWorkspace: true,
       }),
     );
   });

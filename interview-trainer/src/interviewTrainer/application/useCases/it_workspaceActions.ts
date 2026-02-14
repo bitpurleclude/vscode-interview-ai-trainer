@@ -54,6 +54,23 @@ function it_normalizeRelativePath(workspaceRoot: string, selectedPath: string): 
   return relative ? relative.split(path.sep).join("/") : ".";
 }
 
+function it_normalizeWorkspaceDirSetting(
+  workspaceRoot: string,
+  selectedPath: string,
+): { normalized: string; outsideWorkspace: boolean } {
+  const inWorkspace = it_normalizeRelativePath(workspaceRoot, selectedPath);
+  if (inWorkspace) {
+    return {
+      normalized: inWorkspace,
+      outsideWorkspace: false,
+    };
+  }
+  return {
+    normalized: path.resolve(selectedPath).split(path.sep).join("/"),
+    outsideWorkspace: true,
+  };
+}
+
 function it_traceWorkspace(
   context: ItWorkspaceUseCaseContext,
   event: string,
@@ -95,7 +112,11 @@ export async function it_selectWorkspaceDirFromWebview(params: {
   const skillConfig = (configBundle.skill || {}) as Record<string, unknown>;
   const workspaceConfig = (skillConfig.workspace || {}) as Record<string, unknown>;
   const current = String(workspaceConfig[targetKey] ?? skillConfig[targetKey] ?? "").trim();
-  const defaultPath = current ? path.join(workspaceRoot, current) : workspaceRoot;
+  const defaultPath = current
+    ? path.isAbsolute(current)
+      ? current
+      : path.join(workspaceRoot, current)
+    : workspaceRoot;
 
   it_traceWorkspace(params.context, "application.workspace.select_dir", "select_dir", "start", {
     kind,
@@ -109,31 +130,26 @@ export async function it_selectWorkspaceDirFromWebview(params: {
     defaultPath,
   });
   if (!selectedPath) {
-    it_traceWorkspace(params.context, "application.workspace.select_dir", "select_dir", "canceled", {
-      kind,
-      targetKey,
-      reason: "user_cancelled",
-    });
-    return { configBundle, value: { canceled: true } };
-  }
-
-  const normalized = it_normalizeRelativePath(workspaceRoot, selectedPath);
-  if (!normalized) {
-    params.context.showWarning("所选目录必须位于当前工作区内");
     it_traceWorkspace(
       params.context,
       "application.workspace.select_dir",
       "select_dir",
-      "rejected",
+      "canceled",
       {
         kind,
         targetKey,
-        selectedPath,
-        reason: "outside_workspace",
+        reason: "user_cancelled",
       },
-      "warn",
     );
     return { configBundle, value: { canceled: true } };
+  }
+
+  const normalizedSelection = it_normalizeWorkspaceDirSetting(workspaceRoot, selectedPath);
+  const normalized = normalizedSelection.normalized;
+  if (normalizedSelection.outsideWorkspace) {
+    params.context.showWarning(
+      "Selected directory is outside workspace. It will be stored as an absolute path.",
+    );
   }
 
   const nextSkill = {
@@ -157,6 +173,7 @@ export async function it_selectWorkspaceDirFromWebview(params: {
     targetKey,
     selectedPath,
     normalizedPath: normalized || ".",
+    outsideWorkspace: normalizedSelection.outsideWorkspace,
   });
 
   return {
@@ -197,7 +214,7 @@ export async function it_selectSessionsDirFromWebview(params: {
 
   const normalized = it_normalizeRelativePath(workspaceRoot, selectedPath);
   if (!normalized) {
-    params.context.showWarning("所选目录必须位于当前工作区内");
+    params.context.showWarning("所选目录必须位于当前工作区内。");
     it_traceWorkspace(
       params.context,
       "application.workspace.select_sessions_dir",
