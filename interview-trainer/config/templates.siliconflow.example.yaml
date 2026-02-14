@@ -1,0 +1,65 @@
+version: 1
+environments:
+  prod:
+    templates:
+      "llm:siliconflow-chat":
+        id: "llm:siliconflow-chat"
+        name: "SiliconFlow Chat Completions"
+        category: "llm"
+        request:
+          method: "POST"
+          url: "https://api.siliconflow.cn/v1/chat/completions"
+          headers:
+            Authorization: "Bearer {{secrets.siliconflow_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "<YOUR_CHAT_MODEL>"
+            messages: "{{messages}}"
+            temperature: "{{temperature}}"
+            top_p: "{{topP}}"
+            stream: false
+          timeoutSec: 60
+        response:
+          mode: "json"
+          textPath: "choices[0].message.content"
+
+      "embedding:siliconflow-embedding":
+        id: "embedding:siliconflow-embedding"
+        name: "SiliconFlow Embeddings"
+        category: "embedding"
+        request:
+          method: "POST"
+          url: "https://api.siliconflow.cn/v1/embeddings"
+          headers:
+            Authorization: "Bearer {{secrets.siliconflow_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "{{model}}"
+            input: "{{embeddingInput}}"
+          timeoutSec: 30
+        response:
+          mode: "json"
+
+    bindings:
+      llm:
+        questionParse: "llm:siliconflow-chat"
+        title: "llm:siliconflow-chat"
+        segment: "llm:siliconflow-chat"
+        evaluation: "llm:siliconflow-chat"
+      asr:
+        transcription: "<YOUR_EXISTING_ASR_TEMPLATE_ID>"
+      embedding:
+        retrieval: "embedding:siliconflow-embedding"
+
+    secrets:
+      - "siliconflow_api_key"
+
+    param_options:
+      reasoning_effort:
+        - "low"
+        - "medium"
+        - "high"
+        - "xhigh"
+
+    token_options:
+      auto_refresh: true

@@ -104,6 +104,7 @@
     "build:extension": "tsc -p tsconfig.json --noEmit && node scripts/build-extension.js",
     "build": "npm run build:webview && npm run build:extension",
     "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix",
+    "verify:package:templates": "node scripts/verify-package-templates.js",
     "test": "vitest run --coverage",
     "test:e2e:smoke": "node scripts/run-e2e-smoke.js"
   },

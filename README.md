@@ -162,6 +162,293 @@ inputs/examples    # 示范/例子
   - `providers/*.yaml`：Provider 配置
 
 设置页点击“查看配置文件”可直接打开。
+补充：`interview-trainer/config/templates.*.example.yaml` 会随 VSIX 打包，并在插件启动时自动合并到用户 `templates.yaml`（仅补充缺失模板，不覆盖已有配置）。
+
+## SiliconFlow API 接入模板（通用）
+
+下面这套模板按本项目当前模板执行链路编写，已对齐：
+- 插件模板变量与执行逻辑：`interview-trainer/src/interviewTrainer/infra/api/it_templateExecutor.ts`
+- LLM Chat 调用结构：`interview-trainer/src/interviewTrainer/infra/api/it_llm.ts`
+- OpenAI Compatible Chat 请求结构：`interview-trainer/src/interviewTrainer/infra/api/it_requestBuilder.ts`
+
+对应 SiliconFlow 官方 Chat Completions 文档要点：
+- Base URL：`https://api.siliconflow.cn/v1`
+- Endpoint：`POST /chat/completions`
+- 鉴权：`Authorization: Bearer <SILICONFLOW_API_KEY>`
+- 必填参数：`model`、`messages`
+
+### 可直接复用模板（templates.yaml）
+
+仓库内已提供示例文件：
+`interview-trainer/config/templates.siliconflow.example.yaml`
+
+也可直接复制以下通用片段到你的 `templates.yaml`：
+
+```yaml
+version: 1
+environments:
+  prod:
+    templates:
+      "llm:siliconflow-chat":
+        id: "llm:siliconflow-chat"
+        name: "SiliconFlow Chat Completions"
+        category: "llm"
+        request:
+          method: "POST"
+          url: "https://api.siliconflow.cn/v1/chat/completions"
+          headers:
+            Authorization: "Bearer {{secrets.siliconflow_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "<YOUR_CHAT_MODEL>"
+            messages: "{{messages}}"
+            temperature: "{{temperature}}"
+            top_p: "{{topP}}"
+            stream: false
+          timeoutSec: 60
+        response:
+          mode: "json"
+          textPath: "choices[0].message.content"
+
+      "embedding:siliconflow-embedding":
+        id: "embedding:siliconflow-embedding"
+        name: "SiliconFlow Embeddings"
+        category: "embedding"
+        request:
+          method: "POST"
+          url: "https://api.siliconflow.cn/v1/embeddings"
+          headers:
+            Authorization: "Bearer {{secrets.siliconflow_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "{{model}}"
+            input: "{{embeddingInput}}"
+          timeoutSec: 30
+        response:
+          mode: "json"
+
+    bindings:
+      llm:
+        questionParse: "llm:siliconflow-chat"
+        title: "llm:siliconflow-chat"
+        segment: "llm:siliconflow-chat"
+        evaluation: "llm:siliconflow-chat"
+      asr:
+        transcription: "<YOUR_EXISTING_ASR_TEMPLATE_ID>"
+      embedding:
+        retrieval: "embedding:siliconflow-embedding"
+
+    secrets:
+      - "siliconflow_api_key"
+
+    param_options:
+      reasoning_effort:
+        - "low"
+        - "medium"
+        - "high"
+        - "xhigh"
+
+    token_options:
+      auto_refresh: true
+```
+
+### 使用说明
+
+1. 将 `<YOUR_CHAT_MODEL>` 替换为你在 SiliconFlow 已开通的聊天模型名。
+2. 在设置页的“API 模板管理”中新增密钥名 `siliconflow_api_key` 并保存真实 Key。
+3. `asr.transcription` 绑定请保留你当前可用的 ASR 模板 ID（SiliconFlow 此处仅提供 LLM/Embedding 接入模板）。
+4. 如果暂时不使用向量检索，可在检索设置中切到 `keyword` 模式，先只验证 LLM 链路。
+5. 为兼容本插件当前模板执行路径，建议先用 `stream: false`；稳定后再按需扩展 SSE 流式模板。
+
+## 火山方舟（ARK）API 接入模板（Chat Completions）
+
+基于官方 Chat Completions 方式（你给的示例 `curl`）可直接接入本插件模板系统：
+- Endpoint：`POST https://ark.cn-beijing.volces.com/api/v3/chat/completions`
+- Header：`Content-Type: application/json`、`Authorization: Bearer <ARK_API_KEY>`
+- Body 关键字段：`model`、`messages`
+
+### 可直接复用模板（templates.yaml）
+
+仓库内已提供示例文件：
+`interview-trainer/config/templates.volc-ark.example.yaml`
+
+也可直接复制以下片段到你的 `templates.yaml`：
+
+```yaml
+version: 1
+environments:
+  prod:
+    templates:
+      "llm:volc-ark-chat":
+        id: "llm:volc-ark-chat"
+        name: "Volcengine Ark Chat Completions"
+        category: "llm"
+        request:
+          method: "POST"
+          url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+          headers:
+            Authorization: "Bearer {{secrets.ark_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "doubao-1-5-pro-32k-250115"
+            messages: "{{messages}}"
+            temperature: "{{temperature}}"
+            top_p: "{{topP}}"
+            stream: false
+          timeoutSec: 60
+        response:
+          mode: "json"
+          textPath: "choices[0].message.content"
+
+    bindings:
+      llm:
+        questionParse: "llm:volc-ark-chat"
+        title: "llm:volc-ark-chat"
+        segment: "llm:volc-ark-chat"
+        evaluation: "llm:volc-ark-chat"
+      asr:
+        transcription: "<YOUR_EXISTING_ASR_TEMPLATE_ID>"
+
+    secrets:
+      - "ark_api_key"
+```
+
+### 使用说明
+
+1. 在设置页“API 模板管理”里新增密钥名 `ark_api_key` 并保存你的火山 API Key。
+2. 如果模型名不同，替换 `model: "doubao-1-5-pro-32k-250115"`。
+3. `asr.transcription` 继续绑定你当前可用 ASR 模板（这套模板只覆盖 LLM）。
+4. 先用模板测试的 dry-run / live 验证，再绑定到 `questionParse/title/segment/evaluation`。
+
+### Embedding（多模态）模板
+
+如果你要按火山方舟官方 `embeddings/multimodal` 方式接入，可使用下列模板片段（已写入 `interview-trainer/config/templates.volc-ark.example.yaml`）：
+
+```yaml
+"embedding:volc-ark-multimodal":
+  id: "embedding:volc-ark-multimodal"
+  name: "Volcengine Ark Embeddings Multimodal"
+  category: "embedding"
+  request:
+    method: "POST"
+    url: "https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal"
+    headers:
+      Authorization: "Bearer {{secrets.ark_api_key}}"
+      Content-Type: "application/json"
+    body:
+      model: "doubao-embedding-vision-250615"
+      input:
+        - type: "text"
+          text: "{{embeddingInput}}"
+        - type: "image_url"
+          image_url:
+            url: "{{imageUrl}}"
+    timeoutSec: 30
+  response:
+    mode: "json"
+    jsonPath: "data[0].embedding"
+```
+
+模板测试时可在“变量 JSON”里传入：
+
+```json
+{
+  "imageUrl": "https://ark-project.tos-cn-beijing.volces.com/images/view.jpeg"
+}
+```
+
+注意：
+- 多模态模板主要用于“图文联合向量”场景。
+- 若用于当前插件的文本检索链路，建议优先使用纯文本 embedding 模板，或先将检索模式切为 `keyword` 以避免向量批处理不匹配。
+
+## 百度语音转文字（Token + 请求）模板
+
+下面这套模板对应你给的两步调用：
+1. 先调用 `oauth/2.0/token` 获取 `access_token`
+2. 再调用 `https://vop.baidu.com/server_api` 做 ASR
+
+仓库内已提供示例文件：
+`interview-trainer/config/templates.baidu-asr-token.example.yaml`
+
+可直接复用片段如下：
+
+```yaml
+version: 1
+environments:
+  prod:
+    templates:
+      "token:baidu-asr-access-token":
+        id: "token:baidu-asr-access-token"
+        name: "Baidu ASR Access Token"
+        category: "token"
+        request:
+          method: "POST"
+          url: "https://aip.baidubce.com/oauth/2.0/token"
+          query:
+            grant_type: "client_credentials"
+            client_id: "{{secrets.baidu_asr_api_key}}"
+            client_secret: "{{secrets.baidu_asr_secret_key}}"
+          headers:
+            Content-Type: "application/json"
+          timeoutSec: 30
+        response:
+          mode: "json"
+          textPath: "access_token"
+        token:
+          name: "baidu_asr_access_token"
+          valuePath: "access_token"
+          expiresInPath: "expires_in"
+          refreshBeforeSec: 86400
+          maxRetries: 1
+          enabled: true
+
+      "asr:baidu-vop-token":
+        id: "asr:baidu-vop-token"
+        name: "Baidu VOP ASR With Token"
+        category: "asr"
+        request:
+          method: "POST"
+          url: "https://vop.baidu.com/server_api"
+          headers:
+            Content-Type: "application/json"
+            Accept: "application/json"
+          body:
+            format: "{{audio.format}}"
+            rate: "{{audio.rate}}"
+            channel: "{{audio.channel}}"
+            cuid: "interview-trainer"
+            dev_pid: "{{asr.dev_pid}}"
+            speech: "{{audioFile}}"
+            len: "{{audio.byteLength}}"
+            token: "{{tokens.baidu_asr_access_token}}"
+          timeoutSec: 120
+        response:
+          mode: "json"
+          textPath: "result[0]"
+
+    bindings:
+      asr:
+        transcription: "asr:baidu-vop-token"
+
+    secrets:
+      - "baidu_asr_api_key"
+      - "baidu_asr_secret_key"
+
+    token_options:
+      auto_refresh: true
+```
+
+### 使用步骤
+
+1. 在设置页“API 模板管理”新增并保存两个密钥：
+`baidu_asr_api_key`、`baidu_asr_secret_key`。
+2. 在模板绑定中把 `asr.transcription` 绑定到 `asr:baidu-vop-token`。
+3. 点击“刷新全部 Token”或先做一次 token 模板 live 测试，确认 `baidu_asr_access_token` 已生成。
+4. 再做 ASR 模板 live 测试，确认返回 `result[0]` 文本。
+
+说明：
+- `refreshBeforeSec: 86400` 表示在过期前 1 天自动刷新 token（百度默认有效期通常约 30 天）。
+- 如果你需要指定 `cuid`，把 `cuid: "interview-trainer"` 改成固定设备标识即可。
 
 ## 性能优化建议
 

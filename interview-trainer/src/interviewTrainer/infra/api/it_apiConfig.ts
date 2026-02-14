@@ -71,6 +71,7 @@ const IT_DEFAULT_FILES = [
   "guardrails.yaml",
 ];
 const IT_PROVIDER_DIR = "providers";
+const IT_TEMPLATE_EXAMPLE_PATTERN = /^templates\..+\.example\.(yaml|yml)$/i;
 
 function it_readYamlFile(filePath: string): any {
   try {
@@ -85,6 +86,162 @@ function it_writeYamlFile(filePath: string, payload: any): void {
   const text = YAML.stringify(payload);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, text, "utf-8");
+}
+
+function it_isPlainObject(value: unknown): value is Record<string, any> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function it_uniqueStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const normalized = value
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(normalized));
+}
+
+function it_mergeTemplateExampleConfigs(defaultDir: string, targetDir: string): void {
+  try {
+    const targetPath = path.join(targetDir, "templates.yaml");
+    if (!fs.existsSync(targetPath) || !fs.existsSync(defaultDir)) {
+      return;
+    }
+
+    const targetRaw = it_readYamlFile(targetPath);
+    const targetConfig = it_isPlainObject(targetRaw) ? { ...targetRaw } : {};
+    const targetEnvs = it_isPlainObject(targetConfig.environments)
+      ? { ...targetConfig.environments }
+      : {};
+    targetConfig.environments = targetEnvs;
+
+    const entries = fs
+      .readdirSync(defaultDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && IT_TEMPLATE_EXAMPLE_PATTERN.test(entry.name));
+
+    let changed = false;
+
+    entries.forEach((entry) => {
+      const srcPath = path.join(defaultDir, entry.name);
+      const srcRaw = it_readYamlFile(srcPath);
+      if (!it_isPlainObject(srcRaw)) {
+        return;
+      }
+      const srcEnvs = it_isPlainObject(srcRaw.environments) ? srcRaw.environments : {};
+
+      Object.entries(srcEnvs).forEach(([envName, envValue]) => {
+        if (!it_isPlainObject(envValue)) {
+          return;
+        }
+
+        const existingEnvRaw = targetEnvs[envName];
+        const envConfig = it_isPlainObject(existingEnvRaw) ? { ...existingEnvRaw } : {};
+        let envChanged = false;
+
+        const srcTemplates = it_isPlainObject(envValue.templates) ? envValue.templates : {};
+        const dstTemplates = it_isPlainObject(envConfig.templates) ? { ...envConfig.templates } : {};
+        Object.entries(srcTemplates).forEach(([templateKey, templateValue]) => {
+          if (!it_isPlainObject(templateValue)) {
+            return;
+          }
+          const templateId = String(templateValue.id || templateKey || "").trim();
+          const resolvedKey = templateId || templateKey;
+          if (!resolvedKey || dstTemplates[resolvedKey]) {
+            return;
+          }
+          dstTemplates[resolvedKey] = {
+            ...templateValue,
+            id: templateId || resolvedKey,
+          };
+          envChanged = true;
+        });
+        if (Object.keys(dstTemplates).length) {
+          envConfig.templates = dstTemplates;
+        }
+
+        const srcBindings = it_isPlainObject(envValue.bindings) ? envValue.bindings : {};
+        const dstBindings = it_isPlainObject(envConfig.bindings) ? { ...envConfig.bindings } : {};
+        Object.entries(srcBindings).forEach(([groupKey, groupValue]) => {
+          if (!it_isPlainObject(groupValue)) {
+            return;
+          }
+          const dstGroup = it_isPlainObject(dstBindings[groupKey])
+            ? { ...dstBindings[groupKey] }
+            : {};
+          let groupChanged = false;
+          Object.entries(groupValue).forEach(([bindingKey, bindingValue]) => {
+            const nextValue = String(bindingValue || "").trim();
+            const currentValue = String(dstGroup[bindingKey] || "").trim();
+            if (!currentValue && nextValue) {
+              dstGroup[bindingKey] = nextValue;
+              groupChanged = true;
+            }
+          });
+          if (groupChanged || (!dstBindings[groupKey] && Object.keys(dstGroup).length)) {
+            dstBindings[groupKey] = dstGroup;
+            envChanged = true;
+          }
+        });
+        if (Object.keys(dstBindings).length) {
+          envConfig.bindings = dstBindings;
+        }
+
+        const srcSecrets = it_uniqueStrings(envValue.secrets);
+        const dstSecrets = it_uniqueStrings(envConfig.secrets);
+        const mergedSecrets = Array.from(new Set([...dstSecrets, ...srcSecrets]));
+        if (mergedSecrets.length && mergedSecrets.length !== dstSecrets.length) {
+          envConfig.secrets = mergedSecrets;
+          envChanged = true;
+        }
+
+        const srcReasoning = it_uniqueStrings(envValue?.param_options?.reasoning_effort);
+        if (srcReasoning.length) {
+          const dstParamOptions = it_isPlainObject(envConfig.param_options)
+            ? { ...envConfig.param_options }
+            : {};
+          const dstReasoning = it_uniqueStrings(dstParamOptions.reasoning_effort);
+          const mergedReasoning = Array.from(new Set([...dstReasoning, ...srcReasoning]));
+          if (
+            mergedReasoning.length &&
+            (mergedReasoning.length !== dstReasoning.length ||
+              !Array.isArray(dstParamOptions.reasoning_effort))
+          ) {
+            dstParamOptions.reasoning_effort = mergedReasoning;
+            envConfig.param_options = dstParamOptions;
+            envChanged = true;
+          }
+        }
+
+        const srcAutoRefresh = envValue?.token_options?.auto_refresh;
+        if (srcAutoRefresh !== undefined) {
+          const dstTokenOptions = it_isPlainObject(envConfig.token_options)
+            ? { ...envConfig.token_options }
+            : {};
+          if (dstTokenOptions.auto_refresh === undefined) {
+            dstTokenOptions.auto_refresh = Boolean(srcAutoRefresh);
+            envConfig.token_options = dstTokenOptions;
+            envChanged = true;
+          }
+        }
+
+        if (envChanged || !it_isPlainObject(existingEnvRaw)) {
+          targetEnvs[envName] = envConfig;
+          changed = true;
+        }
+      });
+    });
+
+    if (!changed) {
+      return;
+    }
+    if (!Number.isFinite(Number(targetConfig.version))) {
+      targetConfig.version = 1;
+    }
+    it_writeYamlFile(targetPath, targetConfig);
+  } catch {
+    // ignore template example merge failures
+  }
 }
 
 function it_getDefaultConfigDir(context: vscode.ExtensionContext): string {
@@ -151,6 +308,8 @@ export function it_ensureConfigFiles(context: vscode.ExtensionContext): void {
       fs.copyFileSync(src, dest);
     }
   }
+
+  it_mergeTemplateExampleConfigs(defaultDir, targetDir);
 
   const providerSrc = it_getDefaultProviderDir(context);
   const providerDest = it_getUserProviderDir(context);

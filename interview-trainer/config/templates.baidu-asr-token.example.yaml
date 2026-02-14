@@ -1,0 +1,72 @@
+version: 1
+environments:
+  prod:
+    templates:
+      "token:baidu-asr-access-token":
+        id: "token:baidu-asr-access-token"
+        name: "Baidu ASR Access Token"
+        category: "token"
+        request:
+          method: "POST"
+          url: "https://aip.baidubce.com/oauth/2.0/token"
+          query:
+            grant_type: "client_credentials"
+            client_id: "{{secrets.baidu_asr_api_key}}"
+            client_secret: "{{secrets.baidu_asr_secret_key}}"
+          headers:
+            Content-Type: "application/json"
+          timeoutSec: 30
+        response:
+          mode: "json"
+          textPath: "access_token"
+        token:
+          name: "baidu_asr_access_token"
+          valuePath: "access_token"
+          expiresInPath: "expires_in"
+          refreshBeforeSec: 86400
+          maxRetries: 1
+          enabled: true
+
+      "asr:baidu-vop-token":
+        id: "asr:baidu-vop-token"
+        name: "Baidu VOP ASR With Token"
+        category: "asr"
+        request:
+          method: "POST"
+          url: "https://vop.baidu.com/server_api"
+          headers:
+            Content-Type: "application/json"
+            Accept: "application/json"
+          body:
+            format: "{{audio.format}}"
+            rate: "{{audio.rate}}"
+            channel: "{{audio.channel}}"
+            cuid: "interview-trainer"
+            dev_pid: "{{asr.dev_pid}}"
+            speech: "{{audioFile}}"
+            len: "{{audio.byteLength}}"
+            token: "{{tokens.baidu_asr_access_token}}"
+          timeoutSec: 120
+        response:
+          mode: "json"
+          textPath: "result[0]"
+
+    bindings:
+      asr:
+        transcription: "asr:baidu-vop-token"
+      llm: {}
+      embedding: {}
+
+    secrets:
+      - "baidu_asr_api_key"
+      - "baidu_asr_secret_key"
+
+    param_options:
+      reasoning_effort:
+        - "low"
+        - "medium"
+        - "high"
+        - "xhigh"
+
+    token_options:
+      auto_refresh: true

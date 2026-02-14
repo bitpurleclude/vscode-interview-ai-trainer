@@ -1,0 +1,71 @@
+version: 1
+environments:
+  prod:
+    templates:
+      "llm:volc-ark-chat":
+        id: "llm:volc-ark-chat"
+        name: "Volcengine Ark Chat Completions"
+        category: "llm"
+        request:
+          method: "POST"
+          url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+          headers:
+            Authorization: "Bearer {{secrets.ark_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "doubao-1-5-pro-32k-250115"
+            messages: "{{messages}}"
+            temperature: "{{temperature}}"
+            top_p: "{{topP}}"
+            stream: false
+          timeoutSec: 60
+        response:
+          mode: "json"
+          textPath: "choices[0].message.content"
+
+      "embedding:volc-ark-multimodal":
+        id: "embedding:volc-ark-multimodal"
+        name: "Volcengine Ark Embeddings Multimodal"
+        category: "embedding"
+        request:
+          method: "POST"
+          url: "https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal"
+          headers:
+            Authorization: "Bearer {{secrets.ark_api_key}}"
+            Content-Type: "application/json"
+          body:
+            model: "doubao-embedding-vision-250615"
+            input:
+              - type: "text"
+                text: "{{embeddingInput}}"
+              - type: "image_url"
+                image_url:
+                  url: "{{imageUrl}}"
+          timeoutSec: 30
+        response:
+          mode: "json"
+          jsonPath: "data[0].embedding"
+
+    bindings:
+      llm:
+        questionParse: "llm:volc-ark-chat"
+        title: "llm:volc-ark-chat"
+        segment: "llm:volc-ark-chat"
+        evaluation: "llm:volc-ark-chat"
+      asr:
+        transcription: "<YOUR_EXISTING_ASR_TEMPLATE_ID>"
+      embedding:
+        retrieval: "<OPTIONAL_EMBEDDING_TEMPLATE_ID>"
+
+    secrets:
+      - "ark_api_key"
+
+    param_options:
+      reasoning_effort:
+        - "low"
+        - "medium"
+        - "high"
+        - "xhigh"
+
+    token_options:
+      auto_refresh: true
