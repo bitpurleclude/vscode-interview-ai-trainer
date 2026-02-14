@@ -45,6 +45,10 @@ function it_errorMessage(error: unknown): string {
   return String(error);
 }
 
+function it_isValidSecretName(name: string): boolean {
+  return /^[a-zA-Z0-9_.-]+$/.test(name);
+}
+
 function it_traceTemplate(
   context: ItTemplateUseCaseContext,
   event: string,
@@ -170,6 +174,17 @@ export async function it_saveTemplateSecretFromWebview(params: {
       "error",
     );
     throw new Error("missing secret name");
+  }
+  if (!it_isValidSecretName(name)) {
+    it_traceTemplate(
+      params.context,
+      "application.template_secret.save",
+      "save_secret",
+      "error",
+      { reason: "invalid_secret_name", name },
+      "error",
+    );
+    throw new Error("invalid secret name");
   }
 
   const hasValue = Object.prototype.hasOwnProperty.call(payload, "value");

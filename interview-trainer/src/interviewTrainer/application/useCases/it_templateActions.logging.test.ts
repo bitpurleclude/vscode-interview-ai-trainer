@@ -99,4 +99,49 @@ describe("it_templateActions logging", () => {
       }),
     );
   });
+
+  it("rejects invalid secret name and logs reason", async () => {
+    const context: any = {
+      extensionContext: {
+        secrets: {
+          store: vi.fn(async () => {}),
+          delete: vi.fn(async () => {}),
+        },
+      },
+      configService: {
+        loadBundle: vi.fn(() => ({
+          api: { active: { environment: "prod" } },
+          templates: { version: 1, environments: { prod: { secrets: [] } } },
+        })),
+        saveTemplateSecrets: vi.fn(),
+        saveTemplatesConfig: vi.fn(),
+      },
+      refreshConfigSnapshot: vi.fn(async () => ({ ok: true })),
+      tokenService: {
+        refreshTokenByName: vi.fn(async () => {}),
+        refreshAll: vi.fn(async () => {}),
+      },
+      logCorpusTrace: vi.fn(),
+    };
+
+    await expect(
+      it_saveTemplateSecretFromWebview({
+        context,
+        payload: {
+          name: "ark api key",
+          value: "x",
+        },
+      }),
+    ).rejects.toThrow(/invalid secret name/i);
+
+    expect(context.logCorpusTrace).toHaveBeenCalledWith(
+      "template save_secret error",
+      expect.objectContaining({
+        event: "application.template_secret.save",
+        reason: "invalid_secret_name",
+      }),
+    );
+    expect(context.configService.saveTemplateSecrets).not.toHaveBeenCalled();
+    expect(context.extensionContext.secrets.store).not.toHaveBeenCalled();
+  });
 });

@@ -18,6 +18,21 @@ type UseTemplateBindingsOptions = {
   setConfig: React.Dispatch<React.SetStateAction<ItConfigSnapshot | null>>;
 };
 
+function it_formatRequestError(resp: any, fallback: string): string {
+  const errorCode = String(resp?.errorCode || "").trim();
+  const errorDetail = String(resp?.error || "").trim();
+  if (errorCode && errorDetail) {
+    return `${fallback} (${errorCode}): ${errorDetail}`;
+  }
+  if (errorDetail) {
+    return `${fallback}: ${errorDetail}`;
+  }
+  if (errorCode) {
+    return `${fallback} (${errorCode})`;
+  }
+  return `${fallback}，请重试。`;
+}
+
 export function useTemplateBindings({
   templateBindings,
   setTemplateBindings,
@@ -45,7 +60,7 @@ export function useTemplateBindings({
         }
         setTemplateSaveMessage("绑定已保存。");
       } else {
-        setTemplateSaveMessage("绑定保存失败，请重试。");
+        setTemplateSaveMessage(it_formatRequestError(resp, "绑定保存失败"));
       }
     } catch (err) {
       setTemplateSaveMessage(
@@ -69,7 +84,7 @@ export function useTemplateBindings({
         }
         setTemplateSaveMessage("参数选项已保存。");
       } else {
-        setTemplateSaveMessage("参数选项保存失败，请重试。");
+        setTemplateSaveMessage(it_formatRequestError(resp, "参数选项保存失败"));
       }
     } catch (err) {
       setTemplateSaveMessage(
@@ -96,6 +111,10 @@ export function useTemplateBindings({
       setSecretMessage("请填写密钥名称。");
       return;
     }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(name)) {
+      setSecretMessage("密钥名称仅支持字母、数字、下划线、短横线和点。");
+      return;
+    }
     setSavingSecret(true);
     setSecretMessage(null);
     try {
@@ -110,7 +129,7 @@ export function useTemplateBindings({
         setSecretMessage("密钥已保存。");
         setSecretDraft({ name: "", value: "" });
       } else {
-        setSecretMessage("密钥保存失败，请重试。");
+        setSecretMessage(it_formatRequestError(resp, "密钥保存失败"));
       }
     } catch (err) {
       setSecretMessage(`密钥保存失败：${err instanceof Error ? err.message : String(err)}`);
@@ -130,7 +149,7 @@ export function useTemplateBindings({
           }
           setSecretMessage("密钥已删除。");
         } else {
-          setSecretMessage(`密钥删除失败：${resp?.error || "请重试。"}`);
+          setSecretMessage(it_formatRequestError(resp, "密钥删除失败"));
         }
       } catch (err) {
         setSecretMessage(`密钥删除失败：${err instanceof Error ? err.message : String(err)}`);
