@@ -315,7 +315,15 @@ export function useTemplateEditor({
         setSelectedTemplateId(nextTemplate.id);
         setTemplateSaveMessage("模板已保存。");
       } else {
-        setTemplateSaveMessage("模板保存失败，请检查输入。");
+        const errorCode = String(resp?.errorCode || "").trim();
+        const errorDetail = String(resp?.error || "").trim();
+        setTemplateSaveMessage(
+          errorDetail
+            ? `模板保存失败：${errorCode ? `${errorCode}: ` : ""}${errorDetail}`
+            : errorCode
+              ? `模板保存失败：${errorCode}`
+              : "模板保存失败，请检查输入。",
+        );
       }
     } catch (err) {
       setTemplateSaveMessage(
@@ -340,7 +348,15 @@ export function useTemplateEditor({
         }
         setTemplateSaveMessage("模板已删除。");
       } else {
-        setTemplateSaveMessage("删除失败，请重试。");
+        const errorCode = String(resp?.errorCode || "").trim();
+        const errorDetail = String(resp?.error || "").trim();
+        setTemplateSaveMessage(
+          errorDetail
+            ? `删除失败：${errorCode ? `${errorCode}: ` : ""}${errorDetail}`
+            : errorCode
+              ? `删除失败：${errorCode}`
+              : "删除失败，请重试。",
+        );
       }
     } catch (err) {
       setTemplateSaveMessage(`删除失败：${err instanceof Error ? err.message : String(err)}`);
