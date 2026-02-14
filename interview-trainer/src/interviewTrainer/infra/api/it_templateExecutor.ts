@@ -49,6 +49,15 @@ type ItNormalizedTemplateError = {
   responsePreview?: string;
 };
 
+type ItStreamLike = {
+  on: (event: string, listener: (...args: any[]) => void) => unknown;
+  off?: (event: string, listener: (...args: any[]) => void) => unknown;
+  once?: (event: string, listener: (...args: any[]) => void) => unknown;
+  removeListener?: (event: string, listener: (...args: any[]) => void) => unknown;
+  destroy?: () => unknown;
+  resume?: () => unknown;
+};
+
 function it_errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -97,52 +106,77 @@ function it_toStringOrNumber(value: unknown): string {
   return "";
 }
 
+function it_pickProviderCode(record: Record<string, unknown>): string | undefined {
+  const code = it_toStringOrNumber(
+    record.code ??
+      record.error_code ??
+      record.errorCode ??
+      record.status_code ??
+      record.statusCode ??
+      record.type,
+  );
+  return code || undefined;
+}
+
+function it_pickProviderMessage(record: Record<string, unknown>): string | undefined {
+  const message = it_trimText(
+    record.message ??
+      record.msg ??
+      record.error_msg ??
+      record.errorMessage ??
+      record.detail ??
+      record.error_description ??
+      record.description,
+  );
+  return message ? it_compactText(message) : undefined;
+}
+
 function it_extractProviderErrorData(data: unknown): {
   code?: string;
   message?: string;
 } {
   if (typeof data === "string") {
-    const message = it_compactText(data);
+    const trimmed = data.trim();
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        return it_extractProviderErrorData(JSON.parse(trimmed));
+      } catch {
+        // ignore malformed JSON strings
+      }
+    }
+    const message = it_compactText(trimmed);
     return message ? { message } : {};
   }
   if (!it_isPlainObject(data)) {
     return {};
   }
-  const directCode = it_toStringOrNumber(
-    data.code ?? data.error_code ?? data.errorCode ?? data.type,
-  );
-  let directMessage = it_trimText(
-    data.message ?? data.msg ?? data.error_msg ?? data.errorMessage ?? data.detail,
-  );
+  const directCode = it_pickProviderCode(data);
+  let directMessage = it_pickProviderMessage(data);
   const nestedError = data.error;
   if (!directMessage && typeof nestedError === "string") {
-    directMessage = nestedError.trim();
+    directMessage = it_compactText(nestedError);
   }
-  if (it_isPlainObject(nestedError)) {
+  const nestedCandidates: unknown[] = [nestedError, data.status, data.result, data.data];
+  for (const candidate of nestedCandidates) {
+    if (!it_isPlainObject(candidate)) {
+      continue;
+    }
     if (!directMessage) {
-      directMessage = it_trimText(
-        nestedError.message ??
-          nestedError.msg ??
-          nestedError.error_msg ??
-          nestedError.errorMessage ??
-          nestedError.detail,
-      );
+      directMessage = it_pickProviderMessage(candidate);
     }
     if (!directCode) {
-      const nestedCode = it_toStringOrNumber(
-        nestedError.code ?? nestedError.error_code ?? nestedError.errorCode ?? nestedError.type,
-      );
+      const nestedCode = it_pickProviderCode(candidate);
       if (nestedCode) {
         return {
           code: nestedCode,
-          message: directMessage ? it_compactText(directMessage) : undefined,
+          message: directMessage || undefined,
         };
       }
     }
   }
   return {
     code: directCode || undefined,
-    message: directMessage ? it_compactText(directMessage) : undefined,
+    message: directMessage || undefined,
   };
 }
 
@@ -193,6 +227,152 @@ function it_previewResponseData(data: unknown): string | undefined {
   }
 }
 
+function it_isStreamLike(value: unknown): value is ItStreamLike {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.on === "function" && (typeof record.resume === "function" || typeof record.destroy === "function");
+}
+
+function it_removeStreamListener(
+  stream: ItStreamLike,
+  event: string,
+  listener: (...args: any[]) => void,
+): void {
+  if (typeof stream.off === "function") {
+    stream.off(event, listener);
+    return;
+  }
+  if (typeof stream.removeListener === "function") {
+    stream.removeListener(event, listener);
+  }
+}
+
+function it_bufferFromChunk(chunk: unknown): Buffer {
+  if (Buffer.isBuffer(chunk)) {
+    return chunk;
+  }
+  if (chunk instanceof Uint8Array) {
+    return Buffer.from(chunk);
+  }
+  if (typeof chunk === "string") {
+    return Buffer.from(chunk);
+  }
+  return Buffer.from(String(chunk ?? ""));
+}
+
+async function it_readStreamPreview(
+  stream: ItStreamLike,
+  options?: { maxBytes?: number; timeoutMs?: number },
+): Promise<string | undefined> {
+  const maxBytes = Math.max(256, Number(options?.maxBytes ?? 8192));
+  const timeoutMs = Math.max(100, Number(options?.timeoutMs ?? 1200));
+  return await new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let finished = false;
+    let timer: ReturnType<typeof setTimeout> | undefined = undefined;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      it_removeStreamListener(stream, "data", onData);
+      it_removeStreamListener(stream, "end", onEnd);
+      it_removeStreamListener(stream, "error", onError);
+      it_removeStreamListener(stream, "close", onClose);
+    };
+
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      cleanup();
+      if (!chunks.length) {
+        resolve(undefined);
+        return;
+      }
+      const text = Buffer.concat(chunks).toString("utf8");
+      resolve(it_compactText(text, 500));
+    };
+
+    const onData = (chunk: unknown) => {
+      if (finished) {
+        return;
+      }
+      const buffer = it_bufferFromChunk(chunk);
+      if (!buffer.length) {
+        return;
+      }
+      const remain = maxBytes - size;
+      if (remain <= 0) {
+        finish();
+        return;
+      }
+      if (buffer.length > remain) {
+        chunks.push(buffer.subarray(0, remain));
+        size += remain;
+        finish();
+        return;
+      }
+      chunks.push(buffer);
+      size += buffer.length;
+      if (size >= maxBytes) {
+        finish();
+      }
+    };
+
+    const onEnd = () => finish();
+    const onClose = () => finish();
+    const onError = () => finish();
+
+    stream.on("data", onData);
+    stream.on("end", onEnd);
+    stream.on("close", onClose);
+    stream.on("error", onError);
+    if (typeof stream.resume === "function") {
+      stream.resume();
+    }
+    timer = setTimeout(() => finish(), timeoutMs);
+  });
+}
+
+async function it_resolveResponseErrorData(data: unknown): Promise<{
+  data: unknown;
+  responsePreview?: string;
+}> {
+  if (!it_isStreamLike(data)) {
+    return {
+      data,
+      responsePreview: it_previewResponseData(data),
+    };
+  }
+  const streamPreview = await it_readStreamPreview(data);
+  if (!streamPreview) {
+    return {
+      data,
+      responsePreview: "[stream body unavailable]",
+    };
+  }
+  const trimmed = streamPreview.trim();
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+    try {
+      return {
+        data: JSON.parse(trimmed),
+        responsePreview: streamPreview,
+      };
+    } catch {
+      // keep plain-text preview when json parsing fails
+    }
+  }
+  return {
+    data: streamPreview,
+    responsePreview: streamPreview,
+  };
+}
+
 function it_buildHttpErrorMessage(params: {
   baseMessage: string;
   statusCode?: number;
@@ -214,18 +394,19 @@ function it_buildHttpErrorMessage(params: {
   return message;
 }
 
-function it_normalizeTemplateError(error: unknown): ItNormalizedTemplateError {
+async function it_normalizeTemplateError(error: unknown): Promise<ItNormalizedTemplateError> {
   if (!it_isHttpLikeError(error)) {
     return { error };
   }
   const response = error.response || {};
   const statusCode =
     typeof response.status === "number" ? response.status : undefined;
+  const resolvedData = await it_resolveResponseErrorData(response.data);
   const { code: providerCode, message: providerMessage } = it_extractProviderErrorData(
-    response.data,
+    resolvedData.data,
   );
   const requestId = it_extractRequestId(response.headers);
-  const responsePreview = it_previewResponseData(response.data);
+  const responsePreview = resolvedData.responsePreview;
   const baseMessage =
     error instanceof Error ? error.message : it_trimText(error.message);
   const nextMessage = it_buildHttpErrorMessage({
@@ -570,7 +751,7 @@ export async function it_executeTemplate(
         headers: response.headers as Record<string, string>,
       };
     } catch (error) {
-      const normalized = it_normalizeTemplateError(error);
+      const normalized = await it_normalizeTemplateError(error);
       lastError = normalized.error;
       lastErrorDetail = normalized;
       it_traceTemplateExecutor(options.onTrace, "attempt", "error", {

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Readable } from "stream";
 import { describe, expect, it, vi } from "vitest";
 import { it_executeTemplate } from "./it_templateExecutor";
 
@@ -99,5 +100,45 @@ describe("it_templateExecutor security", () => {
         variables: {},
       }),
     ).rejects.toThrow("HTTP 403 (20003): Insufficient balance [request_id=sf-req-123]");
+  });
+
+  it("extracts provider error details from stream error bodies", async () => {
+    const requestMock = vi.mocked(axios.request);
+    requestMock.mockReset();
+    requestMock.mockRejectedValue({
+      message: "Request failed with status code 403",
+      response: {
+        status: 403,
+        headers: {},
+        data: Readable.from([
+          JSON.stringify({
+            error: {
+              code: "permission_denied",
+              message: "Model access denied",
+            },
+          }),
+        ]),
+      },
+    });
+
+    await expect(
+      it_executeTemplate({
+        runtime: {
+          ...runtime,
+          template: {
+            ...runtime.template,
+            request: {
+              method: "POST",
+              url: "https://example.com/api",
+              body: {},
+            },
+            response: {
+              mode: "sse",
+            },
+          },
+        },
+        variables: {},
+      }),
+    ).rejects.toThrow("HTTP 403 (permission_denied): Model access denied");
   });
 });
