@@ -49,6 +49,20 @@ function it_isValidSecretName(name: string): boolean {
   return /^[a-zA-Z0-9_.-]+$/.test(name);
 }
 
+function it_buildSecretHint(value: string): string {
+  const normalized = String(value || "");
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= 2) {
+    return `${normalized[0] || "*"}***${normalized.slice(-1) || "*"}`;
+  }
+  if (normalized.length <= 6) {
+    return `${normalized.slice(0, 1)}***${normalized.slice(-1)}`;
+  }
+  return `${normalized.slice(0, 3)}***${normalized.slice(-3)}`;
+}
+
 function it_traceTemplate(
   context: ItTemplateUseCaseContext,
   event: string,
@@ -208,6 +222,30 @@ export async function it_saveTemplateSecretFromWebview(params: {
       ...existing,
       name,
     ]);
+
+    const nextEnvConfig = it_asRecord(templatesConfig.environments?.[env]);
+    const nextSecretHints = {
+      ...it_asRecord(nextEnvConfig.secret_hints),
+    };
+    if (hasValue) {
+      const hint = it_buildSecretHint(value);
+      if (hint) {
+        nextSecretHints[name] = hint;
+      } else {
+        delete nextSecretHints[name];
+      }
+    }
+    templatesConfig = {
+      ...templatesConfig,
+      environments: {
+        ...(templatesConfig.environments || {}),
+        [env]: {
+          ...nextEnvConfig,
+          secret_hints: nextSecretHints,
+        },
+      },
+    };
+
     params.context.configService.saveTemplatesConfig(templatesConfig);
 
     if (hasValue) {
@@ -285,6 +323,23 @@ export async function it_deleteTemplateSecretFromWebview(params: {
       env,
       nextSecrets,
     );
+
+    const nextEnvConfig = it_asRecord(templatesConfig.environments?.[env]);
+    const nextSecretHints = {
+      ...it_asRecord(nextEnvConfig.secret_hints),
+    };
+    delete nextSecretHints[name];
+    templatesConfig = {
+      ...templatesConfig,
+      environments: {
+        ...(templatesConfig.environments || {}),
+        [env]: {
+          ...nextEnvConfig,
+          secret_hints: nextSecretHints,
+        },
+      },
+    };
+
     params.context.configService.saveTemplatesConfig(templatesConfig);
     await params.context.extensionContext.secrets.delete(
       `interviewTrainer.${env}.secret.${name}`,

@@ -53,6 +53,17 @@ describe("it_templateActions logging", () => {
       "interviewTrainer.prod.secret.demo",
       "super-secret-value",
     );
+    expect(context.configService.saveTemplatesConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environments: expect.objectContaining({
+          prod: expect.objectContaining({
+            secret_hints: expect.objectContaining({
+              demo: "sup***lue",
+            }),
+          }),
+        }),
+      }),
+    );
     expect(context.logCorpusTrace).toHaveBeenCalledWith(
       "template save_secret success",
       expect.objectContaining({

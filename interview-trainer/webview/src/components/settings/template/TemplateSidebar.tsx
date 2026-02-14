@@ -10,6 +10,7 @@ type TemplateSidebarProps = {
   showAllVars: boolean;
   setShowAllVars: React.Dispatch<React.SetStateAction<boolean>>;
   templateSecrets: string[];
+  templateSecretHints: Record<string, string>;
   secretDraft: SecretDraft;
   setSecretDraft: React.Dispatch<React.SetStateAction<SecretDraft>>;
   savingSecret: boolean;
@@ -37,6 +38,7 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
   showAllVars,
   setShowAllVars,
   templateSecrets,
+  templateSecretHints,
   secretDraft,
   setSecretDraft,
   savingSecret,
@@ -153,6 +155,9 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
                 <div className="it-template__secret-main">
                   <span className="it-template__token-name">{name}</span>
                   <div className="it-template__token-meta">{`{{secrets.${name}}}`}</div>
+                  {templateSecretHints[name] ? (
+                    <div className="it-template__token-meta">{templateSecretHints[name]}</div>
+                  ) : null}
                 </div>
                 <div className="it-template__secret-actions">
                   <button

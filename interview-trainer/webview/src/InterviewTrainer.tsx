@@ -1006,6 +1006,7 @@ const InterviewTrainer: React.FC = () => {
     paramCatalogList,
     templateUsageSets,
     templateSecrets: bindingSecrets,
+    templateSecretHints: config?.templates?.secretHints ?? {},
     secretDraft,
     setSecretDraft,
     savingSecret,

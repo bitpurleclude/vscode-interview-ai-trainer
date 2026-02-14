@@ -112,6 +112,7 @@ export interface ItTemplatesSnapshot {
     reasoningEffort: string[];
   };
   secretNames?: string[];
+  secretHints?: Record<string, string>;
   tokenStore?: ItTokenStoreSnapshot;
 }
 

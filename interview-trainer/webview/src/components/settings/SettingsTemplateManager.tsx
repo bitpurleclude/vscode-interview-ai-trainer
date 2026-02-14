@@ -43,6 +43,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
     paramCatalogList,
     templateUsageSets,
     templateSecrets,
+    templateSecretHints,
     secretDraft,
     setSecretDraft,
     savingSecret,
@@ -317,6 +318,7 @@ export const SettingsTemplateManager: React.FC<SettingsTemplateManagerProps> = (
           showAllVars={showAllVars}
           setShowAllVars={setShowAllVars}
           templateSecrets={templateSecrets}
+          templateSecretHints={templateSecretHints}
           secretDraft={secretDraft}
           setSecretDraft={setSecretDraft}
           savingSecret={savingSecret}

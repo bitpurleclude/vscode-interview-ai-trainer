@@ -101,6 +101,7 @@ export type SettingsCommonTemplateProps = {
   paramCatalogList: string[];
   templateUsageSets: TemplateUsageSets;
   templateSecrets: string[];
+  templateSecretHints: Record<string, string>;
   secretDraft: SecretDraft;
   setSecretDraft: React.Dispatch<React.SetStateAction<SecretDraft>>;
   savingSecret: boolean;

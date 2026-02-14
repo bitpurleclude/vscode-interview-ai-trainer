@@ -22,6 +22,12 @@ import {
 
 const IT_TEMPLATE_VAR_PATTERN = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 
+function it_asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function it_buildTemplateParamCatalog(): ItTemplateParamCatalog {
   return {
     common: ["apiKey", "secretKey", "timeoutSec", "stream"],
@@ -219,9 +225,17 @@ export function it_buildConfigSnapshot(
     }))
     .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
   const templateBindings = templateEnv.bindings || { llm: {}, asr: {}, embedding: {} };
-  const templateSecrets = Array.isArray(templateEnv.secrets)
+  const templateSecrets: string[] = Array.isArray(templateEnv.secrets)
     ? templateEnv.secrets.map((item: any) => String(item || "").trim()).filter(Boolean)
     : [];
+  const rawSecretHints = it_asRecord(templateEnv.secret_hints);
+  const templateSecretHints: Record<string, string> = {};
+  templateSecrets.forEach((name) => {
+    const hint = String(rawSecretHints[name] || "").trim();
+    if (hint) {
+      templateSecretHints[name] = hint;
+    }
+  });
   const paramOptions = {
     reasoningEffort: Array.isArray(templateEnv.param_options?.reasoning_effort)
       ? templateEnv.param_options.reasoning_effort
@@ -237,6 +251,7 @@ export function it_buildConfigSnapshot(
     paramUsage,
     paramOptions,
     secretNames: templateSecrets,
+    secretHints: templateSecretHints,
     tokenStore,
   };
   const llmConfig = envConfig.llm ?? {};
