@@ -31,6 +31,24 @@ type ItTemplateExecutorTrace = (
   detail?: Record<string, unknown>,
 ) => void;
 
+type ItHttpLikeError = {
+  message?: unknown;
+  response?: {
+    status?: unknown;
+    headers?: unknown;
+    data?: unknown;
+  };
+};
+
+type ItNormalizedTemplateError = {
+  error: unknown;
+  statusCode?: number;
+  providerCode?: string;
+  providerMessage?: string;
+  requestId?: string;
+  responsePreview?: string;
+};
+
 function it_errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -46,6 +64,189 @@ function it_statusFromError(error: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+function it_isHttpLikeError(error: unknown): error is ItHttpLikeError {
+  return Boolean(error && typeof error === "object" && "response" in (error as object));
+}
+
+function it_trimText(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
+
+function it_compactText(value: string, maxChars = 280): string {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length <= maxChars
+    ? normalized
+    : `${normalized.slice(0, Math.max(0, maxChars - 3))}...`;
+}
+
+function it_toStringOrNumber(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return "";
+}
+
+function it_extractProviderErrorData(data: unknown): {
+  code?: string;
+  message?: string;
+} {
+  if (typeof data === "string") {
+    const message = it_compactText(data);
+    return message ? { message } : {};
+  }
+  if (!it_isPlainObject(data)) {
+    return {};
+  }
+  const directCode = it_toStringOrNumber(
+    data.code ?? data.error_code ?? data.errorCode ?? data.type,
+  );
+  let directMessage = it_trimText(
+    data.message ?? data.msg ?? data.error_msg ?? data.errorMessage ?? data.detail,
+  );
+  const nestedError = data.error;
+  if (!directMessage && typeof nestedError === "string") {
+    directMessage = nestedError.trim();
+  }
+  if (it_isPlainObject(nestedError)) {
+    if (!directMessage) {
+      directMessage = it_trimText(
+        nestedError.message ??
+          nestedError.msg ??
+          nestedError.error_msg ??
+          nestedError.errorMessage ??
+          nestedError.detail,
+      );
+    }
+    if (!directCode) {
+      const nestedCode = it_toStringOrNumber(
+        nestedError.code ?? nestedError.error_code ?? nestedError.errorCode ?? nestedError.type,
+      );
+      if (nestedCode) {
+        return {
+          code: nestedCode,
+          message: directMessage ? it_compactText(directMessage) : undefined,
+        };
+      }
+    }
+  }
+  return {
+    code: directCode || undefined,
+    message: directMessage ? it_compactText(directMessage) : undefined,
+  };
+}
+
+function it_extractRequestId(headers: unknown): string | undefined {
+  if (!headers || typeof headers !== "object") {
+    return undefined;
+  }
+  const record = headers as Record<string, unknown>;
+  const keys = Object.keys(record);
+  for (const key of keys) {
+    const lower = key.toLowerCase();
+    if (
+      lower !== "x-request-id" &&
+      lower !== "request-id" &&
+      lower !== "x-trace-id" &&
+      lower !== "trace-id" &&
+      lower !== "x-sf-request-id"
+    ) {
+      continue;
+    }
+    const rawValue = record[key];
+    if (Array.isArray(rawValue) && rawValue.length) {
+      const first = String(rawValue[0] || "").trim();
+      if (first) {
+        return first;
+      }
+      continue;
+    }
+    const value = String(rawValue || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function it_previewResponseData(data: unknown): string | undefined {
+  if (data === undefined || data === null) {
+    return undefined;
+  }
+  if (typeof data === "string") {
+    return it_compactText(data, 500);
+  }
+  try {
+    return it_compactText(JSON.stringify(data), 500);
+  } catch {
+    return it_compactText(String(data), 500);
+  }
+}
+
+function it_buildHttpErrorMessage(params: {
+  baseMessage: string;
+  statusCode?: number;
+  providerCode?: string;
+  providerMessage?: string;
+  requestId?: string;
+}): string {
+  const statusText = params.statusCode ? `HTTP ${params.statusCode}` : "";
+  let message = statusText || params.baseMessage || "Template request failed.";
+  if (params.providerCode) {
+    message += ` (${params.providerCode})`;
+  }
+  if (params.providerMessage) {
+    message += `: ${params.providerMessage}`;
+  }
+  if (params.requestId) {
+    message += ` [request_id=${params.requestId}]`;
+  }
+  return message;
+}
+
+function it_normalizeTemplateError(error: unknown): ItNormalizedTemplateError {
+  if (!it_isHttpLikeError(error)) {
+    return { error };
+  }
+  const response = error.response || {};
+  const statusCode =
+    typeof response.status === "number" ? response.status : undefined;
+  const { code: providerCode, message: providerMessage } = it_extractProviderErrorData(
+    response.data,
+  );
+  const requestId = it_extractRequestId(response.headers);
+  const responsePreview = it_previewResponseData(response.data);
+  const baseMessage =
+    error instanceof Error ? error.message : it_trimText(error.message);
+  const nextMessage = it_buildHttpErrorMessage({
+    baseMessage,
+    statusCode,
+    providerCode,
+    providerMessage,
+    requestId,
+  });
+  let normalizedError: unknown = error;
+  if (!(error instanceof Error) || error.message !== nextMessage) {
+    normalizedError = new Error(nextMessage);
+  }
+  return {
+    error: normalizedError,
+    statusCode,
+    providerCode,
+    providerMessage,
+    requestId,
+    responsePreview,
+  };
 }
 
 function it_traceTemplateExecutor(
@@ -281,6 +482,7 @@ export async function it_executeTemplate(
   const expectStream = responseMode === "sse";
 
   let lastError: unknown = undefined;
+  let lastErrorDetail: ItNormalizedTemplateError | undefined = undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     if (options.abortSignal?.aborted) {
       it_traceTemplateExecutor(options.onTrace, "run", "aborted", {
@@ -368,14 +570,20 @@ export async function it_executeTemplate(
         headers: response.headers as Record<string, string>,
       };
     } catch (error) {
-      lastError = error;
+      const normalized = it_normalizeTemplateError(error);
+      lastError = normalized.error;
+      lastErrorDetail = normalized;
       it_traceTemplateExecutor(options.onTrace, "attempt", "error", {
         templateId: runtime.template.id,
         environment: runtime.environment,
         attempt: attempt + 1,
         maxAttempts: maxRetries + 1,
-        statusCode: it_statusFromError(error),
-        error: it_errorMessage(error),
+        statusCode: normalized.statusCode ?? it_statusFromError(normalized.error),
+        error: it_errorMessage(normalized.error),
+        providerCode: normalized.providerCode,
+        providerMessage: normalized.providerMessage,
+        requestId: normalized.requestId,
+        responsePreview: normalized.responsePreview,
         durationMs: Date.now() - attemptStart,
       });
     }
@@ -385,8 +593,12 @@ export async function it_executeTemplate(
     templateId: runtime.template.id,
     environment: runtime.environment,
     maxAttempts: maxRetries + 1,
-    statusCode: it_statusFromError(lastError),
+    statusCode: lastErrorDetail?.statusCode ?? it_statusFromError(lastError),
     error: it_errorMessage(lastError),
+    providerCode: lastErrorDetail?.providerCode,
+    providerMessage: lastErrorDetail?.providerMessage,
+    requestId: lastErrorDetail?.requestId,
+    responsePreview: lastErrorDetail?.responsePreview,
     durationMs: Date.now() - startedAt,
   });
   throw lastError instanceof Error ? lastError : new Error("Template request failed.");

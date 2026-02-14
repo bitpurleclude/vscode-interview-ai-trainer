@@ -65,4 +65,39 @@ describe("it_templateExecutor security", () => {
       }),
     ).rejects.toThrow("Template request failed.");
   });
+
+  it("surfaces provider error details for HTTP responses", async () => {
+    const requestMock = vi.mocked(axios.request);
+    requestMock.mockReset();
+    requestMock.mockRejectedValue({
+      message: "Request failed with status code 403",
+      response: {
+        status: 403,
+        headers: {
+          "x-request-id": "sf-req-123",
+        },
+        data: {
+          code: 20003,
+          message: "Insufficient balance",
+        },
+      },
+    });
+
+    await expect(
+      it_executeTemplate({
+        runtime: {
+          ...runtime,
+          template: {
+            ...runtime.template,
+            request: {
+              method: "POST",
+              url: "https://example.com/api",
+              body: {},
+            },
+          },
+        },
+        variables: {},
+      }),
+    ).rejects.toThrow("HTTP 403 (20003): Insufficient balance [request_id=sf-req-123]");
+  });
 });
