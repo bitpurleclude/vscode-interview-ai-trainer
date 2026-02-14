@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { ItState, ItTemplateBindings, ItTemplateCategory } from "./types";
+import {
+  ItConfigSnapshot,
+  ItState,
+  ItTemplateBindings,
+  ItTemplateCategory,
+} from "./types";
 import { on, request } from "./messenger";
 import { STRICT_SYSTEM_PROMPT, DEFAULT_DEMO_PROMPT } from "./constants/prompts";
 import { DEFAULT_STATE } from "./constants/defaultState";
@@ -38,6 +43,16 @@ const IT_E2E_MISSING_HANDLER_PROBE_TYPE = "it/test/missingHandlerProbe";
 const IT_E2E_UI_CLICK_DELAY_MS = 80;
 const IT_E2E_UI_WAIT_POLL_MS = 120;
 const IT_E2E_UI_ANALYZE_TIMEOUT_MS = 45_000;
+const IT_WORKSPACE_DIR_FIELD_MAP: Record<
+  string,
+  keyof ItConfigSnapshot["workspaceDirs"]
+> = {
+  notes: "notesDir",
+  prompts: "promptsDir",
+  rubrics: "rubricsDir",
+  knowledge: "knowledgeDir",
+  examples: "examplesDir",
+};
 
 type ItE2EUiStep = {
   action: string;
@@ -472,11 +487,48 @@ const InterviewTrainer: React.FC = () => {
   const handleOpenSettings = () => {
     request("it/openSettings", undefined);
   };
-  const handleSelectSessionsDir = () => {
-    request("it/selectSessionsDir", undefined);
+  const handleSelectSessionsDir = async () => {
+    const resp = await request("it/selectSessionsDir", undefined);
+    if (resp?.status !== "success") {
+      return;
+    }
+    const sessionsDir = String(resp?.content?.sessionsDir || "").trim();
+    if (!sessionsDir) {
+      return;
+    }
+    setConfig((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        sessionsDir,
+      };
+    });
   };
   const handleSelectWorkspaceDir = async (kind: string) => {
-    await request("it/selectWorkspaceDir", { kind });
+    const resp = await request("it/selectWorkspaceDir", { kind });
+    if (resp?.status !== "success") {
+      return;
+    }
+    const selectedKind = String(resp?.content?.kind || kind).trim();
+    const selectedPath = String(resp?.content?.path || "").trim();
+    const workspaceField = IT_WORKSPACE_DIR_FIELD_MAP[selectedKind];
+    if (!workspaceField || !selectedPath) {
+      return;
+    }
+    setConfig((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        workspaceDirs: {
+          ...prev.workspaceDirs,
+          [workspaceField]: selectedPath,
+        },
+      };
+    });
   };
   const handleToggleNoteHits = () => {
     setShowNoteHits((prev) => !prev);

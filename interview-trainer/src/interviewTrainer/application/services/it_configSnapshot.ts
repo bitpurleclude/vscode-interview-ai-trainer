@@ -138,6 +138,7 @@ const IT_LEGACY_WORKSPACE_KEYS = [
   "knowledge_dir",
   "examples_dir",
 ];
+const IT_CORPUS_WATCHER_SIGNATURES = new WeakMap<ItConfigSnapshotHost, string>();
 
 type ItWorkspaceMigrationResult = {
   skill: Record<string, any>;
@@ -145,6 +146,16 @@ type ItWorkspaceMigrationResult = {
 };
 
 type ItCorpusWatcherEventKind = "create" | "change" | "delete";
+
+function it_buildCorpusWatcherSignature(
+  workspaceRoot: string,
+  targets: string[],
+): string {
+  return JSON.stringify({
+    workspaceRoot: path.normalize(workspaceRoot),
+    targets: targets.slice().sort(),
+  });
+}
 
 function it_traceCorpusWatchers(
   host: ItConfigSnapshotHost,
@@ -436,15 +447,17 @@ export function it_buildConfigSnapshot(
 }
 
 export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
-  const disposedCount = host.corpusWatchers.length;
-  host.corpusWatchers.forEach((watcher) => watcher.dispose());
-  host.corpusWatchers = [];
-  it_traceCorpusWatchers(host, "reset", "success", {
-    disposedCount,
-  });
-
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
+    const disposedCount = host.corpusWatchers.length;
+    if (disposedCount > 0) {
+      host.corpusWatchers.forEach((watcher) => watcher.dispose());
+      host.corpusWatchers = [];
+      it_traceCorpusWatchers(host, "reset", "success", {
+        disposedCount,
+      });
+    }
+    IT_CORPUS_WATCHER_SIGNATURES.delete(host);
     it_traceCorpusWatchers(host, "setup", "skipped", {
       reason: "workspace_missing",
     }, "warn");
@@ -468,6 +481,23 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
         .map((value) => path.normalize(String(value))),
     ),
   );
+  const nextSignature = it_buildCorpusWatcherSignature(workspaceRoot, targets);
+  const prevSignature = IT_CORPUS_WATCHER_SIGNATURES.get(host);
+  if (prevSignature === nextSignature && host.corpusWatchers.length === targets.length) {
+    it_traceCorpusWatchers(host, "setup", "unchanged", {
+      workspaceRoot,
+      targetCount: targets.length,
+      watcherCount: host.corpusWatchers.length,
+    }, "debug");
+    return;
+  }
+
+  const disposedCount = host.corpusWatchers.length;
+  host.corpusWatchers.forEach((watcher) => watcher.dispose());
+  host.corpusWatchers = [];
+  it_traceCorpusWatchers(host, "reset", "success", {
+    disposedCount,
+  });
 
   it_traceCorpusWatchers(host, "setup", "start", {
     workspaceRoot,
@@ -499,6 +529,7 @@ export function it_updateCorpusWatchers(host: ItConfigSnapshotHost): void {
     host.corpusWatchers.push(watcher);
   });
 
+  IT_CORPUS_WATCHER_SIGNATURES.set(host, nextSignature);
   host.corpusDirty = true;
   host.corpusDirtyFiles.clear();
   it_traceCorpusWatchers(host, "setup", "success", {

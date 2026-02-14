@@ -69,7 +69,6 @@ export async function it_getConfigFromWebview(params: {
   it_traceCore(params.context, "get_config", "start");
   try {
     const configSnapshot = await params.context.refreshConfigSnapshot();
-    const configBundle = params.context.configService.loadBundle();
     params.context.scheduleEmbeddingWarmup("config");
     it_traceCore(params.context, "get_config", "success", {
       retrievalMode: configSnapshot.retrieval.mode,
@@ -78,7 +77,6 @@ export async function it_getConfigFromWebview(params: {
     return {
       value: configSnapshot,
       configSnapshot,
-      configBundle,
     };
   } catch (error) {
     it_traceCore(params.context, "get_config", "error", {
