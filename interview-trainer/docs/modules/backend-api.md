@@ -40,6 +40,7 @@
 ## 注意事项
 - 模板变量需与前端“可引用变量”一致，否则易出现 dryrun/live 不一致。
 - `templateEnv` 与 `environment` 影响模板选择，注意 prod/dev 区分。
+- 多模态 Embedding 模板（如 `.../embeddings/multimodal`）在接收多条文本时，`it_embedding.ts` 会自动做客户端 fan-out（逐条调用再聚合向量），避免接口单次只返回单向量导致批处理失败。
 
 ## 常见问题
 - 请求 400：通常是模板参数缺失或类型不匹配。

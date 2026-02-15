@@ -130,6 +130,81 @@ function it_isDoubaoMultimodalModel(cfg: ItEmbeddingConfig): boolean {
   return model.includes("vision") || model.includes("multimodal");
 }
 
+function it_isTemplateMultimodalRequest(template: ItApiTemplate): boolean {
+  const url = String(template?.request?.url || "").toLowerCase();
+  return url.includes("/embeddings/multimodal");
+}
+
+async function it_executeEmbeddingTemplate(args: {
+  cfg: ItEmbeddingConfig;
+  template: ItApiTemplate;
+  templateContext: vscode.ExtensionContext;
+  templateEnv: string;
+  inputs: string[];
+}): Promise<number[][]> {
+  const { cfg, template, templateContext, templateEnv, inputs } = args;
+  const embeddingInput = inputs.length === 1 ? inputs[0] : inputs;
+  const embeddingInputs = inputs.map((text) => ({
+    type: "text",
+    text,
+  }));
+  const result = await it_executeTemplate({
+    runtime: {
+      template,
+      environment: templateEnv,
+      context: templateContext,
+    },
+    variables: {
+      embeddingInput,
+      embeddingInputs,
+      model: cfg.model,
+      ...(cfg.templateVars || {}),
+    },
+    maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
+    timeoutSec: cfg.timeoutSec,
+    stream: false,
+  });
+  const value = result.value ?? result.raw;
+  if (Array.isArray(value)) {
+    if (value.length && Array.isArray(value[0])) {
+      return value as number[][];
+    }
+    if (value.length && value.every((item) => typeof item === "number")) {
+      return [value as number[]];
+    }
+  }
+  const vectors = it_parseEmbeddingResponse(result.raw, inputs.length);
+  if (!vectors.length) {
+    throw new Error("Embedding response missing data");
+  }
+  return vectors;
+}
+
+async function it_callEmbeddingTemplateFanout(args: {
+  cfg: ItEmbeddingConfig;
+  template: ItApiTemplate;
+  templateContext: vscode.ExtensionContext;
+  templateEnv: string;
+  inputs: string[];
+}): Promise<number[][]> {
+  const { cfg, template, templateContext, templateEnv, inputs } = args;
+  const results: number[][] = [];
+  for (const text of inputs) {
+    const vectors = await it_executeEmbeddingTemplate({
+      cfg,
+      template,
+      templateContext,
+      templateEnv,
+      inputs: [text],
+    });
+    if (!vectors.length || !Array.isArray(vectors[0])) {
+      throw new Error("Embedding response missing data");
+    }
+    results.push(vectors[0]);
+  }
+  return results;
+}
+
 
 function it_traceEmbedding(
   cfg: ItEmbeddingConfig,
@@ -262,40 +337,61 @@ export async function it_callEmbedding(
       const template = cfg.template as ItApiTemplate;
       const templateContext = cfg.templateContext as vscode.ExtensionContext;
       const templateEnv = cfg.templateEnv || "prod";
-      const embeddingInput = inputs.length === 1 ? inputs[0] : inputs;
-      const embeddingInputs = inputs.map((text) => ({
-        type: "text",
-        text,
-      }));
-      const result = await it_executeTemplate({
-        runtime: {
+      const shouldPreferFanout =
+        inputs.length > 1 &&
+        (it_isTemplateMultimodalRequest(template) || it_isDoubaoMultimodalModel(cfg));
+      if (shouldPreferFanout) {
+        it_traceEmbedding(cfg, "template_fanout", "start", {
+          inputCount: inputs.length,
+          templateId: template.id,
+          reason: "multimodal_template",
+        });
+        vectors = await it_callEmbeddingTemplateFanout({
+          cfg,
           template,
-          environment: templateEnv,
-          context: templateContext,
-        },
-        variables: {
-          embeddingInput,
-          embeddingInputs,
-          model: cfg.model,
-          ...(cfg.templateVars || {}),
-        },
-        maxRetries: cfg.templateMaxRetries ?? cfg.maxRetries,
-        timeoutSec: cfg.timeoutSec,
-        stream: false,
-      });
-      const value = result.value ?? result.raw;
-      if (Array.isArray(value)) {
-        if (value.length && Array.isArray(value[0])) {
-          vectors = value as number[][];
-        } else if (value.length && value.every((item) => typeof item === "number")) {
-          vectors = [value as number[]];
+          templateContext,
+          templateEnv,
+          inputs,
+        });
+        it_traceEmbedding(cfg, "template_fanout", "success", {
+          inputCount: inputs.length,
+          vectorCount: vectors.length,
+          templateId: template.id,
+        });
+      } else {
+        try {
+          vectors = await it_executeEmbeddingTemplate({
+            cfg,
+            template,
+            templateContext,
+            templateEnv,
+            inputs,
+          });
+        } catch (error) {
+          const shouldFallbackFanout =
+            inputs.length > 1 &&
+            it_errorMessage(error).includes("single vector for multiple inputs");
+          if (!shouldFallbackFanout) {
+            throw error;
+          }
+          it_traceEmbedding(cfg, "template_fanout", "start", {
+            inputCount: inputs.length,
+            templateId: template.id,
+            reason: "single_vector_response",
+          });
+          vectors = await it_callEmbeddingTemplateFanout({
+            cfg,
+            template,
+            templateContext,
+            templateEnv,
+            inputs,
+          });
+          it_traceEmbedding(cfg, "template_fanout", "success", {
+            inputCount: inputs.length,
+            vectorCount: vectors.length,
+            templateId: template.id,
+          });
         }
-      }
-      if (!vectors.length) {
-        vectors = it_parseEmbeddingResponse(result.raw, inputs.length);
-      }
-      if (!vectors.length) {
-        throw new Error("Embedding response missing data");
       }
     } else if (useMultimodal) {
       vectors = await it_callDoubaoMultimodal(cfg, inputs);

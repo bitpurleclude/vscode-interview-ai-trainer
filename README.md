@@ -349,6 +349,9 @@ environments:
     jsonPath: "data[0].embedding"
 ```
 
+运行说明：
+- 当模板 URL 使用 `embeddings/multimodal` 且检索阶段一次传入多条文本时，插件会自动在客户端做 fan-out（逐条请求并聚合向量），以兼容该接口单次返回单向量的行为。
+
 模板测试时可在“变量 JSON”里传入：
 
 ```json
