@@ -486,11 +486,11 @@ npm run package
 
 ## API Key 获取链接
 
-- SiliconFlow（API Key）  
+- SiliconFlow（siliconflow_api_key）  
   https://cloud.siliconflow.cn/me/account/ak
-- 百度语音（API Key / Secret Key）  
+- 百度语音（baidu_asr_api_key / baidu_asr_secret_key）  
   https://console.bce.baidu.com/ai-engine/old/#/ai/speech/app/list
-- 火山引擎 Ark（API Key）  
+- 火山引擎 Ark（ark_api_key）  
   https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D
 
 ## 开发工具下载
