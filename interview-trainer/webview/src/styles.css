@@ -242,11 +242,17 @@
   font-size: 10px;
 }
 
+.it-step__stream-new {
+  font-size: 10px;
+}
+
 .it-step__stream-text {
   white-space: pre-wrap;
   font-size: 10px;
   line-height: 1.4;
   color: var(--vscode-sideBar-foreground);
+  max-height: min(220px, 35vh);
+  overflow-y: auto;
 }
 
 .it-step__stream-preview {
@@ -554,6 +560,10 @@
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.it-evaluation__stream-text {
+  max-height: min(240px, 38vh);
   overflow-y: auto;
   flex: 1;
 }
@@ -574,6 +584,10 @@
 }
 
 .it-evaluation__stream-toggle {
+  font-size: 11px;
+}
+
+.it-evaluation__stream-new {
   font-size: 11px;
 }
 
