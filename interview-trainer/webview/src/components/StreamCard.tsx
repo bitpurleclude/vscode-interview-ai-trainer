@@ -9,6 +9,7 @@ type StreamCardProps = {
   text?: string;
   collapsed?: boolean;
   done?: boolean;
+  omittedChars?: number;
   showToggle?: boolean;
   previewLimit?: number;
   placeholder?: string;
@@ -23,6 +24,7 @@ export const StreamCard: React.FC<StreamCardProps> = ({
   text,
   collapsed,
   done,
+  omittedChars,
   showToggle,
   previewLimit,
   placeholder = "（等待输出）",
@@ -31,10 +33,16 @@ export const StreamCard: React.FC<StreamCardProps> = ({
 }) => {
   const limit = Math.max(50, previewLimit ?? 200);
   const rawText = String(text || "");
-  const previewText = rawText.length > limit ? rawText.slice(-limit) : rawText;
+  const compactText = rawText.replace(/\s+/g, " ").trim();
+  const summaryLimit = Math.max(30, Math.min(140, Math.floor(limit * 0.7)));
+  const previewText =
+    compactText.length > summaryLimit
+      ? `${compactText.slice(0, summaryLimit)}...`
+      : compactText;
   const containerClass = [
     variant === "evaluation" ? "it-evaluation__stream-card" : "it-step__stream",
     done ? "is-done" : "",
+    collapsed ? "is-collapsed" : "",
     className || "",
   ]
     .filter(Boolean)
@@ -53,6 +61,7 @@ export const StreamCard: React.FC<StreamCardProps> = ({
     variant === "evaluation"
       ? "it-evaluation__stream-preview"
       : "it-step__stream-preview";
+  const omittedClass = "it-stream__omitted";
 
   return (
     <div className={containerClass}>
@@ -66,9 +75,19 @@ export const StreamCard: React.FC<StreamCardProps> = ({
         )}
       </div>
       {collapsed ? (
-        <div className={previewClass}>{previewText || placeholder}</div>
+        <div className={previewClass} title={rawText || placeholder}>
+          <span>{previewText || placeholder}</span>
+          {Number(omittedChars || 0) > 0 ? (
+            <span className={omittedClass}>已省略前 {omittedChars} 字</span>
+          ) : null}
+        </div>
       ) : (
-        <div className={textClass}>{rawText || placeholder}</div>
+        <div className={textClass}>
+          {Number(omittedChars || 0) > 0 ? (
+            <div className={omittedClass}>已省略前 {omittedChars} 字</div>
+          ) : null}
+          <div>{rawText || placeholder}</div>
+        </div>
       )}
     </div>
   );

@@ -16,5 +16,5 @@
 
 ## 注意事项
 - `useAnalysisFlow` 依赖 `parsedQuestionList`，务必保持与后端一致
-- `useStreaming` 仅保留最新截断文本（previewChars）
+- `useStreaming` 改为块级缓冲裁剪（避免逐字删除导致抖动），并记录已省略前缀字数用于 UI 提示。
 - `useTemplateBindings` 负责密钥保存/删除的请求与错误提示透传；删除确认由组件层处理。

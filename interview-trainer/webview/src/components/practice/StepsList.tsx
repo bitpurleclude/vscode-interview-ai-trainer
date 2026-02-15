@@ -31,6 +31,7 @@ type StreamState = {
   text: string;
   collapsed: boolean;
   done?: boolean;
+  omittedChars?: number;
 };
 
 type StepsListProps = {
@@ -104,7 +105,7 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
             {showEvaluationStreams && (
               <div className="it-step__evaluation-streams">
                 <div className="it-step__evaluation-title">
-                  面试评价实时输出（仅保留最新{previewChars}字）
+                  面试评价实时输出（收起时显示摘要，长内容按块裁剪）
                 </div>
                 <div className="it-evaluation__stream-grid" style={evaluationGridStyle}>
                   {evaluationIndices.map((idx) => {
@@ -121,6 +122,7 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
                         text={evalStream?.text}
                         collapsed={evalStream?.collapsed}
                         done={evalStream?.done}
+                        omittedChars={evalStream?.omittedChars}
                         showToggle={isActive}
                         previewLimit={previewChars}
                         onToggle={() => onToggleEvaluationStream(idx)}
@@ -136,6 +138,7 @@ export const StepsList: React.FC<StepsListProps> = (props) => {
                 title="实时输出"
                 text={stream?.text}
                 collapsed={stream?.collapsed}
+                omittedChars={stream?.omittedChars}
                 showToggle
                 previewLimit={previewChars}
                 onToggle={() => onToggleStepStream(step.id)}

@@ -250,10 +250,18 @@
 }
 
 .it-step__stream-preview {
-  white-space: pre-wrap;
   font-size: 10px;
-  line-height: 1.4;
+  line-height: 1.3;
   color: var(--vscode-descriptionForeground);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.it-step__stream-preview > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .it-status-badge {
@@ -553,10 +561,33 @@
 
 .it-evaluation__stream-preview {
   color: var(--vscode-descriptionForeground);
+  line-height: 1.35;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.it-evaluation__stream-preview > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .it-evaluation__stream-toggle {
   font-size: 11px;
+}
+
+.it-stream__omitted {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.it-evaluation__stream-card.is-collapsed {
+  min-height: auto;
+}
+
+.it-step--evaluation .it-evaluation__stream-card.is-collapsed {
+  min-height: auto;
 }
 
 .it-note-hits {

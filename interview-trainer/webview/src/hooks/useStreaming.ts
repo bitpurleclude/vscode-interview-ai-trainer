@@ -5,6 +5,7 @@ type StreamState = {
   text: string;
   collapsed: boolean;
   done?: boolean;
+  omittedChars?: number;
 };
 
 type StreamingOptions = {
@@ -12,6 +13,34 @@ type StreamingOptions = {
   autoCollapse: boolean;
   previewChars: number;
 };
+
+function it_compactStreamText(rawText: string, previewChars: number): {
+  text: string;
+  omittedChars: number;
+} {
+  const safePreview = Math.max(50, previewChars || 200);
+  const softLimit = Math.max(2000, safePreview * 12);
+  const trimStep = Math.max(300, safePreview * 3);
+  if (rawText.length <= softLimit + trimStep) {
+    return {
+      text: rawText,
+      omittedChars: 0,
+    };
+  }
+  const overflow = rawText.length - softLimit;
+  const trimBlocks = Math.floor(overflow / trimStep);
+  if (trimBlocks <= 0) {
+    return {
+      text: rawText,
+      omittedChars: 0,
+    };
+  }
+  const omittedChars = trimBlocks * trimStep;
+  return {
+    text: rawText.slice(omittedChars),
+    omittedChars,
+  };
+}
 
 export function useStreaming(options: StreamingOptions) {
   const [stepStreams, setStepStreams] = useState<Record<string, StreamState>>({});
@@ -29,14 +58,17 @@ export function useStreaming(options: StreamingOptions) {
         return;
       }
       setStepStreams((prev) => {
-        const current = prev[step] || { text: "", collapsed: false, done: false };
+        const current = prev[step] || {
+          text: "",
+          collapsed: false,
+          done: false,
+          omittedChars: 0,
+        };
         const reset = Boolean(data?.reset);
         const done = Boolean(data?.done);
         const rawText =
           typeof data?.text === "string" ? data.text : reset ? "" : current.text;
-        const previewLimit = Math.max(50, options.previewChars || 200);
-        const nextText =
-          rawText.length > previewLimit ? rawText.slice(-previewLimit) : rawText;
+        const compacted = it_compactStreamText(rawText, options.previewChars);
         let collapsed = reset ? false : current.collapsed;
         if (done && options.autoCollapse) {
           collapsed = true;
@@ -44,9 +76,10 @@ export function useStreaming(options: StreamingOptions) {
         return {
           ...prev,
           [step]: {
-            text: nextText,
+            text: compacted.text,
             collapsed,
             done,
+            omittedChars: compacted.omittedChars,
           },
         };
       });
@@ -66,14 +99,17 @@ export function useStreaming(options: StreamingOptions) {
         return;
       }
       setEvaluationStreams((prev) => {
-        const current = prev[index] || { text: "", collapsed: false, done: false };
+        const current = prev[index] || {
+          text: "",
+          collapsed: false,
+          done: false,
+          omittedChars: 0,
+        };
         const reset = Boolean(data?.reset);
         const done = Boolean(data?.done);
         const rawText =
           typeof data?.text === "string" ? data.text : reset ? "" : current.text;
-        const previewLimit = Math.max(50, options.previewChars || 200);
-        const nextText =
-          rawText.length > previewLimit ? rawText.slice(-previewLimit) : rawText;
+        const compacted = it_compactStreamText(rawText, options.previewChars);
         let collapsed = reset ? false : current.collapsed;
         if (done && options.autoCollapse) {
           collapsed = true;
@@ -81,9 +117,10 @@ export function useStreaming(options: StreamingOptions) {
         return {
           ...prev,
           [index]: {
-            text: nextText,
+            text: compacted.text,
             collapsed,
             done,
+            omittedChars: compacted.omittedChars,
           },
         };
       });
@@ -101,7 +138,7 @@ export function useStreaming(options: StreamingOptions) {
   const resetEvaluationStream = useCallback((index: number) => {
     setEvaluationStreams((prev) => ({
       ...prev,
-      [index]: { text: "", collapsed: false, done: false },
+      [index]: { text: "", collapsed: false, done: false, omittedChars: 0 },
     }));
   }, []);
 
@@ -125,7 +162,7 @@ export function useStreaming(options: StreamingOptions) {
     setEvaluationStreams((prev) => ({
       ...prev,
       [index]: {
-        ...(prev[index] || { text: "", collapsed: false, done: false }),
+        ...(prev[index] || { text: "", collapsed: false, done: false, omittedChars: 0 }),
         collapsed: !prev[index]?.collapsed,
       },
     }));

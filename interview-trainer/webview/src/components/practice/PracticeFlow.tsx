@@ -6,6 +6,7 @@ type StreamState = {
   text: string;
   collapsed: boolean;
   done?: boolean;
+  omittedChars?: number;
 };
 
 type PracticeFlowProps = {
