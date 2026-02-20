@@ -9,6 +9,7 @@
 - When a template is configured with `response.mode: sse` but the provider returns one-shot JSON or plain text, the parser now:
   - tries JSON parse and extracts text/value using existing extraction rules;
   - otherwise returns trimmed plain-text body.
+- If an SSE event exists but has no `delta` field, the parser now falls back to structured response extraction (`textPath/jsonPath/chat-like`) before treating it as empty.
 
 ## Why
 - Prevents false-empty live test responses where HTTP status is `200` but `raw/text/value` were all empty only because no `data:` SSE frames were present.

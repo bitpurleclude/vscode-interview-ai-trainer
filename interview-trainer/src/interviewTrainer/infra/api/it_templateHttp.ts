@@ -175,6 +175,38 @@ function it_resolveNonSseFallback(
   return trimmed;
 }
 
+function it_resolvePayloadText(
+  payload: unknown,
+  streaming?: ItTemplateStreaming,
+  response?: ItTemplateResponse,
+): string {
+  const delta = it_extractStreamDelta(payload, streaming, response);
+  if (delta) {
+    return delta;
+  }
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    if (!trimmed) {
+      return "";
+    }
+    // Keep malformed JSON fragments from polluting stream output.
+    const startsLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+    const endsLikeJson = trimmed.endsWith("}") || trimmed.endsWith("]");
+    if (startsLikeJson && !endsLikeJson) {
+      return "";
+    }
+    return trimmed;
+  }
+  const structured = it_extractResponseValue(payload, response);
+  if (typeof structured === "string") {
+    return structured;
+  }
+  if (structured !== undefined && structured !== null) {
+    return it_formatTemplateValue(structured);
+  }
+  return "";
+}
+
 export async function it_consumeTemplateSse(
   stream: NodeJS.ReadableStream,
   streaming?: ItTemplateStreaming,
@@ -240,7 +272,7 @@ export async function it_consumeTemplateSse(
           payload = data;
         }
       }
-      const delta = it_extractStreamDelta(payload, streaming, response);
+      const delta = it_resolvePayloadText(payload, streaming, response);
       flush(delta);
       return false;
     };
@@ -266,7 +298,7 @@ export async function it_consumeTemplateSse(
       if (settledByEvent) {
         return;
       }
-      if (fullText || sawSseData) {
+      if (fullText) {
         resolve(fullText);
         return;
       }

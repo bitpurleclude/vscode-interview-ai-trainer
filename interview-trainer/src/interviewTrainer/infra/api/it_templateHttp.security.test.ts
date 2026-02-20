@@ -60,6 +60,17 @@ describe("it_templateHttp security", () => {
     expect(text).toBe("fallback-text");
   });
 
+  it("extracts structured text when SSE payload has no delta field", async () => {
+    const stream = createSseStream([
+      'data: {"choices":[{"message":{"content":"pong"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ]);
+
+    const text = await it_consumeTemplateSse(stream, undefined, undefined);
+
+    expect(text).toBe("pong");
+  });
+
   it("rejects fast when abort signal is already on", async () => {
     const stream = createSseStream(['data: {"delta":"x"}\n\n']);
 
