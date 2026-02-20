@@ -129,6 +129,52 @@ export function it_extractStreamDelta(
   return typeof delta === "string" ? delta : "";
 }
 
+function it_tryParseJsonPayload(raw: string): unknown {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function it_resolveNonSseFallback(
+  raw: string,
+  streaming?: ItTemplateStreaming,
+  response?: ItTemplateResponse,
+): string {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const parsed = it_tryParseJsonPayload(trimmed);
+  if (parsed !== undefined) {
+    const streamDelta = it_extractStreamDelta(parsed, streaming, response);
+    if (streamDelta) {
+      return streamDelta;
+    }
+    const structured = it_extractResponseValue(parsed, response);
+    if (typeof structured === "string") {
+      return structured;
+    }
+    if (structured !== undefined && structured !== null) {
+      return it_formatTemplateValue(structured);
+    }
+  }
+
+  return trimmed;
+}
+
 export async function it_consumeTemplateSse(
   stream: NodeJS.ReadableStream,
   streaming?: ItTemplateStreaming,
@@ -139,6 +185,8 @@ export async function it_consumeTemplateSse(
   return new Promise((resolve, reject) => {
     let buffer = "";
     let fullText = "";
+    let rawText = "";
+    let sawSseData = false;
     const delimiter = streaming?.eventDelimiter || "\n\n";
     const dataPrefix = streaming?.dataPrefix || "data:";
     const doneSignals = new Set<string>([
@@ -167,6 +215,7 @@ export async function it_consumeTemplateSse(
       if (!dataLines.length) {
         return false;
       }
+      sawSseData = true;
       const data = dataLines
         .map((line) => line.slice(dataPrefix.length).trim())
         .join("\n");
@@ -196,7 +245,9 @@ export async function it_consumeTemplateSse(
       return false;
     };
     stream.on("data", (chunk) => {
-      buffer += chunk.toString();
+      const text = chunk.toString();
+      rawText += text;
+      buffer += text;
       let idx = buffer.indexOf(delimiter);
       while (idx !== -1) {
         const piece = buffer.slice(0, idx);
@@ -208,10 +259,18 @@ export async function it_consumeTemplateSse(
       }
     });
     stream.on("end", () => {
+      let settledByEvent = false;
       if (buffer.trim()) {
-        handleEvent(buffer);
+        settledByEvent = handleEvent(buffer);
       }
-      resolve(fullText);
+      if (settledByEvent) {
+        return;
+      }
+      if (fullText || sawSseData) {
+        resolve(fullText);
+        return;
+      }
+      resolve(it_resolveNonSseFallback(rawText, streaming, response));
     });
     stream.on("error", (err) => reject(err));
   });

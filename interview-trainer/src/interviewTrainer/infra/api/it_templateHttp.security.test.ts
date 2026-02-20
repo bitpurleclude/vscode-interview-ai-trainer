@@ -44,6 +44,22 @@ describe("it_templateHttp security", () => {
     expect(onDelta).toHaveBeenNthCalledWith(2, "B", "AB");
   });
 
+  it("falls back to JSON payload when response is not SSE-formatted", async () => {
+    const stream = createSseStream([JSON.stringify({ output_text: "fallback-json" })]);
+
+    const text = await it_consumeTemplateSse(stream, undefined, undefined);
+
+    expect(text).toBe("fallback-json");
+  });
+
+  it("falls back to plain text when response is not SSE-formatted", async () => {
+    const stream = createSseStream(["fallback-text"]);
+
+    const text = await it_consumeTemplateSse(stream, undefined, undefined);
+
+    expect(text).toBe("fallback-text");
+  });
+
   it("rejects fast when abort signal is already on", async () => {
     const stream = createSseStream(['data: {"delta":"x"}\n\n']);
 
