@@ -9,6 +9,7 @@ environments:
         request:
           method: "POST"
           url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+          stream: false
           headers:
             Authorization: "Bearer {{secrets.ark_api_key}}"
             Content-Type: "application/json"
@@ -17,7 +18,7 @@ environments:
             messages: "{{messages}}"
             temperature: "{{temperature}}"
             top_p: "{{topP}}"
-            stream: false
+            stream: "{{stream}}"
           timeoutSec: 60
         response:
           mode: "json"

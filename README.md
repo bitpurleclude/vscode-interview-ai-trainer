@@ -196,6 +196,7 @@ environments:
         request:
           method: "POST"
           url: "https://api.siliconflow.cn/v1/chat/completions"
+          stream: false
           headers:
             Authorization: "Bearer {{secrets.siliconflow_api_key}}"
             Content-Type: "application/json"
@@ -204,7 +205,7 @@ environments:
             messages: "{{messages}}"
             temperature: "{{temperature}}"
             top_p: "{{topP}}"
-            stream: false
+            stream: "{{stream}}"
           timeoutSec: 60
         response:
           mode: "json"
@@ -258,7 +259,7 @@ environments:
 2. 在设置页的“API 模板管理”中新增密钥名 `siliconflow_api_key` 并保存真实 Key。
 3. `asr.transcription` 绑定请保留你当前可用的 ASR 模板 ID（SiliconFlow 此处仅提供 LLM/Embedding 接入模板）。
 4. 如果暂时不使用向量检索，可在检索设置中切到 `keyword` 模式，先只验证 LLM 链路。
-5. 为兼容本插件当前模板执行路径，建议先用 `stream: false`；稳定后再按需扩展 SSE 流式模板。
+5. 为兼容本插件当前模板执行路径，建议先将 `request.stream` 设为 `false`，并在请求体中使用 `stream: "{{stream}}"`（或按接口要求移动到正确字段位置）；稳定后再按需扩展 SSE 流式模板。
 
 ## 火山方舟（ARK）API 接入模板（Chat Completions）
 
@@ -286,6 +287,7 @@ environments:
         request:
           method: "POST"
           url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+          stream: false
           headers:
             Authorization: "Bearer {{secrets.ark_api_key}}"
             Content-Type: "application/json"
@@ -294,7 +296,7 @@ environments:
             messages: "{{messages}}"
             temperature: "{{temperature}}"
             top_p: "{{topP}}"
-            stream: false
+            stream: "{{stream}}"
           timeoutSec: 60
         response:
           mode: "json"

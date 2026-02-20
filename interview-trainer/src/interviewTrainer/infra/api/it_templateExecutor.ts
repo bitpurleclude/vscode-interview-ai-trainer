@@ -660,7 +660,7 @@ export async function it_executeTemplate(
   const maxRetries = Math.max(0, Number(options.maxRetries ?? 0));
   const responseMode =
     runtime.template.response?.mode || (runtime.template.streaming ? "sse" : "json");
-  const expectStream = responseMode === "sse";
+  const expectStream = responseMode === "sse" && streamEnabled;
 
   let lastError: unknown = undefined;
   let lastErrorDetail: ItNormalizedTemplateError | undefined = undefined;

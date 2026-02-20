@@ -111,6 +111,7 @@ export function it_buildLlmTemplateFromConfig(args: {
   const mode = apiMode ?? (useResponses ? "responses" : "chat");
   const baseUrl = llm.base_url || llm.baseUrl || "";
   const responsesPath = llm.responses_path ?? llm.responsesPath ?? "";
+  const streamEnabled = Boolean(llm.stream ?? llm.stream_enabled ?? true);
   const url =
     provider === "volc_doubao"
       ? mode === "responses"
@@ -123,6 +124,7 @@ export function it_buildLlmTemplateFromConfig(args: {
   const request: ItTemplateRequest = {
     method: "POST",
     url,
+    stream: streamEnabled,
     headers: it_buildTemplateBaseHeaders(),
     body:
       mode === "responses"
@@ -130,7 +132,7 @@ export function it_buildLlmTemplateFromConfig(args: {
             model: llm.model || "",
             input: "{{input}}",
             instructions: "{{instructions}}",
-            stream: Boolean(llm.stream ?? llm.stream_enabled ?? true),
+            stream: "{{stream}}",
             reasoning:
               llm.reasoning_effort || llm.reasoningEffort
                 ? { effort: llm.reasoning_effort ?? llm.reasoningEffort }
@@ -141,7 +143,7 @@ export function it_buildLlmTemplateFromConfig(args: {
             messages: "{{messages}}",
             temperature: Number(llm.temperature ?? 0.8),
             top_p: Number(llm.top_p ?? 0.8),
-            stream: Boolean(llm.stream ?? llm.stream_enabled ?? true),
+            stream: "{{stream}}",
           },
   };
 

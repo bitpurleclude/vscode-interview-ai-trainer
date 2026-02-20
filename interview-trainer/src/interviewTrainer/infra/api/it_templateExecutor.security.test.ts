@@ -141,4 +141,46 @@ describe("it_templateExecutor security", () => {
       }),
     ).rejects.toThrow("HTTP 403 (permission_denied): Model access denied");
   });
+
+  it("uses json response type when stream switch is disabled", async () => {
+    const requestMock = vi.mocked(axios.request);
+    requestMock.mockReset();
+    requestMock.mockResolvedValue({
+      status: 200,
+      data: {
+        choices: [{ message: { content: "pong" } }],
+      },
+      headers: {
+        "content-type": "application/json",
+      },
+    } as any);
+
+    const result = await it_executeTemplate({
+      runtime: {
+        ...runtime,
+        template: {
+          ...runtime.template,
+          request: {
+            method: "POST",
+            url: "https://example.com/api",
+            body: {
+              stream: "{{stream}}",
+            },
+            stream: false,
+          },
+          response: {
+            mode: "sse",
+          },
+        },
+      },
+      variables: {},
+    });
+
+    expect(result.text).toBe("pong");
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseType: "json",
+      }),
+    );
+  });
 });

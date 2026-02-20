@@ -18,3 +18,4 @@
 - This fallback improves resilience, but template mode should still match provider behavior:
   - one-shot response -> `response.mode: json`
   - event stream response -> `response.mode: sse`
+- Prefer referencing stream switch in template body (`stream: "{{stream}}"`) and use `request.stream` as the default toggle, so stream field placement can be customized for provider-specific payload shapes.
