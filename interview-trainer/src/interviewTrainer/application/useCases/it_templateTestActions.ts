@@ -168,6 +168,8 @@ function it_buildTemplateTestVariables(
   defaults: Record<string, unknown>,
 ): Record<string, unknown> {
   const inputText = String(payload.inputText || "");
+  const hasExplicitStream = typeof payload.stream === "boolean";
+  const explicitStreamValue = hasExplicitStream ? payload.stream : undefined;
   const base: Record<string, unknown> = {};
   if (inputText) {
     base.input = inputText;
@@ -180,12 +182,16 @@ function it_buildTemplateTestVariables(
     ];
   }
 
-  if (typeof payload.stream === "boolean") {
-    base.stream = payload.stream;
+  if (hasExplicitStream) {
+    base.stream = explicitStreamValue;
   }
 
   const extra = it_isPlainObject(payload.variables) ? payload.variables : {};
   const merged = it_mergeDeep(it_mergeDeep(base, defaults), extra);
+
+  if (hasExplicitStream) {
+    merged.stream = explicitStreamValue;
+  }
 
   if (inputText) {
     merged.embeddingInput = inputText;
