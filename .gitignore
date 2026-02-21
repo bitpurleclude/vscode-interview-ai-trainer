@@ -12,6 +12,10 @@ testdata/
 testdata/*.vsix
 testdata/*.m4a
 
+# Coverage and runtime session artifacts
+interview-trainer/coverage/
+sessions/
+
 # OS / editor noise
 .DS_Store
 Thumbs.db
