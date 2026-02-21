@@ -1,0 +1,125 @@
+name: E2E Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/e2e-smoke.yml"
+      - "interview-trainer/**"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - ".github/workflows/e2e-smoke.yml"
+      - "interview-trainer/**"
+
+jobs:
+  quality-gates:
+    name: quality-gates
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: interview-trainer
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: interview-trainer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit and contract tests
+        run: npm run test
+
+      - name: Architecture boundary check
+        run: npm run check:arch
+
+  smoke-stage:
+    name: smoke-${{ matrix.stage }}
+    runs-on: windows-latest
+    needs: quality-gates
+    strategy:
+      fail-fast: false
+      matrix:
+        stage:
+          - workspace
+          - no-workspace
+    defaults:
+      run:
+        working-directory: interview-trainer
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: interview-trainer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run stage smoke
+        run: npm run test:e2e:smoke:${{ matrix.stage }} -- --report-file build/e2e-smoke-report-${{ matrix.stage }}.json
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-${{ matrix.stage }}
+          path: |
+            interview-trainer/build/e2e-smoke-report-${{ matrix.stage }}.json
+            interview-trainer/build/e2e-smoke-artifacts
+          if-no-files-found: ignore
+
+  smoke-artifact-contract:
+    name: smoke-artifact-contract
+    runs-on: windows-latest
+    needs: quality-gates
+    defaults:
+      run:
+        working-directory: interview-trainer
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: interview-trainer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run smoke with injected retryable failure
+        run: npm run test:e2e:smoke:no-workspace -- --inject-failure no-workspace --max-attempts 2 --report-file build/e2e-smoke-report-artifact-contract.json
+
+      - name: Validate artifacts in strict mode
+        run: npm run test:e2e:smoke:verify-artifacts:strict
+
+      - name: Upload artifact-contract outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-artifact-contract
+          path: |
+            interview-trainer/build/e2e-smoke-report-artifact-contract.json
+            interview-trainer/build/e2e-smoke-artifacts
+          if-no-files-found: ignore
