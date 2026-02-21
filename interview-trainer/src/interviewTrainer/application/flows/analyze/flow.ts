@@ -2,12 +2,11 @@ import path from "path";
 import {
   ItAnalyzeRequest,
   ItAnalyzeResponse,
-  ItEvaluation,
   ItQuestionTiming,
   ItStepStatus,
   ItWorkflowStep,
 } from "../../../../protocol/interviewTrainer";
-import { it_evaluateAnswer } from "../../services/it_evaluation";
+import type { ItEvaluationConfig } from "../../services/it_evaluation";
 import { it_resolveBindingTemplate } from "../../services/it_templateGateway";
 import {
   it_nextAttemptIndexAsync,
@@ -17,16 +16,16 @@ import {
 import type { ItCorpusItem } from "../../../domain/notes";
 import { it_buildCorpusAsync } from "../../services/it_notesGateway";
 import { it_storeRecordingAsync } from "../../services/it_recordingGateway";
-import { it_buildAcousticForTiming, it_mergeEvaluations } from "../../../domain/analyze/evaluation";
 import { it_deriveTopicTitle } from "../../../domain/analyze/result";
 import { it_generateTopicTitleWithLlm } from "../../services/it_topicTitle";
-import { it_persistAnalysis } from "../../services/it_analysisPersistence";
 import { it_resolveWorkspaceDirPaths } from "../../services/it_workspaceDirs";
 import { it_buildTemplateLlmConfig, it_buildTemplateRuntime, it_splitFallbackQuestions } from "./flow_helpers";
 import { it_runAudioStage } from "./flow_audioStage";
 import { it_prepareQuestionParseStage } from "./flow_questionStage";
 import { it_runSegmentStage } from "./flow_segmentStage";
 import { it_runRetrievalStage } from "./flow_retrievalStage";
+import { it_runEvaluationStage } from "./flow_evaluationStage";
+import { it_runPersistStage } from "./flow_persistStage";
 import type { ItAnalyzeDeps, ItAnalyzeProgress } from "./flow_types";
 
 function it_flowErrorMessage(error: unknown): string {
@@ -489,7 +488,7 @@ export async function it_runAnalysis(
     maxOutputTokens: 0,
   });
   const evalProvider = evaluationLlmConfig.provider || "template";
-  const evaluationConfig = {
+  const evaluationConfig: ItEvaluationConfig = {
     provider: evalProvider,
     model: evaluationLlmConfig.model || "",
     baseUrl: evaluationLlmConfig.baseUrl || "",
@@ -533,203 +532,24 @@ export async function it_runAnalysis(
     `面试评价 5% · 准备 · ${evalLabel} · ${evalModeLabel}`,
     "running",
   );
-
-  const timePlan = [4, 3, 3];
-  const evalQuestions = questionList.length
-    ? questionList
-    : questionText
-      ? [questionText]
-      : [topicTitle];
-  const evalAnswers =
-    questionAnswers && questionAnswers.length === evalQuestions.length
-      ? questionAnswers
-      : evalQuestions.map((question) => ({ question, answer: "" }));
-  const evalNotes =
-    notesByQuestion.length === evalQuestions.length
-      ? notesByQuestion
-      : evalQuestions.map(() => notes);
-  const evalAcoustics = evalQuestions.map((_, idx) =>
-    it_buildAcousticForTiming(
-      questionTimings[idx],
-      audioSegments,
-      evalAnswers[idx]?.answer || "",
-    ),
-  );
-
-  const totalQuestions = evalQuestions.length || 1;
-  let completed = 0;
-  const baseProgress = 15;
-  const spanProgress = 75;
-  reportProgress(
-    "evaluation",
-    baseProgress,
-    `面试评价 ${baseProgress}% · 生成中 · ${evalLabel} · ${evalModeLabel}`,
-    "running",
-  );
-  const evaluations: ItEvaluation[] = [];
-  const streamEnabled = Boolean(deps.onStream || deps.onEvalStream);
-  const evaluationStageStartedAt = Date.now();
-  it_traceFlow(
-    "evaluation_stage",
-    "start",
-    {
-      questionCount: evalQuestions.length,
-      streamEnabled,
-    },
-    "debug",
-  );
-  try {
-    if (streamEnabled) {
-    const tasks = evalQuestions.map((question, idx) =>
-      (async () => {
-        const streamHandler =
-          deps.onStream || deps.onEvalStream
-            ? (update: { text: string; done?: boolean; reset?: boolean }) => {
-                deps.onStream?.({ step: "evaluation", ...update });
-                deps.onEvalStream?.({ questionIndex: idx, ...update });
-              }
-            : undefined;
-        const result = await it_evaluateAnswer(
-          question,
-          evalAnswers[idx]?.answer || "",
-          evalAcoustics[idx],
-          evalNotes[idx] || [],
-          evaluationConfig,
-          [question],
-          [{ question, answer: evalAnswers[idx]?.answer || "" }],
-          questionText,
-          evalQuestions,
-          [
-            request.systemPrompt?.trim(),
-            request.perQuestionSystemPrompts?.[idx]?.trim(),
-          ]
-            .filter(Boolean)
-            .join("\n\n") || undefined,
-          [
-            request.demoPrompt?.trim(),
-            request.perQuestionDemoPrompts?.[idx]?.trim(),
-          ]
-            .filter(Boolean)
-            .join("\n\n") || undefined,
-          deps.onCorpusTrace,
-          streamHandler,
-        );
-        evaluations[idx] = result;
-        deps.onPartial?.({
-          evaluation: it_mergeEvaluations({
-            topicTitle: questionText || topicTitle,
-            questions: evalQuestions,
-            answers: evalAnswers,
-            evaluations,
-            timePlan,
-          }),
-        });
-        completed += 1;
-        const progress = Math.min(
-          95,
-          baseProgress + Math.round((spanProgress * completed) / totalQuestions),
-        );
-        reportProgress(
-          "evaluation",
-          progress,
-          `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
-          "running",
-        );
-        return result;
-      })(),
-    );
-    await Promise.all(tasks);
-  } else {
-    await Promise.all(
-      evalQuestions.map((question, idx) =>
-        (async () => {
-          const result = await it_evaluateAnswer(
-            question,
-            evalAnswers[idx]?.answer || "",
-            evalAcoustics[idx],
-            evalNotes[idx] || [],
-            evaluationConfig,
-            [question],
-            [{ question, answer: evalAnswers[idx]?.answer || "" }],
-            questionText,
-            evalQuestions,
-            [
-              request.systemPrompt?.trim(),
-              request.perQuestionSystemPrompts?.[idx]?.trim(),
-            ]
-              .filter(Boolean)
-              .join("\n\n") || undefined,
-            [
-              request.demoPrompt?.trim(),
-              request.perQuestionDemoPrompts?.[idx]?.trim(),
-            ]
-              .filter(Boolean)
-              .join("\n\n") || undefined,
-            deps.onCorpusTrace,
-            undefined,
-          );
-          evaluations[idx] = result;
-          deps.onPartial?.({
-            evaluation: it_mergeEvaluations({
-              topicTitle: questionText || topicTitle,
-              questions: evalQuestions,
-              answers: evalAnswers,
-              evaluations,
-              timePlan,
-            }),
-          });
-          completed += 1;
-          const progress = Math.min(
-            95,
-            baseProgress + Math.round((spanProgress * completed) / totalQuestions),
-          );
-          reportProgress(
-            "evaluation",
-            progress,
-            `面试评价 ${progress}% · ${evalLabel} · ${evalModeLabel} · 第${completed}/${totalQuestions}题`,
-            "running",
-          );
-          return result;
-        })(),
-      ),
-    );
-  }
-  } catch (error) {
-    it_traceFlow(
-      "evaluation_stage",
-      "error",
-      {
-        durationMs: Date.now() - evaluationStageStartedAt,
-        questionCount: evalQuestions.length,
-        streamEnabled,
-        errorCode: "evaluation_stage_failed",
-        error: it_flowErrorMessage(error),
-      },
-      "error",
-    );
-    throw error;
-  }
-
-  const evaluation: ItEvaluation = it_mergeEvaluations({
-    topicTitle: questionText || topicTitle,
-    questions: evalQuestions,
-    answers: evalAnswers,
-    evaluations,
-    timePlan,
+  const evaluation = await it_runEvaluationStage({
+    deps,
+    request,
+    questionText,
+    topicTitle,
+    questionList,
+    questionAnswers,
+    questionTimings,
+    audioSegments,
+    notes,
+    notesByQuestion,
+    evaluationConfig,
+    evalLabel,
+    evalModeLabel,
+    reportProgress,
+    ensureNotAborted,
+    traceFlow: it_traceFlow,
   });
-  reportProgress("evaluation", 95, "面试评价 95% · 汇总", "running");
-  reportProgress("evaluation", 100, `面试评价 100% · ${evalLabel}`, "success");
-  deps.onPartial?.({ evaluation });
-  ensureNotAborted();
-  it_traceFlow(
-    "evaluation_stage",
-    "success",
-    {
-      durationMs: Date.now() - evaluationStageStartedAt,
-      questionCount: evalQuestions.length,
-      streamEnabled,
-    },
-  );
 
   const response: ItAnalyzeResponse = {
     transcript,
@@ -747,55 +567,20 @@ export async function it_runAnalysis(
     audioPath: storedAudioPath,
   };
 
-  const persistStageStartedAt = Date.now();
-  it_traceFlow(
-    "persist_stage",
-    "start",
-    {
-      reportPath,
-      topicDir,
-      attemptIndex,
-    },
-    "debug",
-  );
-  try {
-    await it_persistAnalysis({
-      questionText,
-      questionList,
-      topicTitle,
-      topicDir,
-      reportPath,
-      attemptIndex,
-      response,
-      reportProgress,
-      onTrace: deps.onCorpusTrace,
-    });
-    it_traceFlow(
-      "persist_stage",
-      "success",
-      {
-        durationMs: Date.now() - persistStageStartedAt,
-        reportPath,
-        topicDir,
-        attemptIndex,
-      },
-    );
-  } catch (error) {
-    it_traceFlow(
-      "persist_stage",
-      "error",
-      {
-        durationMs: Date.now() - persistStageStartedAt,
-        reportPath,
-        topicDir,
-        attemptIndex,
-        errorCode: "persist_stage_failed",
-        error: it_flowErrorMessage(error),
-      },
-      "error",
-    );
-    throw error;
-  }
+  ensureNotAborted();
+  await it_runPersistStage({
+    questionText,
+    questionList,
+    topicTitle,
+    topicDir,
+    reportPath,
+    attemptIndex,
+    response,
+    reportProgress,
+    shouldAbort: () => Boolean(deps.abortSignal?.aborted),
+    onTrace: deps.onCorpusTrace,
+    traceFlow: it_traceFlow,
+  });
 
   it_traceFlow(
     "run",
