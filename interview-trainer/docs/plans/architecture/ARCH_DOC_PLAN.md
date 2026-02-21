@@ -1,5 +1,62 @@
 # 架构分类与工程文档规划（草案）
 
+## Document Metadata
+- Document Type: `Plan`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02`
+- Last Updated: `2026-02-21`
+- Related Paths:
+  - `interview-trainer/docs/architecture/`
+  - `interview-trainer/docs/modules/`
+  - `interview-trainer/src/`
+  - `interview-trainer/webview/src/`
+  - `interview-trainer/scripts/`
+  - `interview-trainer/config/`
+
+## Background and Goals
+- 对前后端模块进行统一归档和分层解释，形成可维护、可审计的工程文档体系。
+- 让新同学和 AI 维护者能快速定位模块职责、调用链和注意事项。
+
+## Scope and Non-goals
+- Scope:
+  - 产出 architecture 总览、目录图和模块文档，并保持命名与目录一致。
+  - 覆盖扩展端、Webview、脚本和配置目录的职责说明。
+  - 在文档中标注关键调用链与排障建议。
+- Non-goals:
+  - 不把本计划扩展为功能设计文档或产品说明书。
+  - 不覆盖 `node_modules/build/out/media` 等产物目录。
+
+## Task Matrix (Summary)
+| ID | Priority | Status | Plan | Acceptance |
+| --- | --- | --- | --- | --- |
+| D1 | P0 | In Progress | 输出 `ARCHITECTURE_OVERVIEW` 与 `DIRECTORY_MAP` | 架构总览和目录职责文档完整 |
+| D2 | P1 | In Progress | 分模块文档补齐（backend/frontend/scripts/config） | 模块文档按模板覆盖关键目录 |
+| D3 | P1 | In Progress | 文档交叉校验与构建验证 | 文档描述与代码路径一致，构建链路通过 |
+
+## Verification
+- Commands:
+  - `npm run build`
+  - `npm run test`
+- Evidence:
+  - 文档路径、模块名称与代码结构一致。
+  - 关键调用链描述可映射到实际文件。
+
+## Risks and Rollback
+- Risks:
+  - 目录重构或文件迁移后文档容易过期。
+  - 模板不统一会导致文档可读性下降。
+- Rollback:
+  - 保留历史文档版本，按模块分批回滚文档变更。
+  - 在索引文档中标注“待同步”状态，避免错误信息扩散。
+
+## Progress Log
+- `2026-02`: 形成初版文档规划草案和落地目录。
+- `2026-02-21`: 文档规范化，补齐任务矩阵与验证/回滚口径。
+
+## Legacy Detailed Plan
+> 以下内容保留原始草案内容与确认记录。
+
 > 目标：对 `interview-trainer/` 目录下前端与后端进行模块/目录级别归档，
 > 形成架构梳理与工程文档，覆盖用途、流程、注意事项等。
 

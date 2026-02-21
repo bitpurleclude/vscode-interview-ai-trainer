@@ -1,5 +1,20 @@
 # Directory Map and Responsibilities
 
+## Document Metadata
+- Document Type: `Directory Responsibility Map`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02`
+- Last Updated: `2026-02-21`
+- Related Docs:
+  - `docs/architecture/README.md`
+  - `docs/architecture/ARCHITECTURE_OVERVIEW.md`
+  - `docs/modules/`
+
+## Scope
+- Map core directories to responsibilities and architectural boundaries.
+- Clarify which folders are source-of-truth and which are build artifacts.
+
 ```text
 interview-trainer/
 |-- assets/                               # Extension icons and static assets
@@ -25,12 +40,17 @@ interview-trainer/
 
 ## Key Areas
 - `src/interviewTrainer/interface/handlers/`: Webview event entry and routing with capability ports.
+- `src/interviewTrainer/interface/e2e/`: E2E-only fixtures/constants + command registration used by host smoke commands.
 - `src/interviewTrainer/application/useCases/`: use-case entry points consumed by handlers.
 - `src/interviewTrainer/application/flows/analyze/`: staged analysis orchestration.
+- `src/interviewTrainer/application/flows/analyze/flow_evaluationStage.ts`: evaluation-stage orchestration extracted from `flow.ts`.
+- `src/interviewTrainer/application/flows/analyze/flow_persistStage.ts`: persistence-stage orchestration extracted from `flow.ts`.
 - `src/interviewTrainer/application/services/`: gateways, state helpers, logging, config helpers.
 - `src/interviewTrainer/domain/`: pure logic modules without I/O.
 - `src/interviewTrainer/infra/`: external system integrations and persistence.
 - `webview/src/`: frontend UI, state, and backend messaging.
+- `webview/src/hooks/useE2ETestBridge.ts`: webview-side E2E protocol automation extracted from root component.
+- `webview/src/hooks/e2e/`: split webview E2E handlers and shared DOM/protocol helpers.
 
 ## Excluded from Engineering Docs
 - `node_modules/`, `build/`, `out/`, and `media/` are dependency/build outputs.
@@ -45,3 +65,7 @@ When folder structure or responsibility changes, update at least:
 - `docs/architecture/ARCHITECTURE_OVERVIEW.md`
 - `docs/architecture/DIRECTORY_MAP.md`
 - Matching files in `docs/modules/*`
+
+## Maintenance Rules
+- Keep the directory tree examples aligned with real repository layout.
+- Keep all text files UTF-8 without BOM.

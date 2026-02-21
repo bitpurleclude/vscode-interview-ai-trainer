@@ -1,5 +1,59 @@
 # 代码清理计划（CLEANUP_PLAN）
 
+## Document Metadata
+- Document Type: `Plan + Execution`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02`
+- Last Updated: `2026-02-21`
+- Related Paths:
+  - `interview-trainer/src/`
+  - `interview-trainer/webview/src/`
+  - `interview-trainer/config/`
+
+## Background and Goals
+- 通过依赖图与符号级扫描识别疑似未使用代码，降低维护负担和认知噪声。
+- 在不破坏运行行为的前提下，分批清理陈旧文件、导出符号和无效配置。
+
+## Scope and Non-goals
+- Scope:
+  - 保留已完成的多轮扫描证据与疑似项列表。
+  - 将“可直接清理”和“待人工确认”分层管理，避免误删。
+  - 执行前后通过构建测试进行回归确认。
+- Non-goals:
+  - 不基于静态扫描结果直接删除所有疑似项。
+  - 不覆盖动态 import、运行时反射、宿主回调等静态图无法判定路径。
+
+## Task Matrix (Summary)
+| ID | Priority | Status | Plan | Acceptance |
+| --- | --- | --- | --- | --- |
+| C1 | P0 | Completed | 深度扫描与符号级扫描基线建立 | 扫描记录可追溯，候选项可复核 |
+| C2 | P0 | In Progress | 明确“可清理”与“待确认”边界并推进清理 | 清理项有证据与回归结果 |
+| C3 | P1 | In Progress | 配置字段/方法级别遗留项治理 | 无效字段和死代码逐步收敛 |
+
+## Verification
+- Commands:
+  - `npm run build`
+  - `npm run test`
+- Evidence:
+  - 每次清理后构建与测试通过。
+  - 被清理项不存在运行时引用回归。
+
+## Risks and Rollback
+- Risks:
+  - 静态分析存在误报，直接删除可能破坏隐藏运行路径。
+  - 大批量清理会增加 code review 负担。
+- Rollback:
+  - 按批次清理并单独提交，出现问题可快速定位回滚。
+  - 对不确定项先降级为“取消导出/标注弃用”，再观察稳定性。
+
+## Progress Log
+- `2026-02`: 完成多轮可达性与符号级扫描并沉淀候选项。
+- `2026-02-21`: 文档规范化，补齐摘要矩阵与统一验证口径。
+
+## Legacy Detailed Plan
+> 以下内容保留原始扫描记录与清理候选明细。
+
 ## 范围说明
 - 已执行深度扫描：从入口文件构建相对导入依赖图，标记不可达文件（疑似未使用）。
 - 入口：`src/extension.ts`、`webview/src/main.tsx`。

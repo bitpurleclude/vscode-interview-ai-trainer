@@ -1,5 +1,63 @@
 # 架构重构规划（ARCH_REFACTOR_PLAN）
 
+## Document Metadata
+- Document Type: `Plan`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02-05`
+- Last Updated: `2026-02-21`
+- Related Paths:
+  - `interview-trainer/src/interviewTrainer/interface/`
+  - `interview-trainer/src/interviewTrainer/application/`
+  - `interview-trainer/src/interviewTrainer/domain/`
+  - `interview-trainer/src/interviewTrainer/infra/`
+  - `interview-trainer/webview/src/`
+  - `interview-trainer/docs/architecture/`
+
+## Background and Goals
+- 在不改变现有功能行为的前提下，逐步建立清晰分层边界和稳定依赖方向。
+- 通过阶段化迁移降低大规模重构风险，并提升模块可测性与可维护性。
+
+## Scope and Non-goals
+- Scope:
+  - 明确扩展端与 Webview 端分层目录和职责。
+  - 迁移高耦合流程到 Application 编排层，收敛 Interface/Domain 越层依赖。
+  - 通过文档与测试同步锁定架构约束。
+- Non-goals:
+  - 不做一次性“大爆炸”重写。
+  - 不在本计划中替换现有协议模型与全量目录布局。
+
+## Task Matrix (Summary)
+| ID | Priority | Status | Plan | Acceptance |
+| --- | --- | --- | --- | --- |
+| A1 | P0 | In Progress | 分层目录职责与依赖方向固化 | Interface/Application/Domain/Infra 职责边界可审计 |
+| A2 | P0 | In Progress | 高耦合模块分阶段迁移与拆分 | 关键流程编排从入口/handler 下沉到 use-case/flow |
+| A3 | P1 | In Progress | 文档与测试同步（含架构检查） | 构建、测试、架构检查可稳定通过 |
+
+## Verification
+- Commands:
+  - `npm run build`
+  - `npm run test`
+  - `npm run check:arch`
+- Evidence:
+  - 关键模块不存在反向依赖与跨层 I/O 渗透。
+  - 迁移后流程行为与原契约保持一致。
+
+## Risks and Rollback
+- Risks:
+  - 分阶段重构期间可能出现双路径并存，导致维护复杂度短期上升。
+  - 类型边界变更可能触发连锁编译/测试失败。
+- Rollback:
+  - 以批次粒度回滚单阶段迁移，不回滚整条链路。
+  - 保留兼容适配层，确保回退窗口内业务可运行。
+
+## Progress Log
+- `2026-02-05`: 建立架构重构计划与阶段目标。
+- `2026-02-21`: 文档规范化，补齐任务矩阵与验证/回滚口径。
+
+## Legacy Detailed Plan
+> 以下内容保留原始重构规划细节与任务分解。
+
 更新时间：2026-02-05
 
 目标：在不改变功能与外部行为的前提下，建立清晰的前后端分层边界，降低耦合，提升可维护性与可扩展性。

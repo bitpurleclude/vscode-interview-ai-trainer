@@ -1,5 +1,60 @@
 # 插件缺陷修复规划（BUGFIX_PLAN）
 
+## Document Metadata
+- Document Type: `Fix Plan`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02`
+- Last Updated: `2026-02-21`
+- Related Paths:
+  - `interview-trainer/src/interviewTrainer/application/useCases/`
+  - `interview-trainer/src/interviewTrainer/application/flows/analyze/`
+  - `interview-trainer/webview/src/components/settings/`
+  - `interview-trainer/src/protocol/interviewTrainer.ts`
+  - `interview-trainer/webview/src/types.ts`
+
+## Scope and Non-goals
+- Scope:
+  - 修复设置页 ASR 配置与模板绑定契约相关缺陷。
+  - 修复保存结果命名、目录归档、标题回退与日志观测问题。
+  - 修复发布展示相关编码问题（UTF-8 无 BOM）。
+- Non-goals:
+  - 不重构整套设置页架构与模板引擎实现。
+  - 不在本计划中引入新的外部依赖或发布流程变更。
+
+## Task Matrix (Summary)
+| ID | Priority | Status | Plan | Acceptance |
+| --- | --- | --- | --- | --- |
+| B1 | P0 | In Progress | ASR 设置页精简并保持模板化字段契约 | 设置页字段与 `api_config.yaml` 写入一致 |
+| B2 | P0 | In Progress | 修复保存命名与相似度分目录逻辑 | 保存结果可稳定写入正确 topic 目录 |
+| B3 | P1 | In Progress | 新增/对齐 `llm.title` 模板绑定与回退日志 | 文件命名优先模板，回退时有可追踪日志 |
+| B4 | P1 | In Progress | 修复 package 展示乱码与文档同步 | VSIX 页面中文显示正常且文档一致 |
+
+## Verification
+- Commands:
+  - `npm run build`
+  - `npm run test`
+  - `npm run package`
+- Evidence:
+  - 设置页保存后配置落盘正确，重启后可回显。
+  - 手动保存结果路径与命名符合期望，不出现错误目录归档。
+  - 发布包中文字段显示正常，无乱码。
+
+## Risks and Rollback
+- Risks:
+  - 保存路径与标题逻辑变更可能影响历史会话目录关联。
+  - 模板绑定新增项处理不完整时可能出现前后端字段不一致。
+- Rollback:
+  - 保存逻辑可按 use-case 层逐文件回滚。
+  - `llm.title` 绑定可降级为旧回退链路，保持行为可用。
+
+## Progress Log
+- `2026-02`: 计划建立并推进 ASR/保存结果/模板命名相关修复。
+- `2026-02-21`: 文档规范化，补齐任务矩阵与验证口径。
+
+## Legacy Detailed Plan
+> 以下内容保留历史详细规划与执行细节。
+
 ## 背景与目标
 - 解决设置页 ASR 配置缺失、保存结果命名/分目录失效、插件名称乱码等问题。
 - ASR 设置页仅保留模板化所需字段，减少与模板配置的重复。

@@ -12,7 +12,13 @@
 ## npm Command Mapping
 - `npm run build`: build webview + extension.
 - `npm run test`: run Vitest unit/contract/security suites.
-- `npm run test:e2e:smoke`: run VS Code host smoke test skeleton.
+- `npm run check:arch`: enforce layer dependency direction rules (Domain/Interface/Application/Infra).
+- `npm run test:e2e:smoke`: run VS Code host smoke in dual-mode (`workspace` + `no-workspace`).
+- `npm run test:e2e:smoke:workspace`: run workspace-only host smoke stage.
+- `npm run test:e2e:smoke:no-workspace`: run no-workspace-only host smoke stage.
+- `npm run test:e2e:smoke:verify-artifacts`: validate `build/e2e-smoke-artifacts/*.json` schema.
+- `npm run test:e2e:smoke:verify-artifacts:strict`: validate artifact schema + summary/error quality gates.
+- `npm run test:e2e:smoke:report`: run dual-mode smoke and emit structured execution report to `build/e2e-smoke-report.json`.
 - `npm run package`: build and package VSIX to `build/interview-trainer.vsix`.
 
 ## Maintenance Notes
@@ -29,4 +35,16 @@
 - In `no-workspace` mode, smoke asserts structured failure payloads (`errorCode=workspace_not_found`) instead of only string matching.
 - `test:e2e:smoke` now verifies protocol guard behavior by triggering a missing handler request and asserting structured response (`errorCode=handler_not_found`).
 - In `workspace` mode, smoke explicitly rejects API/template-binding failure signals (for example `?????`, `missing template`, `api key`), preventing false-green runs.
-- When adding or changing scripts, update this document and `SECURITY_TEST_PLAN.md` together.
+- `scripts/run-e2e-smoke.js` supports CLI controls:
+  - `--stages <modes>`
+  - `--inject-failure <modes>`
+  - `--max-attempts <n>`
+  - `--retry-delay-ms <n>`
+  - `--report-file <path>`
+  - `--validate-artifacts` / `--validate-artifacts-strict`
+- The same controls can be driven by env vars: `IT_E2E_SMOKE_STAGES`, `IT_E2E_SMOKE_INJECT_FAILURE`, `IT_E2E_SMOKE_MAX_ATTEMPTS`, `IT_E2E_SMOKE_RETRY_DELAY_MS`, `IT_E2E_SMOKE_REPORT_FILE`.
+- CI reference:
+  - `quality-gates` runs `build` + `test` + `check:arch` before smoke jobs.
+  - `smoke-stage` matrix runs `workspace` and `no-workspace` stages in parallel and uploads reports/artifacts.
+  - `smoke-artifact-contract` job injects a deterministic retryable failure and verifies strict artifact quality gates.
+- When adding or changing scripts, update this document and `docs/plans/quality/SECURITY_TEST_PLAN.md` together.

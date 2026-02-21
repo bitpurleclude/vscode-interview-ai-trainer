@@ -1,5 +1,63 @@
 # 重构任务规划（REFACTOR_TASKS_PLAN）
 
+## Document Metadata
+- Document Type: `Plan + Execution`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02`
+- Last Updated: `2026-02-21`
+- Related Paths:
+  - `interview-trainer/src/interviewTrainer/`
+  - `interview-trainer/webview/src/`
+  - `interview-trainer/src/protocol/interviewTrainer.ts`
+  - `interview-trainer/docs/architecture/`
+  - `interview-trainer/docs/modules/`
+
+## Scope and Non-goals
+- Scope:
+  - 按优先级推进历史重构任务（P0~P6）并保留执行证据。
+  - 清理高耦合逻辑、拆分超大文件、收敛架构违规依赖。
+  - 每批任务同步文档与验证结果。
+- Non-goals:
+  - 不在单次提交中完成所有目录全量重写。
+  - 不变更对外协议字段的兼容行为（除非单独计划说明）。
+
+## Task Matrix (Summary)
+| ID | Priority | Status | Plan | Acceptance |
+| --- | --- | --- | --- | --- |
+| R0 | P0 | Completed | tools 相关逻辑与文案清理 | tools 相关代码与文档残留移除 |
+| R1 | P0 | Completed | 高优先级文件拆分（webview/domain） | 超大文件拆分并通过构建测试 |
+| R2 | P1 | Completed | 中低优先级模块拆分与整理 | 关键模块职责收敛、行为不回退 |
+| R3 | P1 | In Progress | 架构合规修复（Domain 去 I/O/Infra 依赖） | 依赖方向满足分层约束 |
+| R4 | P1 | In Progress | Interface/Application 迁移与网关细化 | handler dispatch-only，use-case 编排清晰 |
+| R5 | P2 | In Progress | Host/Flow 合同细化与剩余清理 | 构建、测试、文档同步稳定通过 |
+
+## Verification
+- Commands:
+  - `npm run build`
+  - `npm run test`
+  - `npm run package`
+  - `npm run check:arch`
+- Evidence:
+  - 任务条目均可映射到代码路径与验证结果。
+  - 未完成项有明确状态与后续动作。
+
+## Risks and Rollback
+- Risks:
+  - 大量分阶段重构会带来短期上下文切换成本。
+  - 迁移中若契约边界不稳，可能引发跨模块回归。
+- Rollback:
+  - 按批次回滚，避免连带回退已稳定模块。
+  - 对过渡网关保留兼容期，再逐步收敛。
+
+## Progress Log
+- `2026-02`: 建立重构任务清单并启动分阶段执行。
+- `2026-02-07`: 多个 P4/P5/P6 条目完成并补充进度记录。
+- `2026-02-21`: 文档规范化，补齐摘要矩阵与统一验证口径。
+
+## Legacy Detailed Plan
+> 以下内容保留原始任务清单与历史执行记录。
+
 ## 目标
 - 按架构规范清理无用逻辑，降低耦合与维护成本。
 - 拆分超大文件，明确模块边界与职责。
@@ -202,7 +260,7 @@
 - [x] Completed full-layer dependency sweep for `interface/application/domain/infra`.
 - [x] Hard-rule violations found: `0`.
 - [x] Application non-gateway direct infra imports found: `0`.
-- [x] Wrote compliance report with residual structural risks: `ARCH_COMPLIANCE_REPORT.md`.
+- [x] Wrote compliance report with residual structural risks: `docs/architecture/ARCH_COMPLIANCE_REPORT.md`.
 - [x] Verified build/test/package after sweep.
 
 ## P6-1 (2026-02-07) Extension Host Lifecycle Decomposition Progress
@@ -295,4 +353,3 @@
 - [x] Rewrote garbled module docs (`interface/handlers/README.md`, `docs/modules/backend-handlers.md`, `docs/modules/backend-recording.md`) in UTF-8.
 - [x] Re-ran layer scan and confirmed no hard-rule dependency violations.
 - [ ] Follow-up: keep docs/modules synchronized with future handler-port refinements.
-

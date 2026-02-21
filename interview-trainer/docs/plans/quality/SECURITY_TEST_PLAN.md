@@ -1,5 +1,64 @@
 # SECURITY_TEST_PLAN
 
+## Document Metadata
+- Document Type: `Plan + Execution`
+- Status: `In Progress`
+- Owner: `Interview Trainer Maintainers`
+- Created: `2026-02`
+- Last Updated: `2026-02-21`
+- Related Paths:
+  - `interview-trainer/src/interviewTrainer/application/useCases/`
+  - `interview-trainer/src/interviewTrainer/application/flows/analyze/`
+  - `interview-trainer/src/interviewTrainer/interface/handlers/`
+  - `interview-trainer/test/e2e/smoke/`
+  - `interview-trainer/scripts/run-e2e-smoke.js`
+
+## Scope and Non-goals
+- Scope:
+  - 建立攻击驱动的安全测试矩阵，覆盖输入边界、资源滥用、协议异常和持久化安全风险。
+  - 将关键安全测试纳入单测/集成/E2E smoke 的可持续回归链路。
+  - 为失败场景提供结构化诊断证据，减少假绿。
+- Non-goals:
+  - 不宣称覆盖全部漏洞类型或提供 100% 安全保证。
+  - 不替代运行时隔离、权限控制和发布流程安全策略。
+
+## Task Matrix (Summary)
+| ID | Priority | Status | Plan | Acceptance |
+| --- | --- | --- | --- | --- |
+| S0 | P0 | Completed | 输入污染、数值投毒、路径越界、模板失败等基础安全用例 | P0/P1 安全回归用例稳定通过 |
+| S1 | P1 | Completed | Analyze fault matrix 与协议/消息契约强化 | 单故障/组合故障行为可预测 |
+| S2 | P1 | Completed | Host smoke 骨架与关键命令生命周期验证 | workspace/no-workspace 合同稳定 |
+| S3 | P1 | In Progress | Settings/Protocol/Analyze/UI 失败注入矩阵深化 | 成功/失败分支均有严格断言 |
+| S4 | P2 | In Progress | CI 阶段矩阵、artifact 合同与报告治理 | 失败工件可验证、可追溯、可复盘 |
+
+## Verification
+- Commands:
+  - `npm run test`
+  - `npm run build`
+  - `npm run test:e2e:smoke`
+  - `npm run test:e2e:smoke:workspace`
+  - `npm run test:e2e:smoke:no-workspace`
+  - `npm run test:e2e:smoke:verify-artifacts:strict`
+- Evidence:
+  - 安全关键路径 failure contract 有明确断言和可追踪工件。
+  - no-workspace 场景返回结构化错误并被 smoke 严格校验。
+
+## Risks and Rollback
+- Risks:
+  - 断言强化会提高对环境抖动敏感度，短期内失败数可能上升。
+  - 失败注入矩阵扩大后，维护成本与执行耗时增加。
+- Rollback:
+  - 允许按阶段临时缩减矩阵范围，但必须记录降级原因与恢复时间。
+  - 保留核心 P0/P1 套件作为不可降级基线。
+
+## Progress Log
+- `2026-02-08`: 建立安全测试计划并完成首批 P0/P1 用例。
+- `2026-02-21`: 扩展至 smoke failure matrix、artifact 合同与 CI 自动化。
+- `2026-02-21`: 文档规范化，补齐摘要矩阵与统一验证口径。
+
+## Legacy Detailed Plan
+> 以下内容保留原始安全测试规划与详细进度。
+
 ## Objective
 - Build an attack-driven test suite that catches crash, lock-up, and severe malfunction scenarios.
 - Prioritize exploitability and blast radius over raw line coverage.
@@ -283,7 +342,7 @@ Planned update:
 - `webview/src/messenger.contract.test.ts`
 - `webview/src/hooks/useAnalysisFlow.contract.test.ts`
 - `test/e2e/smoke/index.js` + `scripts/run-e2e-smoke.js`
-- `SECURITY_TEST_PLAN.md` progress updates.
+- `docs/plans/quality/SECURITY_TEST_PLAN.md` progress updates.
 - Final risk report listing:
   - fixed attack vectors
   - residual risks
