@@ -48,6 +48,7 @@ export async function it_persistAnalysis(params: {
     status?: ItStepStatus,
   ) => void;
   onTrace?: (message: string, detail?: Record<string, unknown>) => void;
+  shouldAbort?: () => boolean;
 }): Promise<void> {
   const {
     questionText,
@@ -59,7 +60,14 @@ export async function it_persistAnalysis(params: {
     response,
     reportProgress,
     onTrace,
+    shouldAbort,
   } = params;
+
+  const ensureNotAborted = () => {
+    if (shouldAbort?.()) {
+      throw new Error("分析已停止");
+    }
+  };
 
   it_persistenceTrace(onTrace, "persist_analysis", "start", {
     topicDir,
@@ -68,12 +76,14 @@ export async function it_persistAnalysis(params: {
   });
 
   try {
+    ensureNotAborted();
     reportProgress("report", 30, "report 30% - local", "running");
     it_persistenceTrace(onTrace, "append_report", "start", {
       reportPath,
       attemptIndex,
     });
 
+    ensureNotAborted();
     await it_appendReportAsync(
       reportPath,
       topicTitle,
@@ -87,6 +97,7 @@ export async function it_persistAnalysis(params: {
         attemptNote: "Scores are for reference only.",
       },
     );
+    ensureNotAborted();
     await it_updateReferenceNotesFileAsync(topicDir, response.evaluation);
     it_persistenceTrace(onTrace, "append_report", "success", {
       reportPath,
@@ -111,12 +122,14 @@ export async function it_persistAnalysis(params: {
       topicDir,
       attemptIndex,
     });
+    ensureNotAborted();
     await it_appendAttemptDataAsync(topicDir, attemptData);
     it_persistenceTrace(onTrace, "append_attempt", "success", {
       topicDir,
       attemptIndex,
     });
 
+    ensureNotAborted();
     it_persistenceTrace(onTrace, "read_topic_meta", "start", {
       topicDir,
     });
@@ -131,6 +144,7 @@ export async function it_persistAnalysis(params: {
     it_persistenceTrace(onTrace, "write_topic_meta", "start", {
       topicDir,
     });
+    ensureNotAborted();
     await it_writeTopicMetaAsync(topicDir, {
       topicTitle: meta.topicTitle || topicTitle,
       questionText: questionText || meta.questionText || "",

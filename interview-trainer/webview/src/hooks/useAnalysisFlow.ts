@@ -351,13 +351,14 @@ export function useAnalysisFlow({
         });
         setSaveResultMessage("结果已写入");
       } else {
+        const errorMessage = String(resp?.error || "unknown_error");
         traceAnalysisAction(
           "save_result",
           "error",
-          { error: String(resp?.error || "unknown_error") },
+          { error: errorMessage },
           "error",
         );
-        setSaveResultMessage("结果已写入");
+        setSaveResultMessage(`保存失败：${errorMessage}`);
       }
     } catch (err) {
       traceAnalysisAction(

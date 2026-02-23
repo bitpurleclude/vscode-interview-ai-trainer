@@ -36,7 +36,7 @@ describe("flow_segmentStage", () => {
 
     const result = await it_runSegmentStage({
       deps: {
-        onPartial: (event) => partialEvents.push(event as Record<string, unknown>),
+        onPartial: (event: unknown) => partialEvents.push(event as Record<string, unknown>),
         onStream: undefined,
         onCorpusTrace: undefined,
       } as any,
@@ -122,7 +122,7 @@ describe("flow_segmentStage", () => {
 
     const result = await it_runSegmentStage({
       deps: {
-        onPartial: (event) => partialEvents.push(event as Record<string, unknown>),
+        onPartial: (event: unknown) => partialEvents.push(event as Record<string, unknown>),
         onStream: undefined,
         onCorpusTrace: undefined,
       } as any,

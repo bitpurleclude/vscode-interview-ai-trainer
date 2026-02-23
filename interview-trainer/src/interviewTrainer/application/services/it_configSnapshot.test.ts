@@ -229,12 +229,15 @@ describe("it_configSnapshot", () => {
     const snapshot = it_buildConfigSnapshot(host, host.configBundle.api);
 
     expect(snapshot.activeEnvironment).toBe("prod");
-    expect(snapshot.templates.templates).toHaveLength(1);
-    expect(snapshot.templates.secretNames).toEqual(["SECRET_A"]);
-    expect(snapshot.templates.paramUsage.tplA.used).toContain("apiKey");
-    expect(snapshot.templates.paramUsage.tplA.unknown).toContain("customVar");
-    expect(snapshot.retrievalCache.embeddingCacheDir).toContain("ws-hash");
-    expect(snapshot.streaming.previewChars).toBe(150);
+    expect(snapshot.templates).toBeTruthy();
+    expect(snapshot.retrievalCache).toBeTruthy();
+    expect(snapshot.streaming).toBeTruthy();
+    expect(snapshot.templates!.templates).toHaveLength(1);
+    expect(snapshot.templates!.secretNames).toEqual(["SECRET_A"]);
+    expect(snapshot.templates!.paramUsage.tplA.used).toContain("apiKey");
+    expect(snapshot.templates!.paramUsage.tplA.unknown).toContain("customVar");
+    expect(snapshot.retrievalCache!.embeddingCacheDir).toContain("ws-hash");
+    expect(snapshot.streaming!.previewChars).toBe(150);
     expect(snapshot.llm.model).toBe("gpt-4o-mini");
     expect(host.tokenService?.getSnapshot).toHaveBeenCalledWith("prod");
   });

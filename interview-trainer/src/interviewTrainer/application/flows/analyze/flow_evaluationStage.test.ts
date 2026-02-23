@@ -94,9 +94,9 @@ describe("flow_evaluationStage", () => {
 
     const result = await it_runEvaluationStage({
       deps: {
-        onStream: (event) => streamEvents.push(event as Record<string, unknown>),
-        onEvalStream: (event) => evalStreamEvents.push(event as Record<string, unknown>),
-        onPartial: (event) => partialEvents.push(event as Record<string, unknown>),
+        onStream: (event: unknown) => streamEvents.push(event as Record<string, unknown>),
+        onEvalStream: (event: unknown) => evalStreamEvents.push(event as Record<string, unknown>),
+        onPartial: (event: unknown) => partialEvents.push(event as Record<string, unknown>),
         onCorpusTrace: undefined,
       } as any,
       request: createRequest(),

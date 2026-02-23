@@ -29,6 +29,7 @@
 - `test:e2e:smoke` now verifies fixture analyze + webview tab/button click automation in one host run.
 - `test:e2e:smoke` now also verifies webview analyze lifecycle through controls (fill question, import audio, click analyze, and capture success/error outcome).
 - `test:e2e:smoke` now covers webview edge branches for canceling an active analyze run and save-result feedback assertions.
+- `test:e2e:smoke` now also covers settings flow automation (environment switch/create/restore, topic settings persist/restore, streaming settings persist/restore, trace-log enable).
 - `test:e2e:smoke` now uses isolated per-run profile dirs (`user-data`/`extensions`) and removes them after run to reduce mutex conflicts.
 - `test:e2e:smoke` retries transient host startup failures (`ProcessSingleton`/mutex/lock/EADDRINUSE) with isolated profiles; tune via `IT_E2E_SMOKE_MAX_ATTEMPTS` and `IT_E2E_SMOKE_RETRY_DELAY_MS`.
 - `test:e2e:smoke` runs in two modes: `workspace` (real flow with open folder) and `no-workspace` (negative-path assertion). Mode is injected by runner via `IT_E2E_SMOKE_MODE`; workspace requirement is enforced via `IT_E2E_REQUIRE_WORKSPACE=1`.

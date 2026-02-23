@@ -45,8 +45,8 @@ describe("it_evaluationFallback", () => {
       "c.md :: c-snippet",
     ]);
     expect(result.noteSuggestions).toHaveLength(3);
-    expect(result.noteSuggestions[0]).toContain("a-snippet");
-    expect(result.noteSuggestions[1]).toContain("b-snippet");
-    expect(result.noteSuggestions[2]).toContain("c-snippet");
+    expect(result.noteSuggestions?.[0]).toContain("a-snippet");
+    expect(result.noteSuggestions?.[1]).toContain("b-snippet");
+    expect(result.noteSuggestions?.[2]).toContain("c-snippet");
   });
 });

@@ -9,6 +9,7 @@ const WEBVIEW_ANALYZE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewAnalyz
 const WEBVIEW_CANCEL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewCancelFlow";
 const WEBVIEW_SAVE_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSaveResultFlow";
 const WEBVIEW_PROTOCOL_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewProtocolGuardFlow";
+const WEBVIEW_SETTINGS_FLOW_COMMAND = "itInterviewTrainer.__test.runWebviewSettingsFlow";
 
 const SMOKE_MODE = String(process.env.IT_E2E_SMOKE_MODE || "workspace").toLowerCase();
 const WORKSPACE_ERROR_CODE = "workspace_not_found";
@@ -43,13 +44,13 @@ function isApiBindingErrorMessage(value) {
     return false;
   }
   return (
-    text.includes("?????") ||
+    text.includes("模板未绑定") ||
+    text.includes("未绑定模板") ||
     text.includes("template not bound") ||
     text.includes("missing template") ||
-    text.includes("api???") ||
+    text.includes("api 未配置") ||
     text.includes("api key") ||
-    text.includes("apikey") ||
-    text.includes("???")
+    text.includes("apikey")
   );
 }
 
@@ -326,6 +327,28 @@ function assertWebviewProtocolGuardResult(result) {
   );
 }
 
+function assertWebviewSettingsFlowResult(result) {
+  assert.ok(result && typeof result === "object", "Webview settings flow result should be an object");
+  assert.strictEqual(
+    result.status,
+    "success",
+    `Webview settings flow failed: ${JSON.stringify(result)}`,
+  );
+  assert.ok(Array.isArray(result.steps), "Webview settings flow should include steps");
+  assert.ok(result.steps.length > 0, "Webview settings flow should include at least one step");
+  const failedSteps = result.steps.filter((step) => step?.ok === false);
+  assert.strictEqual(
+    failedSteps.length,
+    0,
+    `Webview settings flow contains failed steps: ${JSON.stringify(failedSteps)}`,
+  );
+  assert.strictEqual(
+    result.activePage,
+    "practice",
+    `Webview settings flow should return to practice page: ${JSON.stringify(result)}`,
+  );
+}
+
 function assertExpectedCommandsPresent(allCommands) {
   [
     "itInterviewTrainer.open",
@@ -339,6 +362,7 @@ function assertExpectedCommandsPresent(allCommands) {
     WEBVIEW_CANCEL_FLOW_COMMAND,
     WEBVIEW_SAVE_FLOW_COMMAND,
     WEBVIEW_PROTOCOL_FLOW_COMMAND,
+    WEBVIEW_SETTINGS_FLOW_COMMAND,
   ].forEach((commandId) => {
     assert.ok(allCommands.includes(commandId), `Missing command: ${commandId}`);
   });
@@ -388,6 +412,12 @@ async function runWorkspaceSmoke(extension) {
     60_000,
   );
   assertWebviewProtocolGuardResult(webviewProtocolFlowResult);
+
+  const webviewSettingsFlowResult = await executeCommandAndAssert(
+    WEBVIEW_SETTINGS_FLOW_COMMAND,
+    120_000,
+  );
+  assertWebviewSettingsFlowResult(webviewSettingsFlowResult);
 }
 
 async function runNoWorkspaceSmoke() {

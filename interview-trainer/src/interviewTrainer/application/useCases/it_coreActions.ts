@@ -68,6 +68,7 @@ export async function it_getConfigFromWebview(params: {
 }): Promise<ItCoreResult<ItConfigSnapshot>> {
   it_traceCore(params.context, "get_config", "start");
   try {
+    const configBundle = params.context.configService.loadBundle();
     const configSnapshot = await params.context.refreshConfigSnapshot();
     params.context.scheduleEmbeddingWarmup("config");
     it_traceCore(params.context, "get_config", "success", {
@@ -76,6 +77,7 @@ export async function it_getConfigFromWebview(params: {
     });
     return {
       value: configSnapshot,
+      configBundle,
       configSnapshot,
     };
   } catch (error) {
@@ -215,7 +217,7 @@ export async function it_openMicSettingsFromWebview(params: {
       };
     }
 
-    params.context.showInfo("???????????????????");
+    params.context.showInfo("请在系统设置中手动开启麦克风权限。");
     it_traceCore(params.context, "open_mic_settings", "manual", {
       platform: params.context.platform,
     });

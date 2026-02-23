@@ -152,9 +152,9 @@ describe("it_evaluationResult", () => {
     expect(result.overallScore).toBe(78);
     expect(result.noteUsage).toEqual(["n1.md :: note-1", "n2.md :: note-2"]);
     expect(result.noteSuggestions).toHaveLength(2);
-    expect(result.noteSuggestions[0]).toContain("note-1");
-    expect(result.noteSuggestions[1]).toContain("note-2");
-    expect(result.revisedAnswers[0]).toMatchObject({
+    expect(result.noteSuggestions?.[0]).toContain("note-1");
+    expect(result.noteSuggestions?.[1]).toContain("note-2");
+    expect(result.revisedAnswers?.[0]).toMatchObject({
       question: "q1",
       revised: "r1",
       estimatedTimeMin: 3,
@@ -190,8 +190,8 @@ describe("it_evaluationResult", () => {
     );
 
     expect(mocks.generateOutlines).toHaveBeenCalledTimes(1);
-    expect(result.revisedAnswers[0].outlineOriginal).toEqual(["valid-outline"]);
-    expect(result.revisedAnswers[0].outlineRevised).toEqual(["valid-outline"]);
+    expect(result.revisedAnswers?.[0]?.outlineOriginal).toEqual(["valid-outline"]);
+    expect(result.revisedAnswers?.[0]?.outlineRevised).toEqual(["valid-outline"]);
   });
 
   it("regenerates revised text by outline in two-step mode when llm is available", async () => {
@@ -212,7 +212,7 @@ describe("it_evaluationResult", () => {
     );
 
     expect(mocks.generateRevisedByOutline).toHaveBeenCalledTimes(1);
-    expect(result.revisedAnswers[0].revised).toBe("rewritten answer");
+    expect(result.revisedAnswers?.[0]?.revised).toBe("rewritten answer");
   });
 
   it("skips llm regeneration when llm unavailable or answer mode is single", async () => {
@@ -226,6 +226,6 @@ describe("it_evaluationResult", () => {
 
     expect(mocks.generateOutlines).not.toHaveBeenCalled();
     expect(mocks.generateRevisedByOutline).not.toHaveBeenCalled();
-    expect(result.revisedAnswers[0].revised).toBe("r1");
+    expect(result.revisedAnswers?.[0]?.revised).toBe("r1");
   });
 });

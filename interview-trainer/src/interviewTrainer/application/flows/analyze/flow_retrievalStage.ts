@@ -149,7 +149,7 @@ export async function it_runRetrievalStage({
     templateContext: embeddingRuntime?.context,
   };
   if (!embeddingRuntime && retrievalMode !== "keyword") {
-    notesError = "Embedding ?????";
+    notesError = "Embedding 模板未绑定";
     notesErrorStage = "retrieve";
   }
 
@@ -244,7 +244,7 @@ export async function it_runRetrievalStage({
   let notesPercent = 70;
   let notesTasksTotal = 1;
   let notesTasksDone = 0;
-  const concurrencyHint = ` ? queryx${maxConcurrency} ? questionx${questionMaxConcurrency} ? kindx${kindMaxConcurrency}`;
+  const concurrencyHint = ` · queryx${maxConcurrency} · questionx${questionMaxConcurrency} · kindx${kindMaxConcurrency}`;
   const updateNotesProgress = (percent: number) => {
     notesPercent = percent;
     const taskHint = notesTasksTotal ? ` · ${notesTasksDone}/${notesTasksTotal}` : "";

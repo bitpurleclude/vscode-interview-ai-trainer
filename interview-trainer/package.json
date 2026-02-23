@@ -107,7 +107,12 @@
     "package": "npm run build && npx @vscode/vsce package --out ./build/interview-trainer.vsix",
     "verify:package:templates": "node scripts/verify-package-templates.js",
     "test": "vitest run --coverage",
-    "test:e2e:smoke": "node scripts/run-e2e-smoke.js"
+    "test:e2e:smoke": "node scripts/run-e2e-smoke.js",
+    "test:e2e:smoke:workspace": "node scripts/run-e2e-smoke.js --stages workspace",
+    "test:e2e:smoke:no-workspace": "node scripts/run-e2e-smoke.js --stages no-workspace",
+    "test:e2e:smoke:verify-artifacts": "node scripts/run-e2e-smoke.js --validate-artifacts",
+    "test:e2e:smoke:verify-artifacts:strict": "node scripts/run-e2e-smoke.js --validate-artifacts-strict",
+    "test:e2e:smoke:report": "node scripts/run-e2e-smoke.js --report-file build/e2e-smoke-report.json"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

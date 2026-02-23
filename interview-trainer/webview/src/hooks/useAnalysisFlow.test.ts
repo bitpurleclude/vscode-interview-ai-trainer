@@ -278,7 +278,7 @@ describe("useAnalysisFlow", () => {
         questionList: ["q1"],
       }),
     );
-    expect(rerendered.saveResultMessage).toBe("saved");
+    expect(rerendered.saveResultMessage).toBe("结果已写入");
   });
 
   it("handles save-result guard and failure feedback branches", async () => {
@@ -303,7 +303,8 @@ describe("useAnalysisFlow", () => {
     const secondHook = renderHook(failed.options);
     await secondHook.handleSaveResult();
     const secondRerender = renderHook(failed.options);
-    expect(secondRerender.saveResultMessage).toBe("save failed");
+    expect(secondRerender.saveResultMessage).toContain("保存失败");
+    expect(secondRerender.saveResultMessage).toContain("disk full");
   });
 
   it("loads history list and switches to history tab", async () => {

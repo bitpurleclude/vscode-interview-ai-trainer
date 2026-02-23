@@ -73,7 +73,7 @@ describe("flow_audioStage", () => {
 
     const result = await it_runAudioStage({
       deps: {
-        onPartial: (event) => partialEvents.push(event as Record<string, unknown>),
+        onPartial: (event: unknown) => partialEvents.push(event as Record<string, unknown>),
         onCorpusTrace,
       } as any,
       request,
@@ -127,7 +127,7 @@ describe("flow_audioStage", () => {
       it_runAudioStage({
         deps: {
           abortSignal: { aborted: true },
-          onPartial: (event) => partialEvents.push(event as Record<string, unknown>),
+          onPartial: (event: unknown) => partialEvents.push(event as Record<string, unknown>),
         } as any,
         request: createRequest("pcm"),
         asrCfg: {},
@@ -146,7 +146,7 @@ describe("flow_audioStage", () => {
 
     const result = await it_runAudioStage({
       deps: {
-        onPartial: (event) => partialEvents.push(event as Record<string, unknown>),
+        onPartial: (event: unknown) => partialEvents.push(event as Record<string, unknown>),
       } as any,
       request: createRequest("wav"),
       asrCfg: {},
