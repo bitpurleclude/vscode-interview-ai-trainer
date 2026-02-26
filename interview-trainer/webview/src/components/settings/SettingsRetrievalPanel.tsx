@@ -276,6 +276,7 @@ export const SettingsRetrievalPanel: React.FC<SettingsRetrievalProps> = (props) 
       <div className="it-input-row it-input-row--nowrap">
         <div style={{ minWidth: 80 }}>历史命名</div>
         <select
+          data-testid="it-settings-topic-mode-select"
           className="it-select"
           value={topicTitleMode}
           disabled={uiLocked || savingTopicSettings}
@@ -288,6 +289,7 @@ export const SettingsRetrievalPanel: React.FC<SettingsRetrievalProps> = (props) 
         </select>
         <div style={{ minWidth: 60 }}>长度</div>
         <input
+          data-testid="it-settings-topic-len-input"
           className="it-input"
           type="number"
           min={4}
@@ -298,6 +300,7 @@ export const SettingsRetrievalPanel: React.FC<SettingsRetrievalProps> = (props) 
           style={{ width: 90 }}
         />
         <button
+          data-testid="it-settings-topic-save-button"
           className="it-button it-button--secondary it-button--compact"
           disabled={uiLocked || savingTopicSettings}
           onClick={handleSaveTopicSettings}
@@ -306,7 +309,11 @@ export const SettingsRetrievalPanel: React.FC<SettingsRetrievalProps> = (props) 
         </button>
       </div>
       <div className="it-settings__hint">选择“LLM 摘要”会额外调用一次 LLM，增加耗时与费用。</div>
-      {topicSaveMessage && <div className="it-settings__hint">{topicSaveMessage}</div>}
+      {topicSaveMessage && (
+        <div className="it-settings__hint" data-testid="it-settings-topic-save-message">
+          {topicSaveMessage}
+        </div>
+      )}
       <div className="it-retrieval__list">
         {retrievalDirs.map((item) => (
           <div key={item.key} className="it-retrieval__item">

@@ -23,6 +23,7 @@
 - 状态区布局依赖步骤顺序，修改步骤需同步 `StepsList.tsx`
 - `StreamCard` 收起态为紧凑摘要（非同体积淡化）；展开态可见完整缓冲文本，并显示“已省略前 N 字”提示。
 - 展开态流式正文采用固定上限高度（px + vh）并使用内部滚动，避免卡片随文本无限拉长。
+- `ResultsPanel` 在“示范性修改”中将“本题评分/本题建议”与提纲并排展示（`it-revised-item__outline-row` + `it-question-evaluation-card`），用于评分阶段按题查看。
 - 模板侧栏的密钥删除采用页内二次确认，不依赖 `window.confirm`。
 - 密钥/Token 列表提供快速引用字符串与复制入口（`{{secrets.xxx}}` / `{{tokens.xxx}}`）。
 

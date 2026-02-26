@@ -132,9 +132,34 @@ describe("flow_evaluationStage", () => {
     expect(String(progressEvents[0]?.message || "")).toContain("Evaluation 15% - generating");
     expect(partialEvents.length).toBeGreaterThanOrEqual(3);
     expect(streamEvents).toHaveLength(2);
-    expect(evalStreamEvents).toHaveLength(2);
-    expect(evalStreamEvents[0]).toMatchObject({ questionIndex: 0, text: "token-1" });
-    expect(evalStreamEvents[1]).toMatchObject({ questionIndex: 1, text: "token-2" });
+    const textEvents = evalStreamEvents.filter((event) => typeof event.text === "string");
+    const snapshotEvents = evalStreamEvents.filter(
+      (event) => Boolean(event.snapshot) && typeof event.snapshot === "object",
+    );
+    expect(textEvents).toHaveLength(2);
+    expect(
+      textEvents.some(
+        (event) => event.questionIndex === 0 && event.text === "token-1",
+      ),
+    ).toBe(true);
+    expect(
+      textEvents.some(
+        (event) => event.questionIndex === 1 && event.text === "token-2",
+      ),
+    ).toBe(true);
+    expect(snapshotEvents).toHaveLength(2);
+    expect(
+      snapshotEvents.some((event) => {
+        const snapshot = event.snapshot as Record<string, unknown>;
+        return event.questionIndex === 0 && Number(snapshot.overallScore) === 85;
+      }),
+    ).toBe(true);
+    expect(
+      snapshotEvents.some((event) => {
+        const snapshot = event.snapshot as Record<string, unknown>;
+        return event.questionIndex === 1 && Number(snapshot.overallScore) === 92;
+      }),
+    ).toBe(true);
     expect(traceEvents.some((event) => event.action === "evaluation_stage" && event.status === "start")).toBe(
       true,
     );
@@ -175,6 +200,54 @@ describe("flow_evaluationStage", () => {
     expect(secondCallArgs[1]).toBe("");
     expect(firstCallArgs[3]).toEqual([{ source: "shared.md", text: "shared-note" }]);
     expect(secondCallArgs[3]).toEqual([{ source: "shared.md", text: "shared-note" }]);
+  });
+
+  it("evaluates multiple questions concurrently", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mocks.evaluateAnswer.mockImplementation(async (question: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      inFlight -= 1;
+      return createEvaluation(question, 80);
+    });
+
+    await it_runEvaluationStage({
+      deps: {
+        onPartial: undefined,
+        onCorpusTrace: undefined,
+      } as any,
+      request: createRequest({
+        questionText: "question-1\nquestion-2\nquestion-3",
+        questionList: ["question-1", "question-2", "question-3"],
+      }),
+      questionText: "question-1\nquestion-2\nquestion-3",
+      topicTitle: "topic-title",
+      questionList: ["question-1", "question-2", "question-3"],
+      questionAnswers: [
+        { question: "question-1", answer: "answer-1" },
+        { question: "question-2", answer: "answer-2" },
+        { question: "question-3", answer: "answer-3" },
+      ],
+      questionTimings: [] as any,
+      audioSegments: [] as any,
+      notes: [{ source: "shared.md", text: "shared-note" }] as any,
+      notesByQuestion: [
+        [{ source: "q1.md", text: "q1-note" }],
+        [{ source: "q2.md", text: "q2-note" }],
+        [{ source: "q3.md", text: "q3-note" }],
+      ] as any,
+      evaluationConfig: { provider: "template", model: "mock-model", timeoutSec: 30 } as any,
+      evalLabel: "topic-eval",
+      evalModeLabel: "concurrency-check",
+      reportProgress: () => undefined,
+      ensureNotAborted: () => undefined,
+      traceFlow: () => undefined,
+    });
+
+    expect(mocks.evaluateAnswer).toHaveBeenCalledTimes(3);
+    expect(maxInFlight).toBeGreaterThan(1);
   });
 
   it("emits error trace and rethrows when evaluation fails", async () => {

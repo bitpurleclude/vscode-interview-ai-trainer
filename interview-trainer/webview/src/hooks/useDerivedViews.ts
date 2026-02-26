@@ -123,10 +123,30 @@ export function useDerivedViews({
     return [raw];
   }, [questionText]);
 
+  const responseTimingQuestions = useMemo(
+    () =>
+      (analysisResult?.questionTimings ?? [])
+        .map((item) => String(item?.question || "").trim())
+        .filter(Boolean),
+    [analysisResult?.questionTimings],
+  );
+
+  const draftTimingQuestions = useMemo(
+    () =>
+      (itState.draftQuestionTimings ?? [])
+        .map((item) => String(item?.question || "").trim())
+        .filter(Boolean),
+    [itState.draftQuestionTimings],
+  );
+
   const evaluationStreamQuestions = useMemo(() => {
     const list =
       (analysisResult?.questionList && analysisResult.questionList.length
         ? analysisResult.questionList
+        : responseTimingQuestions.length
+          ? responseTimingQuestions
+          : draftTimingQuestions.length
+            ? draftTimingQuestions
         : parsedQuestionList.length
           ? parsedQuestionList
           : fallbackQuestions) || [];
@@ -134,7 +154,13 @@ export function useDerivedViews({
       return list.slice(0, 3);
     }
     return [];
-  }, [analysisResult, parsedQuestionList, fallbackQuestions]);
+  }, [
+    analysisResult,
+    responseTimingQuestions,
+    draftTimingQuestions,
+    parsedQuestionList,
+    fallbackQuestions,
+  ]);
 
   const retrievalDirs = useMemo(() => {
     if (!config) {

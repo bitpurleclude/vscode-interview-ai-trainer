@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { on } from "../messenger";
+import type { ItQuestionEvaluation } from "../types";
 
 type StreamState = {
   text: string;
@@ -13,6 +14,48 @@ type StreamingOptions = {
   autoCollapse: boolean;
   previewChars: number;
 };
+
+function it_toQuestionEvaluationSnapshot(
+  value: unknown,
+  questionIndex: number,
+): ItQuestionEvaluation | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const source = value as Record<string, unknown>;
+  const questionText =
+    typeof source.question === "string" && source.question.trim()
+      ? source.question.trim()
+      : `第${questionIndex + 1}题`;
+  const scoreMap: Record<string, number> = {};
+  if (source.scores && typeof source.scores === "object") {
+    Object.entries(source.scores as Record<string, unknown>).forEach(([key, raw]) => {
+      const score = Number(raw);
+      if (key.trim() && Number.isFinite(score)) {
+        scoreMap[key] = score;
+      }
+    });
+  }
+  const suggestions = Array.isArray(source.suggestions)
+    ? source.suggestions
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .slice(0, 6)
+    : [];
+  const summary =
+    typeof source.summary === "string" && source.summary.trim()
+      ? source.summary.trim()
+      : undefined;
+  const overallScore = Number(source.overallScore);
+  return {
+    questionIndex,
+    question: questionText,
+    overallScore: Number.isFinite(overallScore) ? overallScore : 0,
+    scores: scoreMap,
+    suggestions,
+    summary,
+  };
+}
 
 function it_compactStreamText(rawText: string, previewChars: number): {
   text: string;
@@ -46,6 +89,9 @@ export function useStreaming(options: StreamingOptions) {
   const [stepStreams, setStepStreams] = useState<Record<string, StreamState>>({});
   const [evaluationStreams, setEvaluationStreams] = useState<
     Record<number, StreamState>
+  >({});
+  const [evaluationSnapshots, setEvaluationSnapshots] = useState<
+    Record<number, ItQuestionEvaluation>
   >({});
 
   useEffect(() => {
@@ -98,6 +144,13 @@ export function useStreaming(options: StreamingOptions) {
       if (!Number.isFinite(index) || index < 0) {
         return;
       }
+      const snapshot = it_toQuestionEvaluationSnapshot(data?.snapshot, index);
+      if (snapshot) {
+        setEvaluationSnapshots((prev) => ({
+          ...prev,
+          [index]: snapshot,
+        }));
+      }
       setEvaluationStreams((prev) => {
         const current = prev[index] || {
           text: "",
@@ -133,6 +186,7 @@ export function useStreaming(options: StreamingOptions) {
   const resetStreams = useCallback(() => {
     setStepStreams({});
     setEvaluationStreams({});
+    setEvaluationSnapshots({});
   }, []);
 
   const resetEvaluationStream = useCallback((index: number) => {
@@ -140,6 +194,14 @@ export function useStreaming(options: StreamingOptions) {
       ...prev,
       [index]: { text: "", collapsed: false, done: false, omittedChars: 0 },
     }));
+    setEvaluationSnapshots((prev) => {
+      if (!(index in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   }, []);
 
   const handleToggleStepStream = useCallback((stepId: string) => {
@@ -171,6 +233,7 @@ export function useStreaming(options: StreamingOptions) {
   return {
     stepStreams,
     evaluationStreams,
+    evaluationSnapshots,
     resetStreams,
     resetEvaluationStream,
     handleToggleStepStream,

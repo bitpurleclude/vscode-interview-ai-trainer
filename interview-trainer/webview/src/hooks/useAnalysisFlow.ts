@@ -99,6 +99,8 @@ export function useAnalysisFlow({
     resetStreams();
     setIsProcessing(true);
     setShowNoteHits(false);
+    // Drop previous finalized payload so repeated runs do not keep stale results on screen.
+    setAnalysisResult(null);
     analysisCancelledRef.current = false;
     analysisRunRef.current += 1;
     const currentRun = analysisRunRef.current;
@@ -135,7 +137,8 @@ export function useAnalysisFlow({
         return;
       }
       if (response?.status === "success") {
-        setAnalysisResult(response.content);
+        const nextResult = (response.content || null) as ItAnalyzeResponse | null;
+        setAnalysisResult(nextResult ? { ...nextResult } : null);
         const resolved = it_resolveAnalyzeQuestionsFromResponse(response.content);
         const resolvedText = resolved.questionText;
         const resolvedList = resolved.questionList;

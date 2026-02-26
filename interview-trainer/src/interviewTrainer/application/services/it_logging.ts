@@ -304,6 +304,7 @@ export function it_emitEvaluationStreamUpdate(
   host: ItLogHost,
   update: ItEvaluationStreamUpdate,
 ): void {
+  const textLength = typeof update.text === "string" ? update.text.length : 0;
   if (host.configSnapshot?.streaming?.enabled === false) {
     it_logCorpusTrace(host, "evaluation stream update dropped", {
       event: "application.streaming.evaluation_update",
@@ -314,7 +315,8 @@ export function it_emitEvaluationStreamUpdate(
       questionIndex: update.questionIndex,
       done: Boolean(update.done),
       reset: Boolean(update.reset),
-      textLength: update.text.length,
+      textLength,
+      hasSnapshot: Boolean(update.snapshot),
     });
     return;
   }

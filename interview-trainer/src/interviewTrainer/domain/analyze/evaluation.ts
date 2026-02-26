@@ -3,6 +3,7 @@ import type {
   ItAudioSegment,
   ItEvaluation,
   ItNoteHit,
+  ItQuestionEvaluation,
   ItQuestionTiming,
 } from "../../../protocol/interviewTrainer";
 
@@ -147,6 +148,13 @@ export function it_mergeEvaluations(params: {
     return unique;
   };
 
+  const it_pickQuestionSuggestions = (item?: ItEvaluation): string[] => {
+    if (!item) {
+      return [];
+    }
+    return mergeList([item.improvements || [], item.nextFocus || []]).slice(0, 6);
+  };
+
   const strengths = mergeList(evaluations.map((item) => item.strengths || []));
   const issues = mergeList(evaluations.map((item) => item.issues || []));
   const improvements = mergeList(evaluations.map((item) => item.improvements || []));
@@ -159,6 +167,18 @@ export function it_mergeEvaluations(params: {
     (item.noteSuggestions || []).map((note) => `第${idx + 1}题: ${note}`),
   );
 
+  const questionEvaluations: ItQuestionEvaluation[] = questions.map((question, idx) => {
+    const evalItem = evaluations[idx];
+    return {
+      questionIndex: idx,
+      question,
+      overallScore: Number(evalItem?.overallScore ?? 0),
+      scores: { ...(evalItem?.scores || {}) },
+      suggestions: it_pickQuestionSuggestions(evalItem),
+      summary: evalItem?.topicSummary || undefined,
+    };
+  });
+
   const revisedAnswers = questions.map((question, idx) => {
     const evalItem = evaluations[idx];
     const revised = evalItem?.revisedAnswers?.[0];
@@ -168,6 +188,9 @@ export function it_mergeEvaluations(params: {
       original: revised?.original || answers[idx]?.answer || "",
       revised: revised?.revised || "",
       estimatedTimeMin: planned,
+      overallScore: evalItem?.overallScore,
+      scores: evalItem?.scores ? { ...evalItem.scores } : undefined,
+      suggestions: it_pickQuestionSuggestions(evalItem),
       outlineOriginal: revised?.outlineOriginal,
       outlineRevised: revised?.outlineRevised,
     };
@@ -200,6 +223,7 @@ export function it_mergeEvaluations(params: {
     issues,
     improvements,
     nextFocus,
+    questionEvaluations,
     noteUsage,
     noteSuggestions,
     revisedAnswers,

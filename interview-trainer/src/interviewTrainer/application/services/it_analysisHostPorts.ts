@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "vscode";
 import type {
+  ItQuestionEvaluation,
   ItState,
   ItStepState,
   ItStepStatus,
@@ -44,9 +45,10 @@ export type ItAnalysisStreamPort = {
   }) => void;
   emitEvaluationStreamUpdate: (update: {
     questionIndex: number;
-    text: string;
+    text?: string;
     done?: boolean;
     reset?: boolean;
+    snapshot?: ItQuestionEvaluation;
   }) => void;
 };
 

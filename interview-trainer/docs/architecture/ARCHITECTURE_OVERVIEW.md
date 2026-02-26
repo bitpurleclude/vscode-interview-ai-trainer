@@ -71,7 +71,8 @@
 
 ### 3.4 Streaming Updates
 - Backend: `application/services/it_logging.ts` -> `it/evaluationStreamUpdate` / `it/stepStreamUpdate`
-- Frontend: `webview/src/hooks/useStreaming.ts` -> `StepsList` / `StreamCard`
+- `it/evaluationStreamUpdate` supports per-question structured snapshot (`snapshot`) for score/suggestion side card rendering.
+- Frontend: `webview/src/hooks/useStreaming.ts` -> `StepsList` / `StreamCard` + `ResultsPanel` (outline-side per-question score card)
 
 ### 3.5 Structured Logging Pipeline
 - Log DTO and emission policy: `application/services/it_structuredLogger.ts`

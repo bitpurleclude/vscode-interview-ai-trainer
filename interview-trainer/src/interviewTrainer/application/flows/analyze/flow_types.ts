@@ -2,6 +2,7 @@ import type {
   ItAcousticMetrics,
   ItEvaluation,
   ItNoteHit,
+  ItQuestionEvaluation,
   ItQuestionTiming,
   ItStepStatus,
   ItWorkflowStep,
@@ -41,9 +42,10 @@ export interface ItAnalyzeDeps {
   }) => void;
   onEvalStream?: (update: {
     questionIndex: number;
-    text: string;
+    text?: string;
     done?: boolean;
     reset?: boolean;
+    snapshot?: ItQuestionEvaluation;
   }) => void;
   onCorpusTrace?: (message: string, detail?: Record<string, unknown>) => void;
   corpusDirty?: boolean;

@@ -233,6 +233,7 @@ export interface ItEvaluation {
   issues: string[];
   improvements: string[];
   nextFocus: string[];
+  questionEvaluations?: ItQuestionEvaluation[];
   noteUsage?: string[];
   noteSuggestions?: string[];
   revisedAnswers?: ItRevisedAnswer[];
@@ -241,11 +242,23 @@ export interface ItEvaluation {
   prompt?: string;
 }
 
+export interface ItQuestionEvaluation {
+  questionIndex: number;
+  question: string;
+  overallScore: number;
+  scores: Record<string, number>;
+  suggestions: string[];
+  summary?: string;
+}
+
 export interface ItRevisedAnswer {
   question: string;
   original: string;
   revised: string;
   estimatedTimeMin?: number;
+  overallScore?: number;
+  scores?: Record<string, number>;
+  suggestions?: string[];
   outlineOriginal?: string[];
   outlineRevised?: string[];
 }

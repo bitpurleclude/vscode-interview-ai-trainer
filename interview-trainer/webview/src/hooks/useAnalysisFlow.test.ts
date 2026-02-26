@@ -227,6 +227,32 @@ describe("useAnalysisFlow", () => {
     expect(rerendered.analysisResult).toBeNull();
   });
 
+  it("clears previous result before a new run even when response is ignored", async () => {
+    const { options } = createOptions();
+    reactMock.setSlot(0, {
+      questionText: "previous question",
+      questionList: ["previous-q1"],
+      evaluation: {
+        topicTitle: "previous-topic",
+        revisedAnswers: [],
+      },
+    });
+    mocks.shouldIgnoreAnalyzeResponse.mockReturnValueOnce(true);
+    mocks.request.mockResolvedValueOnce({
+      status: "success",
+      content: {
+        questionText: "next question",
+        questionList: ["next-q1"],
+      },
+    });
+
+    const hook = renderHook(options);
+    await hook.handleAnalyze();
+    const rerendered = renderHook(options);
+
+    expect(rerendered.analysisResult).toBeNull();
+  });
+
   it("handles analyze cancel acknowledgement response path", async () => {
     const { options, getParentState } = createOptions();
     mocks.request.mockResolvedValueOnce({

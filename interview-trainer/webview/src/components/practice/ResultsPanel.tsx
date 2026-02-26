@@ -3,6 +3,7 @@ import type {
   ItAcousticMetrics,
   ItEvaluation,
   ItHistoryItem,
+  ItQuestionEvaluation,
   ItQuestionTiming,
 } from "../../types";
 
@@ -21,6 +22,8 @@ type ResultsPanelProps = {
   questionTimingsPreview?: ItQuestionTiming[];
   questionTimingNotePreview?: string;
   evaluationPreview: ItEvaluation | null;
+  evaluationSnapshots: Record<number, ItQuestionEvaluation>;
+  evaluationStreamQuestions: string[];
   uiLocked: boolean;
   isProcessing: boolean;
   regeneratingIndex: number | null;
@@ -58,6 +61,8 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = (props) => {
     questionTimingsPreview,
     questionTimingNotePreview,
     evaluationPreview,
+    evaluationSnapshots,
+    evaluationStreamQuestions,
     uiLocked,
     isProcessing,
     regeneratingIndex,
@@ -77,6 +82,20 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = (props) => {
     buildOutlineTree,
     renderOutlineTree,
   } = props;
+
+  const it_mergeSuggestions = (first: string[] = [], second: string[] = []): string[] => {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    [...first, ...second].forEach((item) => {
+      const value = String(item || "").trim();
+      if (!value || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      unique.push(value);
+    });
+    return unique;
+  };
 
   return (
     <div className="it-results">
@@ -230,11 +249,35 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = (props) => {
                   <div className="it-evaluation__section">
                     <h4>示范性修改</h4>
                     <div className="it-revised-list">
-                      {evaluationPreview.revisedAnswers.map((item, idx) => (
-                        <div key={`${idx}-${item.question}`} className="it-revised-item">
+                      {evaluationPreview.revisedAnswers.map((item, idx) => {
+                        const snapshot = evaluationSnapshots[idx];
+                        const scoreSource =
+                          snapshot && Object.keys(snapshot.scores || {}).length
+                            ? snapshot.scores
+                            : item.scores || {};
+                        const scoreEntries = Object.entries(scoreSource);
+                        const mergedSuggestions = it_mergeSuggestions(
+                          snapshot?.suggestions || [],
+                          item.suggestions || [],
+                        );
+                        const questionLabel =
+                          item.question ||
+                          snapshot?.question ||
+                          evaluationStreamQuestions[idx] ||
+                          `第${idx + 1}题`;
+                        const rawOverall =
+                          typeof snapshot?.overallScore === "number"
+                            ? snapshot.overallScore
+                            : item.overallScore;
+                        const overallScore =
+                          typeof rawOverall === "number" && Number.isFinite(rawOverall)
+                            ? rawOverall
+                            : null;
+                        return (
+                        <div key={`${idx}-${questionLabel}`} className="it-revised-item">
                           <div className="it-revised-item__title">
                             <span>
-                              {idx + 1}. {item.question}
+                              {idx + 1}. {questionLabel}
                               {typeof item.estimatedTimeMin === "number"
                                 ? `（建议${item.estimatedTimeMin}分钟）`
                                 : ""}
@@ -253,27 +296,63 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = (props) => {
                             {renderParagraphs(item.original, `${idx}-orig`)}
                           </div>
                           <div className="it-revised-item__block">
-                            <span>答题提纲（你的回答）：</span>
-                            {item.outlineOriginal && item.outlineOriginal.length > 0 ? (
-                              renderOutlineTree(buildOutlineTree(item.outlineOriginal), `${idx}-orig-outline`)
-                            ) : (
-                              <span>（未提供）</span>
-                            )}
-                          </div>
-                          <div className="it-revised-item__block">
                             <span>示范：</span>
                             {renderParagraphs(item.revised, `${idx}-demo`)}
                           </div>
-                          <div className="it-revised-item__block">
-                            <span>答题提纲（示范）：</span>
-                            {item.outlineRevised && item.outlineRevised.length > 0 ? (
-                              renderOutlineTree(buildOutlineTree(item.outlineRevised), `${idx}-demo-outline`)
-                            ) : (
-                              <span>（未提供）</span>
-                            )}
+                          <div className="it-revised-item__outline-row">
+                            <div className="it-revised-item__outline-column">
+                              <div className="it-revised-item__block">
+                                <span>答题提纲（你的回答）：</span>
+                                {item.outlineOriginal && item.outlineOriginal.length > 0 ? (
+                                  renderOutlineTree(buildOutlineTree(item.outlineOriginal), `${idx}-orig-outline`)
+                                ) : (
+                                  <span>（未提供）</span>
+                                )}
+                              </div>
+                              <div className="it-revised-item__block">
+                                <span>答题提纲（示范）：</span>
+                                {item.outlineRevised && item.outlineRevised.length > 0 ? (
+                                  renderOutlineTree(buildOutlineTree(item.outlineRevised), `${idx}-demo-outline`)
+                                ) : (
+                                  <span>（未提供）</span>
+                                )}
+                              </div>
+                            </div>
+                            <aside className="it-question-evaluation-card">
+                              <div className="it-question-evaluation-card__header">
+                                <span>本题评分</span>
+                                <strong>{overallScore ?? "-"}</strong>
+                              </div>
+                              {snapshot?.summary ? (
+                                <div className="it-question-evaluation-card__summary">{snapshot.summary}</div>
+                              ) : null}
+                              {scoreEntries.length > 0 ? (
+                                <div className="it-question-evaluation-card__scores">
+                                  {scoreEntries.map(([key, value]) => (
+                                    <div key={`${idx}-${key}`} className="it-question-evaluation-card__score-item">
+                                      <span>{key}</span>
+                                      <span>{value}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="it-question-evaluation-card__empty">评分生成中...</div>
+                              )}
+                              <div className="it-question-evaluation-card__title">本题建议</div>
+                              {mergedSuggestions.length > 0 ? (
+                                <ul className="it-question-evaluation-card__list">
+                                  {mergedSuggestions.map((suggestion, suggestionIdx) => (
+                                    <li key={`${idx}-suggestion-${suggestionIdx}`}>{suggestion}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="it-question-evaluation-card__empty">建议生成中...</div>
+                              )}
+                            </aside>
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
                     </div>
                   </div>
                 )}

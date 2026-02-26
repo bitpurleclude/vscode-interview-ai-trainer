@@ -1,5 +1,6 @@
 import type {
   ItConfigSnapshot,
+  ItQuestionEvaluation,
   ItWorkflowStep,
 } from "../../../protocol/interviewTrainer";
 
@@ -12,9 +13,10 @@ export type ItStepStreamUpdate = {
 
 export type ItEvaluationStreamUpdate = {
   questionIndex: number;
-  text: string;
+  text?: string;
   done?: boolean;
   reset?: boolean;
+  snapshot?: ItQuestionEvaluation;
 };
 
 export type ItWebviewPort = {

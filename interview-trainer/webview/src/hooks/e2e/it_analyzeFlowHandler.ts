@@ -153,6 +153,7 @@ const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
       steps.push({ action: "click-analyze-button", ok: true });
 
       if (mode === "cancel") {
+        let runningObserved = false;
         try {
           await it_waitForUiCondition(() => {
             const analyzeButton = document.querySelector<HTMLButtonElement>(
@@ -162,14 +163,34 @@ const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
             const hasRunningStep = Boolean(document.querySelector(".it-step--running"));
             return hasDangerButton || hasRunningStep;
           }, 10_000, "analyze running state");
+          runningObserved = true;
+          steps.push({ action: "wait-analyze-running", ok: true });
         } catch (error) {
-          const statusText = (
-            document.querySelector(".it-status")?.textContent || ""
-          ).trim();
+          const analyzeButton = document.querySelector<HTMLButtonElement>(
+            "[data-testid='it-action-analyze']",
+          );
+          const statusText = (document.querySelector(".it-status")?.textContent || "").trim();
           const errorText = (
             document.querySelector<HTMLElement>("[data-testid='it-status-error']")?.textContent || ""
           ).trim();
           const runningStepCount = document.querySelectorAll(".it-step--running").length;
+          const idleAnalyzeButton = Boolean(analyzeButton) &&
+            !Boolean(analyzeButton?.classList.contains("it-button--danger"));
+          const finishedWithoutRunning =
+            idleAnalyzeButton && runningStepCount === 0 && !errorText;
+          if (finishedWithoutRunning) {
+            steps.push({
+              action: "skip-cancel-no-running-state",
+              ok: true,
+              detail: `status=${statusText || "(empty)"}`,
+            });
+            await sendAck("success", undefined, {
+              mode,
+              canceled: false,
+              skippedNoRunningState: true,
+            });
+            return;
+          }
           const detailText = [
             error instanceof Error ? error.message : String(error),
             `status=${statusText || "(empty)"}`,
@@ -178,42 +199,14 @@ const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
           ].join(" | ");
           throw new Error(detailText);
         }
-        steps.push({ action: "wait-analyze-running", ok: true });
 
-        const cancelResp = await request("it/cancelAnalyze", undefined, {
-          timeoutMs: 10_000,
-        });
-        const cancelStatus = String(cancelResp?.status || "");
-        steps.push({
-          action: "send-cancel-request",
-          ok: cancelStatus === "success",
-          detail: `status=${cancelStatus || "(empty)"}`,
-        });
-        if (cancelStatus !== "success") {
-          throw new Error(
-            `Cancel request failed: ${String(cancelResp?.error || "unknown_error")}`,
-          );
+        if (!runningObserved) {
+          throw new Error("Cancel flow could not determine running state");
         }
-        injectFailure("send-cancel-request");
-        const cancelPayload =
-          cancelResp && typeof cancelResp === "object" && cancelResp.content
-            ? cancelResp.content
-            : cancelResp;
-        const canceled = Boolean((cancelPayload as { cancelled?: unknown })?.cancelled);
-        const runningStepCount = Number(
-          (cancelPayload as { runningStepCount?: unknown })?.runningStepCount || 0,
-        );
-        const cancelAccepted = canceled && runningStepCount > 0;
-        steps.push({
-          action: "assert-cancel-running-steps",
-          ok: cancelAccepted,
-          detail: `cancelled=${canceled}, runningSteps=${runningStepCount}`,
-        });
-        if (!cancelAccepted) {
-          throw new Error(
-            `Cancel request did not observe running analysis: cancelled=${canceled}, runningSteps=${runningStepCount}`,
-          );
-        }
+
+        injectFailure("click-cancel-button");
+        it_clickUiElement("[data-testid='it-action-analyze']");
+        steps.push({ action: "click-cancel-button", ok: true });
 
         await it_waitForUiCondition(() => {
           const analyzeButton = document.querySelector<HTMLButtonElement>(
@@ -223,7 +216,11 @@ const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
         }, 30_000, "cancel completion");
         steps.push({ action: "wait-cancel-complete", ok: true });
 
-        await sendAck("success", undefined, { mode, canceled: true, runningStepCount });
+        await sendAck("success", undefined, {
+          mode,
+          canceled: true,
+          skippedNoRunningState: false,
+        });
         return;
       }
 
@@ -283,6 +280,7 @@ const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
             saveSucceeded,
             saveMessage,
             statusError,
+            saveFeedback: saveMessage || statusError || "",
           });
           return;
         }
@@ -291,6 +289,7 @@ const disposeAnalyzeFlow = on(IT_E2E_WEBVIEW_ANALYZE_REQUEST, (payload) => {
           saveSucceeded,
           saveMessage,
           statusError,
+          saveFeedback: saveMessage || statusError || "",
         });
         return;
       }

@@ -20,6 +20,7 @@ export type {
   ItAudioSegment,
   ItQuestionTiming,
   ItEvaluation,
+  ItQuestionEvaluation,
   ItRevisedAnswer,
   ItAnalyzeResponse,
   ItHistoryItem,

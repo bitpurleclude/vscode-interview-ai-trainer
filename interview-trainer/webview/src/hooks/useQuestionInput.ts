@@ -38,9 +38,13 @@ export function useQuestionInput({ setItState }: UseQuestionInputOptions) {
       setQuestionText(event.target.value);
       if (questionParsed) {
         setQuestionParsed(false);
+        // Parsed sub-questions are bound to previous material; clear them on material change.
+        if (questionList.trim().length > 0) {
+          setQuestionList("");
+        }
       }
     },
-    [questionParsed],
+    [questionParsed, questionList],
   );
 
   const handleQuestionListChange = useCallback(

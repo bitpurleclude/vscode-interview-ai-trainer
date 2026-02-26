@@ -50,6 +50,7 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
       <div className="it-input-row it-input-row--nowrap">
         <div style={{ minWidth: 64 }}>环境</div>
         <select
+          data-testid="it-settings-env-select"
           className="it-select"
           value={config?.activeEnvironment || "prod"}
           disabled={uiLocked || savingEnvironment}
@@ -65,12 +66,14 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
         </select>
         <div style={{ minWidth: 80 }}>新环境</div>
         <input
+          data-testid="it-settings-env-name-input"
           className="it-input"
           value={envDraftName}
           onChange={(event) => setEnvDraftName(event.target.value)}
           placeholder="prod / test / dev"
         />
         <button
+          data-testid="it-settings-env-create-button"
           className="it-button it-button--secondary it-button--compact"
           disabled={uiLocked || savingEnvironment}
           onClick={() => handleCreateEnvironment()}
@@ -110,6 +113,7 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
         <div style={{ minWidth: 80 }}>实时输出</div>
         <label className="it-toggle">
           <input
+            data-testid="it-settings-stream-enabled-checkbox"
             type="checkbox"
             checked={Boolean(streamingSettings.enabled)}
             onChange={(event) =>
@@ -124,6 +128,7 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
         <div style={{ minWidth: 80 }}>自动折叠</div>
         <label className="it-toggle">
           <input
+            data-testid="it-settings-stream-autocollapse-checkbox"
             type="checkbox"
             checked={Boolean(streamingSettings.autoCollapse)}
             onChange={(event) =>
@@ -137,6 +142,7 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
         </label>
         <div style={{ minWidth: 80 }}>预览字数</div>
         <input
+          data-testid="it-settings-stream-preview-input"
           className="it-input"
           type="number"
           min={50}
@@ -149,6 +155,7 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
           }
         />
         <button
+          data-testid="it-settings-stream-save-button"
           className="it-button it-button--secondary it-button--compact"
           disabled={uiLocked || savingStreamingSettings}
           onClick={handleSaveStreamingSettings}
@@ -157,10 +164,13 @@ export const SettingsEnvPanel: React.FC<SettingsEnvProps> = (props) => {
         </button>
       </div>
       {streamingSaveMessage && (
-        <div className="it-settings__hint">{streamingSaveMessage}</div>
+        <div className="it-settings__hint" data-testid="it-settings-stream-save-message">
+          {streamingSaveMessage}
+        </div>
       )}
       <div className="it-settings__actions">
         <button
+          data-testid="it-settings-enable-trace-logs-button"
           className="it-button it-button--secondary it-button--compact"
           disabled={uiLocked || traceLogEnabled}
           onClick={handleEnableTraceLogs}

@@ -3,6 +3,7 @@ import type {
   ItAudioSegment,
   ItEvaluation,
   ItNoteHit,
+  ItQuestionEvaluation,
   ItQuestionTiming,
   ItStepStatus,
   ItWorkflowStep,
@@ -48,6 +49,28 @@ function it_flowErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function it_buildQuestionEvaluationSnapshot(
+  question: string,
+  questionIndex: number,
+  evaluation: ItEvaluation,
+): ItQuestionEvaluation {
+  const suggestionSet = new Set<string>();
+  [...(evaluation.improvements || []), ...(evaluation.nextFocus || [])].forEach((item) => {
+    const value = String(item || "").trim();
+    if (value) {
+      suggestionSet.add(value);
+    }
+  });
+  return {
+    questionIndex,
+    question,
+    overallScore: Number(evaluation.overallScore || 0),
+    scores: { ...(evaluation.scores || {}) },
+    suggestions: Array.from(suggestionSet).slice(0, 6),
+    summary: evaluation.topicSummary || undefined,
+  };
 }
 
 export async function it_runEvaluationStage({
@@ -148,6 +171,11 @@ export async function it_runEvaluationStage({
     );
     ensureNotAborted();
     evaluations[idx] = result;
+    deps.onEvalStream?.({
+      questionIndex: idx,
+      done: true,
+      snapshot: it_buildQuestionEvaluationSnapshot(question, idx, result),
+    });
     deps.onPartial?.({
       evaluation: it_mergeEvaluations({
         topicTitle: questionText || topicTitle,
@@ -171,9 +199,9 @@ export async function it_runEvaluationStage({
   };
 
   try {
-    for (let idx = 0; idx < evalQuestions.length; idx += 1) {
-      await it_evaluateQuestionAt(evalQuestions[idx], idx);
-    }
+    await Promise.all(
+      evalQuestions.map((question, idx) => it_evaluateQuestionAt(question, idx)),
+    );
   } catch (error) {
     traceFlow(
       "evaluation_stage",
